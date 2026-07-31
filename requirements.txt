@@ -1,0 +1,4 @@
+fastapi>=0.110.0
+uvicorn>=0.30.0
+python-multipart>=0.0.9
+google-cloud-vision>=3.7.0

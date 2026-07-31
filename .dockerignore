@@ -1,0 +1,15 @@
+venv/
+__pycache__/
+*.pyc
+.git/
+.gitignore
+.env
+clientdocsocr.json
+*.pem
+*.md
+.DS_Store
+.cursor/
+agent-transcripts/
+terminals/
+*.json
+!requirements.txt

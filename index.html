@@ -1,0 +1,4136 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>ID Verification</title>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+  <style>
+    :root {
+      --bg: #e8edf3;
+      --surface: #ffffff;
+      --accent: #1a5f9e;
+      --accent-dark: #134a7c;
+      --ok: #1f8a4c;
+      --warn: #c9a227;
+      --danger: #c0392b;
+      --text: #1e293b;
+      --muted: #64748b;
+    }
+    * { box-sizing: border-box; }
+    body {
+      font-family: "Segoe UI", Tahoma, Geneva, Verdana, sans-serif;
+      background:
+        radial-gradient(ellipse at 20% 0%, #d6e4f5 0%, transparent 50%),
+        radial-gradient(ellipse at 80% 100%, #cfe0d8 0%, transparent 45%),
+        var(--bg);
+      margin: 0;
+      padding: 24px 16px 48px;
+      color: var(--text);
+      min-height: 100vh;
+    }
+    .container { max-width: 860px; margin: 0 auto; }
+    .card {
+      background: var(--surface);
+      padding: 24px;
+      border-radius: 14px;
+      box-shadow: 0 8px 28px rgba(30, 41, 59, 0.08);
+      margin-bottom: 18px;
+    }
+    h2, h3 { color: var(--accent); margin-top: 0; }
+    .step-hint { color: var(--muted); font-size: 14px; margin: 0 0 16px; }
+    .photo-slots {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 18px;
+      margin-top: 8px;
+    }
+    @media (max-width: 640px) {
+      .photo-slots { grid-template-columns: 1fr; }
+    }
+    .slot-box {
+      border: 2px dashed #9bb8d4;
+      border-radius: 12px;
+      padding: 16px;
+      text-align: center;
+      background: #f5f8fb;
+      transition: border-color 0.25s, background 0.25s;
+    }
+    .slot-box.done {
+      border-color: var(--ok);
+      border-style: solid;
+      background: #f0faf4;
+    }
+    .slot-box h4 { margin: 0 0 10px; font-size: 15px; }
+    .slot-box img {
+      width: 100%;
+      max-height: 240px;
+      object-fit: contain;
+      border-radius: 8px;
+      margin-top: 12px;
+      display: none;
+      border: 1px solid #dde3ea;
+      background: #111;
+    }
+    .btn {
+      background: var(--accent);
+      color: #fff;
+      border: none;
+      padding: 10px 18px;
+      border-radius: 8px;
+      cursor: pointer;
+      font-size: 14px;
+      font-weight: 600;
+      transition: background 0.2s, opacity 0.2s;
+    }
+    .btn:hover { background: var(--accent-dark); }
+    .btn:disabled {
+      opacity: 0.45;
+      cursor: not-allowed;
+    }
+    .btn-pdf {
+      background: var(--ok);
+      flex: 1;
+      padding: 14px;
+      font-size: 16px;
+      display: none;
+    }
+    .btn-pdf:hover { background: #176f3d; }
+    .btn-pdf.visible { display: block; }
+    .bottom-actions {
+      display: none;
+      gap: 12px;
+      margin-top: 8px;
+    }
+    .bottom-actions.visible {
+      display: flex;
+    }
+    .btn-new {
+      background: #5a6268;
+      flex: 1;
+      padding: 14px;
+      font-size: 16px;
+      display: none;
+    }
+    .btn-new:hover { background: #434a50; }
+    .btn-new.visible { display: block; flex: 1; }
+    .bottom-actions .btn-pdf.visible { display: block; flex: 1; }
+
+    #method-choice { display: block; }
+    #method-choice.hidden { display: none; }
+    #scanner-view { display: none; }
+    #scanner-view.visible { display: block; }
+    #passport-view { display: none; }
+    #passport-view.visible { display: block; }
+
+    .method-choice-card {
+      text-align: center;
+      padding: 36px 24px 40px;
+    }
+    .method-choice-card h2 {
+      margin-bottom: 8px;
+      font-size: 1.45rem;
+    }
+    .method-options {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 16px;
+      margin-top: 28px;
+      max-width: 480px;
+      margin-left: auto;
+      margin-right: auto;
+    }
+    @media (max-width: 520px) {
+      .method-options { grid-template-columns: 1fr; }
+    }
+    .method-box {
+      appearance: none;
+      -webkit-appearance: none;
+      border: 2px solid #9bb8d4;
+      border-radius: 14px;
+      background: #f5f8fb;
+      padding: 28px 18px;
+      cursor: pointer;
+      font: inherit;
+      color: var(--text);
+      transition: border-color 0.2s, background 0.2s, transform 0.15s, box-shadow 0.2s;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 8px;
+      min-height: 120px;
+      justify-content: center;
+    }
+    .method-box:hover {
+      border-color: var(--accent);
+      background: #eef5fb;
+      box-shadow: 0 6px 18px rgba(26, 95, 158, 0.12);
+      transform: translateY(-2px);
+    }
+    .method-box:focus-visible {
+      outline: 3px solid rgba(26, 95, 158, 0.35);
+      outline-offset: 2px;
+    }
+    .method-box-title {
+      font-size: 1.35rem;
+      font-weight: 700;
+      color: var(--accent);
+      letter-spacing: 0.02em;
+    }
+    .method-box-sub {
+      font-size: 13px;
+      color: var(--muted);
+    }
+    .view-back {
+      background: none;
+      border: none;
+      color: var(--accent);
+      font-size: 14px;
+      font-weight: 600;
+      cursor: pointer;
+      padding: 0;
+      margin: 0 0 12px;
+    }
+    .view-back:hover { text-decoration: underline; }
+
+    #results-card { display: none; }
+    #results-card.visible { display: block; }
+
+    #ocr-status {
+      display: none;
+      text-align: center;
+      padding: 12px;
+      color: var(--muted);
+      font-size: 14px;
+    }
+    #ocr-status.visible { display: block; }
+
+    /* Camera overlay */
+    #camera-modal {
+      display: none;
+      position: fixed;
+      inset: 0;
+      background: rgba(8, 12, 20, 0.92);
+      z-index: 9999;
+      justify-content: center;
+      align-items: center;
+      flex-direction: column;
+      padding: 16px;
+    }
+    #camera-modal.open { display: flex; }
+    .camera-title {
+      color: #fff;
+      font-size: 16px;
+      font-weight: 600;
+      margin-bottom: 12px;
+    }
+    .video-container {
+      position: relative;
+      width: 100%;
+      max-width: 640px;
+      aspect-ratio: 85.6 / 53.98;
+      background: #000;
+      border-radius: 12px;
+      overflow: hidden;
+    }
+    .video-container.passport-aspect {
+      aspect-ratio: 125 / 88;
+    }
+    .photo-slots.single {
+      grid-template-columns: 1fr;
+      max-width: 420px;
+      margin-left: auto;
+      margin-right: auto;
+    }
+    #pdf-figure-back.hidden-side { display: none; }
+    #video {
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+    }
+    .id-frame {
+      position: absolute;
+      top: 50%;
+      left: 50%;
+      transform: translate(-50%, -50%);
+      width: 82%;
+      height: 78%;
+      border: 3px dashed var(--warn);
+      border-radius: 10px;
+      box-shadow: 0 0 0 9999px rgba(0, 0, 0, 0.55);
+      pointer-events: none;
+      box-sizing: border-box;
+      transition: border-color 0.3s, box-shadow 0.3s;
+    }
+    .id-frame.ready {
+      border: 3px solid var(--ok);
+      box-shadow: 0 0 18px rgba(31, 138, 76, 0.55), 0 0 0 9999px rgba(0, 0, 0, 0.55);
+    }
+    .status-badge {
+      margin-top: 14px;
+      padding: 8px 18px;
+      border-radius: 20px;
+      font-weight: 700;
+      font-size: 14px;
+      background: var(--warn);
+      color: #1a1500;
+      transition: background 0.3s, color 0.3s;
+    }
+    .status-badge.status-ready {
+      background: var(--ok);
+      color: #fff;
+    }
+    .camera-actions {
+      margin-top: 14px;
+      display: flex;
+      gap: 10px;
+      flex-wrap: wrap;
+      justify-content: center;
+    }
+    .btn-capture {
+      background: var(--ok);
+      font-size: 20px;
+      font-weight: 700;
+      padding: 16px 36px;
+      min-width: 180px;
+      min-height: 56px;
+      border-radius: 10px;
+      touch-action: manipulation;
+      -webkit-user-select: none;
+      user-select: none;
+    }
+    .btn-capture:hover { background: #176f3d; }
+    .btn-capture:disabled { opacity: 0.55; }
+    .btn-upload { background: #2b6cb0; font-size: 16px; }
+    .btn-upload:hover { background: #1e4e8c; }
+    .btn-close { background: var(--danger); font-size: 16px; }
+    .btn-close:hover { background: #9b2c22; }
+    .slot-actions {
+      display: flex;
+      gap: 8px;
+      justify-content: center;
+      flex-wrap: wrap;
+    }
+    .slot-actions .btn { font-size: 13px; padding: 8px 14px; }
+
+    .grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 14px;
+    }
+    @media (max-width: 640px) {
+      .grid { grid-template-columns: 1fr; }
+    }
+    .field-group { display: flex; flex-direction: column; }
+    .field-group label {
+      font-size: 13px;
+      font-weight: 600;
+      color: #555;
+      margin-bottom: 5px;
+    }
+    .field-group input {
+      padding: 10px;
+      border: 1px solid #ccd3db;
+      border-radius: 8px;
+      font-size: 14px;
+      transition: background-color 0.4s ease, border-color 0.2s ease;
+    }
+    .dual-inputs {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 8px;
+    }
+    .dual-inputs input {
+      width: 100%;
+      min-width: 0;
+    }
+    .input-with-badge {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      min-width: 0;
+      width: 100%;
+      border: 1px solid #ccd3db;
+      border-radius: 8px;
+      background: #fff;
+      padding: 0 8px 0 0;
+      transition: border-color 0.2s ease, background-color 0.2s ease;
+      overflow: hidden;
+    }
+    .input-with-badge input {
+      flex: 1;
+      min-width: 0;
+      width: 100%;
+      border: none !important;
+      border-radius: 8px;
+      background: transparent;
+      padding: 10px 8px 10px 10px;
+      outline: none;
+      box-shadow: none;
+    }
+    .input-with-badge.ok {
+      border-color: #8fd4a8;
+      background: #f7fcf9;
+    }
+    .input-with-badge.bad {
+      border-color: #f5b5b5;
+      background: #fff8f8;
+    }
+    .input-with-badge.neutral {
+      border-color: #e6d28a;
+      background: #fffbeb;
+    }
+    .field-badge {
+      display: inline-flex;
+      align-items: center;
+      flex-shrink: 0;
+      padding: 3px 8px;
+      border-radius: 999px;
+      font-size: 10px;
+      font-weight: 700;
+      letter-spacing: 0.2px;
+      line-height: 1.2;
+      white-space: nowrap;
+      pointer-events: none;
+    }
+    .field-badge.checked {
+      color: #146c2e;
+      background: #e6f6ec;
+      border: 1px solid #8fd4a8;
+      cursor: pointer;
+      pointer-events: auto;
+    }
+    .field-badge.checked:hover {
+      background: #d4edd9;
+      box-shadow: 0 0 0 2px rgba(31, 138, 76, 0.25);
+    }
+    .field-badge.not-checked,
+    .field-badge.error {
+      color: #9b1c1c;
+      background: #fde8e8;
+      border: 1px solid #f5b5b5;
+      cursor: pointer;
+      pointer-events: auto;
+    }
+    .field-badge.error:hover {
+      background: #f8d4d4;
+      box-shadow: 0 0 0 2px rgba(192, 57, 43, 0.22);
+    }
+    .field-badge.uncheckable {
+      color: #8a6d0b;
+      background: #fff3bf;
+      border: 1px solid #e6c35c;
+    }
+    .field-badge.hidden {
+      display: none;
+    }
+
+    .generate-bar {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      gap: 10px 14px;
+      margin: 0 0 14px;
+      padding: 12px 14px;
+      background: #f4f7fb;
+      border: 1px solid #dde3ea;
+      border-radius: 8px;
+    }
+    .generate-bar label {
+      font-size: 13px;
+      font-weight: 700;
+      color: #334155;
+      margin: 0;
+    }
+    .generate-bar select {
+      flex: 1;
+      min-width: 200px;
+      padding: 8px 10px;
+      border: 1px solid #ccd3db;
+      border-radius: 6px;
+      background: #fff;
+      font-size: 13px;
+      color: #1e293b;
+    }
+    .generate-hint {
+      flex-basis: 100%;
+      margin: 0;
+      font-size: 12px;
+      color: var(--muted);
+      line-height: 1.4;
+    }
+
+    .pdf-photos {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 12px;
+      margin-bottom: 16px;
+    }
+    .pdf-photos figure {
+      margin: 0;
+      text-align: center;
+    }
+    .pdf-photos figcaption {
+      font-size: 12px;
+      color: var(--muted);
+      margin-bottom: 6px;
+      font-weight: 600;
+    }
+    .pdf-photos img {
+      width: 100%;
+      height: auto;
+      object-fit: contain;
+      border: 1px solid #dde3ea;
+      border-radius: 6px;
+      background: #fff;
+    }
+
+    .mrz-block {
+      grid-column: 1 / -1;
+      margin-top: 4px;
+    }
+    .mrz-toggle {
+      width: 100%;
+      text-align: left;
+      background: #f0f4f8;
+      border: 1px solid #ccd3db;
+      border-radius: 8px;
+      padding: 12px 14px;
+      font-size: 13px;
+      font-weight: 600;
+      color: #334155;
+      cursor: pointer;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+    .mrz-toggle:hover { background: #e8eef5; }
+    .mrz-panel {
+      position: relative;
+      margin-top: 8px;
+      overflow: hidden;
+      transition: max-height 0.25s ease, opacity 0.2s ease;
+      max-height: 260px;
+      opacity: 1;
+    }
+    .mrz-panel.collapsed {
+      max-height: 0;
+      opacity: 0;
+      margin-top: 0;
+    }
+    .mrz-panel textarea {
+      position: absolute;
+      width: 1px;
+      height: 1px;
+      opacity: 0;
+      pointer-events: none;
+      overflow: hidden;
+    }
+    .mrz-view {
+      width: 100%;
+      min-height: 96px;
+      margin: 0;
+      font-family: Consolas, "Courier New", monospace;
+      font-size: 13px;
+      letter-spacing: 0.5px;
+      line-height: 1.55;
+      padding: 12px 10px;
+      border: 1px solid #ccd3db;
+      border-radius: 8px;
+      background: #fafbfc;
+      white-space: pre;
+      overflow-x: auto;
+      color: #1e293b;
+    }
+    .mrz-hl {
+      background: #c8f0d8;
+      color: #0f5132;
+      outline: 2px solid #1f8a4c;
+      outline-offset: 1px;
+      border-radius: 3px;
+      box-shadow: 0 0 0 3px rgba(31, 138, 76, 0.18);
+      font-weight: 700;
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <div class="card method-choice-card" id="method-choice">
+      <h2>Which verification method do you choose?</h2>
+      <p class="step-hint">Select a document type to continue.</p>
+      <div class="method-options">
+        <button type="button" class="method-box" onclick="selectMethod('id')">
+          <span class="method-box-title">ID</span>
+          <span class="method-box-sub">ID card</span>
+        </button>
+        <button type="button" class="method-box" onclick="selectMethod('passport')">
+          <span class="method-box-title">Passport</span>
+          <span class="method-box-sub">Passport</span>
+        </button>
+      </div>
+    </div>
+
+    <div id="scanner-view">
+    <div id="pdf-content">
+      <div class="card">
+        <button type="button" class="view-back" onclick="newClient()">← Back</button>
+        <h2>ID Card Scanner</h2>
+        <p class="step-hint" id="step-hint">
+          First capture the front side — place the document in the frame.
+        </p>
+
+        <div class="photo-slots">
+          <div class="slot-box" id="slot-front">
+            <h4>1. Front side</h4>
+            <div class="slot-actions">
+              <button type="button" class="btn" id="btn-front" onclick="openCamera('front')">Capture</button>
+              <button type="button" class="btn btn-upload" id="btn-front-upload" onclick="triggerUpload('front')">Upload</button>
+            </div>
+            <img id="img-front" alt="Front side">
+          </div>
+          <div class="slot-box" id="slot-back">
+            <h4>2. Back side</h4>
+            <div class="slot-actions">
+              <button type="button" class="btn" id="btn-back" onclick="openCamera('back')" disabled>Capture</button>
+              <button type="button" class="btn btn-upload" id="btn-back-upload" onclick="triggerUpload('back')" disabled>Upload</button>
+            </div>
+            <img id="img-back" alt="Back side">
+          </div>
+        </div>
+      </div>
+    </div>
+    </div>
+
+    <div id="passport-view">
+      <div class="card">
+        <button type="button" class="view-back" onclick="newClient()">← Back</button>
+        <h2>Passport Scanner</h2>
+        <p class="step-hint" id="passport-step-hint">
+          Capture the passport data page (photo + MRZ strip).
+        </p>
+        <div class="photo-slots single">
+          <div class="slot-box" id="slot-passport">
+            <h4>Passport page</h4>
+            <div class="slot-actions">
+              <button type="button" class="btn" id="btn-passport" onclick="openCamera('passport')">Capture</button>
+              <button type="button" class="btn btn-upload" id="btn-passport-upload" onclick="triggerUpload('passport')">Upload</button>
+            </div>
+            <img id="img-passport" alt="Passport">
+          </div>
+        </div>
+      </div>
+    </div>
+
+      <div id="ocr-status">Reading data with Google Vision…</div>
+
+      <div class="card" id="results-card">
+        <h3>Extracted data</h3>
+        <div class="generate-bar" id="generate-bar">
+          <label for="generate-stage">Generate</label>
+          <select id="generate-stage" onchange="onGenerateStageChange()">
+            <option value="final">Final (Crop + Straighten + Brightness)</option>
+            <option value="crop">1. Crop</option>
+            <option value="straighten">2. Straighten</option>
+            <option value="brightness">3. Brightness</option>
+          </select>
+          <p class="generate-hint">Top photos are originals; here you see processing stages and their combination.</p>
+        </div>
+        <div class="pdf-photos" id="pdf-photos">
+          <figure id="pdf-figure-front">
+            <figcaption id="pdf-caption-front">Front side</figcaption>
+            <img id="pdf-img-front" alt="Front">
+          </figure>
+          <figure id="pdf-figure-back">
+            <figcaption>Back side</figcaption>
+            <img id="pdf-img-back" alt="Back">
+          </figure>
+        </div>
+        <div class="grid">
+          <div class="field-group">
+            <label>სახელი / Name</label>
+            <div class="dual-inputs">
+              <div class="input-with-badge">
+                <input type="text" id="first_name" placeholder="Georgian">
+                <span class="field-badge uncheckable hidden" id="badge-first_name">Uncheckable</span>
+              </div>
+              <div class="input-with-badge">
+                <input type="text" id="first_name_lat" placeholder="Latin">
+                <span class="field-badge not-checked hidden" id="badge-first_name_lat">Not checked</span>
+              </div>
+            </div>
+          </div>
+          <div class="field-group">
+            <label>გვარი / Surname</label>
+            <div class="dual-inputs">
+              <div class="input-with-badge">
+                <input type="text" id="last_name" placeholder="Georgian">
+                <span class="field-badge uncheckable hidden" id="badge-last_name">Uncheckable</span>
+              </div>
+              <div class="input-with-badge">
+                <input type="text" id="last_name_lat" placeholder="Latin">
+                <span class="field-badge not-checked hidden" id="badge-last_name_lat">Not checked</span>
+              </div>
+            </div>
+          </div>
+          <div class="field-group">
+            <label>დაბადების თარიღი / Date of Birth</label>
+            <div class="input-with-badge">
+              <input type="text" id="birth_date">
+              <span class="field-badge not-checked hidden" id="badge-birth_date">Not checked</span>
+            </div>
+          </div>
+          <div class="field-group">
+            <label>დაბადების ადგილი / Place of Birth</label>
+            <div class="dual-inputs">
+              <div class="input-with-badge">
+                <input type="text" id="birth_place" placeholder="Georgian">
+                <span class="field-badge uncheckable hidden" id="badge-birth_place">Uncheckable</span>
+              </div>
+              <div class="input-with-badge">
+                <input type="text" id="birth_place_lat" placeholder="Latin">
+                <span class="field-badge uncheckable hidden" id="badge-birth_place_lat">Uncheckable</span>
+              </div>
+            </div>
+          </div>
+          <div class="field-group">
+            <label>მოქალაქეობა / Citizenship</label>
+            <div class="input-with-badge">
+              <input type="text" id="citizenship">
+              <span class="field-badge not-checked hidden" id="badge-citizenship">Not checked</span>
+            </div>
+          </div>
+          <div class="field-group">
+            <label>სქესი / Sex</label>
+            <div class="input-with-badge">
+              <input type="text" id="gender">
+              <span class="field-badge not-checked hidden" id="badge-gender">Not checked</span>
+            </div>
+          </div>
+          <div class="field-group">
+            <label>პირადი ნომერი / Personal Number</label>
+            <div class="input-with-badge">
+              <input type="text" id="personal_id">
+              <span class="field-badge not-checked hidden" id="badge-personal_id">Not checked</span>
+            </div>
+          </div>
+          <div class="field-group">
+            <label id="label-doc-number">ბარათის ნომერი / Card Number</label>
+            <div class="input-with-badge">
+              <input type="text" id="card_number">
+              <span class="field-badge not-checked hidden" id="badge-card_number">Not checked</span>
+            </div>
+          </div>
+          <div class="field-group">
+            <label>მოქმედების ვადა / Date of Expiry</label>
+            <div class="input-with-badge">
+              <input type="text" id="expiry_date">
+              <span class="field-badge not-checked hidden" id="badge-expiry_date">Not checked</span>
+            </div>
+          </div>
+          <div class="field-group">
+            <label>გაცემის თარიღი / Date of Issue</label>
+            <div class="input-with-badge">
+              <input type="text" id="issue_date">
+              <span class="field-badge uncheckable hidden" id="badge-issue_date">Uncheckable</span>
+            </div>
+          </div>
+          <div class="mrz-block">
+            <button type="button" class="mrz-toggle" id="mrz-toggle" onclick="toggleMrz()">
+              <span>MRZ</span>
+              <span id="mrz-chevron">▲</span>
+            </button>
+            <div class="mrz-panel" id="mrz-panel">
+              <textarea id="mrz_strip" readonly placeholder="MRZ…"></textarea>
+              <pre id="mrz-view" class="mrz-view" aria-label="MRZ display"></pre>
+            </div>
+          </div>
+        </div>
+      </div>
+
+    <div class="bottom-actions">
+      <button class="btn btn-new" type="button" id="btn-new" onclick="newClient()">New client</button>
+      <button class="btn btn-pdf" id="btn-pdf" onclick="downloadPDF()">Download PDF</button>
+    </div>
+  </div>
+
+  <div id="camera-modal">
+    <div class="camera-title" id="camera-title">Front side</div>
+    <div class="video-container" id="video-container">
+      <video id="video" autoplay playsinline webkit-playsinline muted></video>
+      <div id="id-frame" class="id-frame"></div>
+    </div>
+    <div id="readiness-status" class="status-badge">Place the document in the frame…</div>
+    <div class="camera-actions">
+      <button id="capture-btn" type="button" class="btn btn-capture" onclick="capturePhoto()">Capture</button>
+      <button type="button" class="btn btn-upload" onclick="triggerUpload(activeSlot)">Upload</button>
+      <button type="button" class="btn btn-close" onclick="closeCamera()">Close</button>
+    </div>
+  </div>
+
+  <input type="file" id="file-input" accept="image/*" style="display:none;">
+  <canvas id="hidden-canvas" style="display:none;"></canvas>
+
+  <script>
+    const FRAME_W = 0.82;
+    const FRAME_H = 0.78;
+
+    let activeSlot = null;
+    let videoStream = null;
+    let checkInterval = null;
+    let frontBlob = null;
+    let backBlob = null;
+    let frontDataUrl = null;
+    let backDataUrl = null;
+    let passportBlob = null;
+    let passportDataUrl = null;
+    /** Per-slot generate stages: { crop, straighten, brightness, final } dataUrls */
+    let frontStages = null;
+    let backStages = null;
+    let passportStages = null;
+    let readyStreak = 0; // consecutive good frames before "ready"
+    let readyGraceUntil = 0; // keep Capture enabled briefly (iOS tap vs flicker)
+    let capturingNow = false;
+    let selectedMethod = null;
+
+    function applyDocLabels() {
+      const docLabel = document.getElementById("label-doc-number");
+      const frontCap = document.getElementById("pdf-caption-front");
+      const backFig = document.getElementById("pdf-figure-back");
+      const generateBar = document.getElementById("generate-bar");
+      if (selectedMethod === "passport") {
+        if (docLabel) docLabel.textContent = "პასპორტის ნომერი / Passport Number";
+        if (frontCap) frontCap.textContent = "Passport";
+        if (backFig) backFig.classList.add("hidden-side");
+        if (generateBar) generateBar.style.display = "none";
+      } else {
+        if (docLabel) docLabel.textContent = "ბარათის ნომერი / Card Number";
+        if (frontCap) frontCap.textContent = "Front side";
+        if (backFig) backFig.classList.remove("hidden-side");
+        if (generateBar) generateBar.style.display = "flex";
+      }
+    }
+
+    function showMethodChoice() {
+      closeCamera();
+      selectedMethod = null;
+      document.getElementById("method-choice").classList.remove("hidden");
+      document.getElementById("scanner-view").classList.remove("visible");
+      document.getElementById("passport-view").classList.remove("visible");
+      window.scrollTo({ top: 0, behavior: "smooth" });
+    }
+
+    function selectMethod(method) {
+      selectedMethod = method;
+      document.getElementById("method-choice").classList.add("hidden");
+      document.getElementById("scanner-view").classList.remove("visible");
+      document.getElementById("passport-view").classList.remove("visible");
+      applyDocLabels();
+
+      // Strict routing: ID UI ↔ ID logic, Passport UI ↔ Passport logic
+      if (method === "id") {
+        document.getElementById("scanner-view").classList.add("visible");
+      } else if (method === "passport") {
+        document.getElementById("passport-view").classList.add("visible");
+      }
+      window.scrollTo({ top: 0, behavior: "smooth" });
+    }
+
+    const video = document.getElementById("video");
+    const idFrame = document.getElementById("id-frame");
+    const readinessStatus = document.getElementById("readiness-status");
+    const hiddenCanvas = document.getElementById("hidden-canvas");
+    const cameraModal = document.getElementById("camera-modal");
+
+    /** iOS Safari: createImageBitmap(canvas) often fails — go via Blob / Image. */
+    async function canvasToBlobJpeg(canvas, quality = 0.95) {
+      if (typeof canvas.toBlob === "function") {
+        const blob = await new Promise((resolve) => {
+          canvas.toBlob((b) => resolve(b), "image/jpeg", quality);
+        });
+        if (blob) return blob;
+      }
+      const dataUrl = canvas.toDataURL("image/jpeg", quality);
+      const res = await fetch(dataUrl);
+      return res.blob();
+    }
+
+    async function toDrawableBitmap(source) {
+      let blob = null;
+      if (typeof Blob !== "undefined" && source instanceof Blob) {
+        blob = source;
+      } else if (source instanceof HTMLCanvasElement) {
+        blob = await canvasToBlobJpeg(source);
+      }
+
+      if (blob && typeof createImageBitmap === "function") {
+        try {
+          return await createImageBitmap(blob);
+        } catch (_) { /* fall through */ }
+      }
+      if (!blob && typeof createImageBitmap === "function") {
+        try {
+          return await createImageBitmap(source);
+        } catch (_) { /* fall through */ }
+      }
+
+      // Last resort: HTMLImageElement (drawable by canvas.drawImage)
+      if (!blob && source instanceof HTMLCanvasElement) {
+        blob = await canvasToBlobJpeg(source);
+      }
+      if (!blob) throw new Error("Could not decode image on this browser");
+      const url = URL.createObjectURL(blob);
+      const img = new Image();
+      img.decoding = "async";
+      await new Promise((resolve, reject) => {
+        img.onload = resolve;
+        img.onerror = reject;
+        img.src = url;
+      });
+      img.close = () => {
+        try { URL.revokeObjectURL(url); } catch (_) {}
+      };
+      return img;
+    }
+
+    /**
+     * Map the on-screen guide frame to video-buffer pixels.
+     * Video uses object-fit:cover, so the visible area ≠ the full buffer
+     * (especially on iPhone portrait cameras). Capture/clarity must use this.
+     */
+    function getVisibleVideoRect(videoEl, containerEl) {
+      const vw = videoEl.videoWidth || 0;
+      const vh = videoEl.videoHeight || 0;
+      if (!vw || !vh) return null;
+
+      const cw = (containerEl && containerEl.clientWidth) || vw;
+      const ch = (containerEl && containerEl.clientHeight) || vh;
+      const videoAspect = vw / vh;
+      const boxAspect = cw / Math.max(1, ch);
+
+      let visibleW;
+      let visibleH;
+      let srcX;
+      let srcY;
+      if (videoAspect > boxAspect) {
+        // wider than box → crop left/right
+        visibleH = vh;
+        visibleW = vh * boxAspect;
+        srcX = (vw - visibleW) / 2;
+        srcY = 0;
+      } else {
+        // taller than box → crop top/bottom
+        visibleW = vw;
+        visibleH = vw / boxAspect;
+        srcX = 0;
+        srcY = (vh - visibleH) / 2;
+      }
+
+      const frameW = visibleW * FRAME_W;
+      const frameH = visibleH * FRAME_H;
+      return {
+        vw,
+        vh,
+        visible: { x: srcX, y: srcY, w: visibleW, h: visibleH },
+        frame: {
+          x: srcX + (visibleW - frameW) / 2,
+          y: srcY + (visibleH - frameH) / 2,
+          w: frameW,
+          h: frameH,
+        },
+      };
+    }
+
+    async function openCameraStream() {
+      if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+        throw new Error("getUserMedia unsupported");
+      }
+      const attempts = [
+        {
+          video: {
+            facingMode: { ideal: "environment" },
+            width: { ideal: 1920 },
+            height: { ideal: 1080 },
+          },
+          audio: false,
+        },
+        { video: { facingMode: { ideal: "environment" } }, audio: false },
+        { video: { facingMode: "environment" }, audio: false },
+        { video: true, audio: false },
+      ];
+      let lastErr = null;
+      for (const constraints of attempts) {
+        try {
+          return await navigator.mediaDevices.getUserMedia(constraints);
+        } catch (err) {
+          lastErr = err;
+        }
+      }
+      throw lastErr || new Error("camera failed");
+    }
+
+    function updateStepHint() {
+      const hint = document.getElementById("step-hint");
+      if (!frontDataUrl) {
+        hint.textContent = "Capture or upload the front side first.";
+      } else if (!backDataUrl) {
+        hint.textContent = "Now capture or upload the back side (MRZ strip).";
+      } else {
+        hint.textContent = "Both sides are ready. Review the data and download the PDF.";
+      }
+    }
+
+    function triggerUpload(slot) {
+      if (!slot) return;
+      if (slot === "back" && !frontDataUrl) {
+        const status = document.getElementById("ocr-status");
+        if (status) {
+          status.classList.add("visible");
+          status.textContent = "Error: capture or upload the ID front side first.";
+        }
+        return;
+      }
+      activeSlot = slot;
+      const input = document.getElementById("file-input");
+      input.value = "";
+      input.click();
+    }
+
+    document.getElementById("file-input").addEventListener("change", async (e) => {
+      const file = e.target.files && e.target.files[0];
+      if (!file || !activeSlot) return;
+
+      try {
+        const originalUrl = await new Promise((resolve, reject) => {
+          const reader = new FileReader();
+          reader.onload = () => resolve(reader.result);
+          reader.onerror = reject;
+          reader.readAsDataURL(file);
+        });
+        const originalBlob = file;
+        let stages = null;
+        let final = { blob: originalBlob, dataUrl: originalUrl };
+        const bitmap = await toDrawableBitmap(file);
+        try {
+          if (activeSlot === "passport") {
+            // Drop REMARKS page from final photo; keep biodata for OCR
+            final = await processPassportImage(bitmap);
+          } else {
+            stages = await processDocumentForGenerate(bitmap);
+            final = stages.final;
+          }
+        } finally {
+          if (bitmap && typeof bitmap.close === "function") bitmap.close();
+        }
+
+        const ok = await validateCapturedSide(activeSlot, final.blob);
+        if (!ok) {
+          if (!cameraModal.classList.contains("open")) {
+            alert(readinessStatus.textContent || "Photo rejected. Please capture it correctly.");
+          }
+          return;
+        }
+
+        applySlotImage(
+          activeSlot,
+          {
+            original: { blob: originalBlob, dataUrl: originalUrl },
+            final,
+            stages,
+          },
+          { autoOpenNext: false }
+        );
+        if (cameraModal.classList.contains("open")) closeCamera();
+      } catch (err) {
+        console.error(err);
+        alert("Could not upload the photo.");
+      }
+    });
+
+    /** True if image border looks like a white / very light background. */
+    function borderLooksWhite(gray, w, h) {
+      const band = Math.max(2, Math.floor(Math.min(w, h) * 0.07));
+      let sum = 0;
+      let n = 0;
+      for (let y = 0; y < h; y++) {
+        for (let x = 0; x < w; x++) {
+          if (x >= band && x < w - band && y >= band && y < h - band) continue;
+          sum += gray[y * w + x];
+          n++;
+        }
+      }
+      return n > 0 && sum / n >= 205;
+    }
+
+    /** Pull mask back from its edges so a thin ring next to the card survives. */
+    function erodeMask(mask, w, h, rounds) {
+      let cur = mask;
+      for (let r = 0; r < rounds; r++) {
+        const next = new Uint8Array(cur);
+        for (let y = 0; y < h; y++) {
+          for (let x = 0; x < w; x++) {
+            const i = y * w + x;
+            if (!cur[i]) continue;
+            const up = y > 0 ? cur[i - w] : 1;
+            const down = y < h - 1 ? cur[i + w] : 1;
+            const left = x > 0 ? cur[i - 1] : 1;
+            const right = x < w - 1 ? cur[i + 1] : 1;
+            if (!up || !down || !left || !right) next[i] = 0;
+          }
+        }
+        cur = next;
+      }
+      return cur;
+    }
+
+    /**
+     * Flood-fill near-white pixels connected to the image border.
+     * Returns Uint8Array mask (1 = background to paint black).
+     */
+    function floodWhiteBackgroundMask(rgba, w, h, thresh) {
+      const mask = new Uint8Array(w * h);
+      const seen = new Uint8Array(w * h);
+      const stack = [];
+
+      const bright = (i) => {
+        const o = i * 4;
+        return 0.299 * rgba[o] + 0.587 * rgba[o + 1] + 0.114 * rgba[o + 2] >= thresh;
+      };
+
+      const push = (x, y) => {
+        if (x < 0 || y < 0 || x >= w || y >= h) return;
+        const i = y * w + x;
+        if (seen[i]) return;
+        seen[i] = 1;
+        if (!bright(i)) return;
+        mask[i] = 1;
+        stack.push(i);
+      };
+
+      for (let x = 0; x < w; x++) {
+        push(x, 0);
+        push(x, h - 1);
+      }
+      for (let y = 0; y < h; y++) {
+        push(0, y);
+        push(w - 1, y);
+      }
+
+      while (stack.length) {
+        const i = stack.pop();
+        const x = i % w;
+        const y = (i / w) | 0;
+        push(x + 1, y);
+        push(x - 1, y);
+        push(x, y + 1);
+        push(x, y - 1);
+      }
+      return mask;
+    }
+
+    /**
+     * Build a TEMP analysis image only (never used as final crop pixels):
+     * - black padding
+     * - optional outer-band white→black to help find the card contour
+     * Original bitmap is never modified.
+     */
+    async function buildAnalysisBlackBg(bitmap) {
+      const srcW = bitmap.width;
+      const srcH = bitmap.height;
+      const pad = Math.max(32, Math.round(Math.min(srcW, srcH) * 0.06));
+
+      const maxSide = 360;
+      const scale = Math.min(1, maxSide / Math.max(srcW, srcH));
+      const sw = Math.max(2, Math.round(srcW * scale));
+      const sh = Math.max(2, Math.round(srcH * scale));
+
+      const sample = document.createElement("canvas");
+      sample.width = sw;
+      sample.height = sh;
+      const sctx = sample.getContext("2d", { willReadFrequently: true });
+      sctx.drawImage(bitmap, 0, 0, sw, sh);
+      const sampleData = sctx.getImageData(0, 0, sw, sh);
+      const gray = new Float32Array(sw * sh);
+      for (let i = 0, p = 0; i < sampleData.data.length; i += 4, p++) {
+        gray[p] = 0.299 * sampleData.data[i] + 0.587 * sampleData.data[i + 1] + 0.114 * sampleData.data[i + 2];
+      }
+
+      const whiteBg = borderLooksWhite(gray, sw, sh);
+
+      const out = document.createElement("canvas");
+      out.width = srcW + pad * 2;
+      out.height = srcH + pad * 2;
+      const ctx = out.getContext("2d");
+      ctx.fillStyle = "#000";
+      ctx.fillRect(0, 0, out.width, out.height);
+      // Draw ORIGINAL pixels unchanged into analysis canvas
+      ctx.drawImage(bitmap, pad, pad);
+
+      if (whiteBg) {
+        // Only darken outer band of white background on the ANALYSIS copy.
+        // High threshold + erosion keep the card's own light edge out of the mask,
+        // otherwise the detected contour eats into the card (over-crop on white desks).
+        let mask = floodWhiteBackgroundMask(sampleData.data, sw, sh, 234);
+        mask = erodeMask(mask, sw, sh, 2);
+        const bx = Math.max(2, Math.floor(sw * 0.11));
+        const by = Math.max(2, Math.floor(sh * 0.11));
+        for (let y = by; y < sh - by; y++) {
+          for (let x = bx; x < sw - bx; x++) {
+            mask[y * sw + x] = 0; // never touch card interior on analysis either
+          }
+        }
+
+        const id = ctx.getImageData(pad, pad, srcW, srcH);
+        const px = id.data;
+        for (let y = 0; y < srcH; y++) {
+          const my = Math.min(sh - 1, Math.floor(y * scale));
+          for (let x = 0; x < srcW; x++) {
+            const mx = Math.min(sw - 1, Math.floor(x * scale));
+            if (!mask[my * sw + mx]) continue;
+            const i = (y * srcW + x) * 4;
+            px[i] = 0;
+            px[i + 1] = 0;
+            px[i + 2] = 0;
+          }
+        }
+        ctx.putImageData(id, pad, pad);
+      }
+
+      const analysisBitmap = await toDrawableBitmap(out);
+      return { analysisBitmap, pad, whiteBg };
+    }
+
+    /** Straighten tilted photo without cropping to document contour. */
+    async function deskewBitmapOnly(bitmap) {
+      const analysis = analyzeForDeskew(bitmap);
+      const angle = analysis.angle;
+      // Conservative: only small confident corrections
+      if (Math.abs(angle) < 1.2 || !analysis.confident) {
+        return canvasToJpeg(bitmap, 0, 0, bitmap.width, bitmap.height);
+      }
+
+      const rotated = await rotateBitmap(bitmap, -angle);
+      const result = await canvasToJpeg(rotated, 0, 0, rotated.width, rotated.height);
+      if (typeof rotated.close === "function") rotated.close();
+      return result;
+    }
+
+    /** Analyze image and return deskew angle only if clearly better than original. */
+    function analyzeForDeskew(bitmap) {
+      const srcW = bitmap.width;
+      const srcH = bitmap.height;
+      const maxSide = 420;
+      const scale = Math.min(1, maxSide / Math.max(srcW, srcH));
+      const w = Math.max(2, Math.round(srcW * scale));
+      const h = Math.max(2, Math.round(srcH * scale));
+
+      const canvas = document.createElement("canvas");
+      canvas.width = w;
+      canvas.height = h;
+      const ctx = canvas.getContext("2d", { willReadFrequently: true });
+      ctx.drawImage(bitmap, 0, 0, w, h);
+      const { data } = ctx.getImageData(0, 0, w, h);
+
+      const gray = new Float32Array(w * h);
+      let sumG = 0;
+      for (let i = 0, p = 0; i < data.length; i += 4, p++) {
+        const g = 0.299 * data[i] + 0.587 * data[i + 1] + 0.114 * data[i + 2];
+        gray[p] = g;
+        sumG += g;
+      }
+      const meanG = sumG / gray.length;
+      const blur = boxBlurGray(gray, w, h, Math.max(2, Math.round(Math.min(w, h) * 0.03)));
+      const ID_ASPECT = 85.6 / 54;
+
+      let best = findBestIdWindow(blur, w, h, ID_ASPECT);
+      const brightBox = findBrightCardBox(blur, gray, w, h, meanG, ID_ASPECT);
+      if (brightBox && (!best || brightBox.score > best.score)) best = brightBox;
+      const edgeBox = findEdgeCardBox(gray, w, h, ID_ASPECT);
+      if (edgeBox && (!best || edgeBox.score > best.score * 1.05)) best = edgeBox;
+      if (!best) {
+        return { angle: 0, confident: false };
+      }
+
+      return estimateDeskewAngle(gray, w, h, best);
+    }
+
+    /** Auto-crop ID card tightly — remove patterned/dark backgrounds. */
+    /**
+     * Detect ID box on an analysis image (may have black assist bg).
+     * Returns { best, gray, blur, meanG, w, h, scale } or best=null.
+     */
+    function detectCardBoxOnBitmap(analysisBitmap, aspectRatio) {
+      const srcW = analysisBitmap.width;
+      const srcH = analysisBitmap.height;
+      const maxSide = 480;
+      const scale = Math.min(1, maxSide / Math.max(srcW, srcH));
+      const w = Math.max(2, Math.round(srcW * scale));
+      const h = Math.max(2, Math.round(srcH * scale));
+
+      const canvas = document.createElement("canvas");
+      canvas.width = w;
+      canvas.height = h;
+      const ctx = canvas.getContext("2d", { willReadFrequently: true });
+      ctx.drawImage(analysisBitmap, 0, 0, w, h);
+      const { data } = ctx.getImageData(0, 0, w, h);
+
+      const gray = new Float32Array(w * h);
+      let sumG = 0;
+      for (let i = 0, p = 0; i < data.length; i += 4, p++) {
+        const g = 0.299 * data[i] + 0.587 * data[i + 1] + 0.114 * data[i + 2];
+        gray[p] = g;
+        sumG += g;
+      }
+      const meanG = sumG / gray.length;
+      const blur = boxBlurGray(gray, w, h, Math.max(2, Math.round(Math.min(w, h) * 0.03)));
+      const ID_ASPECT = aspectRatio || 85.6 / 54;
+
+      let best = findBestIdWindow(blur, w, h, ID_ASPECT);
+      const brightBox = findBrightCardBox(blur, gray, w, h, meanG, ID_ASPECT);
+      if (brightBox && (!best || brightBox.score > best.score)) best = brightBox;
+      const edgeBox = findEdgeCardBox(gray, w, h, ID_ASPECT);
+      if (edgeBox && (!best || edgeBox.score > best.score * 1.05)) best = edgeBox;
+
+      return { best, gray, blur, meanG, w, h, scale, ID_ASPECT };
+    }
+
+    /**
+     * Crop to document. Black-bg assist is ONLY for finding the contour —
+     * final JPEG pixels always come from the unmodified original (or its rotate).
+     * Tilts are corrected toward a flat ID-aspect rectangle (like a straight scan).
+     *
+     * options.passport — slightly easier warp acceptance + deskew for biodata pages.
+     */
+    async function cropDocumentBitmap(bitmap, aspectRatio, options = {}) {
+      // ID aspect stays 85.6/54 unless caller (passport) passes another ratio
+      const ID_ASPECT = aspectRatio || 85.6 / 54;
+      const passport = !!options.passport;
+      let analysisTemps = [];
+
+      const closeTemp = (bmp) => {
+        if (bmp && typeof bmp.close === "function") {
+          try { bmp.close(); } catch (_) {}
+        }
+      };
+
+      const analyze = async (origBmp) => {
+        const assist = await buildAnalysisBlackBg(origBmp);
+        analysisTemps.push(assist.analysisBitmap);
+        const det = detectCardBoxOnBitmap(assist.analysisBitmap, ID_ASPECT);
+        return {
+          ...det,
+          pad: assist.pad,
+          whiteBg: assist.whiteBg,
+          assistBitmap: assist.analysisBitmap,
+        };
+      };
+
+      // Map analysis-full-res crop rect → original bitmap coords
+      const mapToOriginal = (minX, minY, maxX, maxY, scale, pad, origW, origH) => {
+        let sx = Math.floor(minX / scale) - pad;
+        let sy = Math.floor(minY / scale) - pad;
+        let ex = Math.ceil((maxX + 1) / scale) - pad;
+        let ey = Math.ceil((maxY + 1) / scale) - pad;
+        sx = Math.max(0, Math.min(origW - 1, sx));
+        sy = Math.max(0, Math.min(origH - 1, sy));
+        ex = Math.max(sx + 1, Math.min(origW, ex));
+        ey = Math.max(sy + 1, Math.min(origH, ey));
+        return { sx, sy, sw: ex - sx, sh: ey - sy };
+      };
+
+      const mapPtToOriginal = (x, y, scale, pad, origW, origH) => ({
+        x: Math.max(0, Math.min(origW - 1, x / scale - pad)),
+        y: Math.max(0, Math.min(origH - 1, y / scale - pad)),
+      });
+
+      let workingOrig = bitmap;
+      let rotatedExtra = null;
+      let warpedExtra = null;
+      let turnedExtra = null;
+      let straightenShot = null; // jpeg after straighten only (before crop)
+      let det = await analyze(workingOrig);
+
+      const cleanupTemps = () => {
+        for (const t of analysisTemps) closeTemp(t);
+        analysisTemps = [];
+        closeTemp(rotatedExtra);
+        closeTemp(warpedExtra);
+        closeTemp(turnedExtra);
+      };
+
+      // Sideways capture: the card box only matches inside a landscape frame,
+      // so give the detector a quarter-turned copy before giving up.
+      if (!det.best) {
+        const turned = await rotateBitmap(workingOrig, 90);
+        const turnedDet = await analyze(turned);
+        if (turnedDet.best) {
+          turnedExtra = turned;
+          workingOrig = turned;
+          det = turnedDet;
+          straightenShot = await canvasToJpeg(turned, 0, 0, turned.width, turned.height);
+        } else {
+          closeTemp(turned);
+        }
+      }
+
+      // 1) Perspective straighten when we can lock onto the 4 card corners
+      if (det.best) {
+        const quadA = findCardQuad(det.gray, det.w, det.h, det.best);
+        if (quadA) {
+          const quadOrig = quadA.map((p) =>
+            mapPtToOriginal(p.x, p.y, det.scale, det.pad, workingOrig.width, workingOrig.height)
+          );
+          if (isPlausibleCardQuad(quadOrig, workingOrig.width, workingOrig.height, ID_ASPECT, {
+            passport,
+          })) {
+            try {
+              warpedExtra = await warpQuadToIdBitmap(workingOrig, quadOrig, ID_ASPECT);
+              const result = await canvasToJpeg(
+                warpedExtra, 0, 0, warpedExtra.width, warpedExtra.height
+              );
+              cleanupTemps();
+              // Warp already straightens + crops to ID aspect
+              return { ...result, straighten: result };
+            } catch (err) {
+              console.warn("perspective warp failed, falling back:", err);
+            }
+          }
+        }
+      }
+
+      // 2) Fallback: rotate deskew + axis-aligned crop
+      if (det.best) {
+        const skew = estimateDeskewAngle(det.gray, det.w, det.h, det.best);
+        const minSkew = passport ? 0.5 : 0.6;
+        if (skew.confident && Math.abs(skew.angle) >= minSkew) {
+          rotatedExtra = await rotateBitmap(workingOrig, -skew.angle);
+          workingOrig = rotatedExtra;
+          straightenShot = await canvasToJpeg(
+            workingOrig, 0, 0, workingOrig.width, workingOrig.height
+          );
+          det = await analyze(workingOrig);
+        }
+      }
+
+      const outW = workingOrig.width;
+      const outH = workingOrig.height;
+
+      if (!det.best) {
+        const fallback = await canvasToJpeg(workingOrig, 0, 0, outW, outH);
+        cleanupTemps();
+        return { ...fallback, straighten: straightenShot || fallback };
+      }
+
+      let { minX, minY, maxX, maxY } = tightenCardBox(
+        det.blur, det.gray, det.w, det.h, det.best, det.meanG
+      );
+
+      // White desks give a weak card edge — keep a slightly wider safety margin
+      const padRatio = det.whiteBg ? 0.03 : 0.015;
+      const padX = Math.max(2, Math.round((maxX - minX) * padRatio));
+      const padY = Math.max(2, Math.round((maxY - minY) * padRatio));
+      minX = Math.max(0, minX - padX);
+      minY = Math.max(0, minY - padY);
+      maxX = Math.min(det.w - 1, maxX + padX);
+      maxY = Math.min(det.h - 1, maxY + padY);
+
+      const { sx, sy, sw, sh } = mapToOriginal(
+        minX, minY, maxX, maxY, det.scale, det.pad, outW, outH
+      );
+
+      if (sw < outW * 0.12 || sh < outH * 0.08) {
+        const fallback = await canvasToJpeg(workingOrig, 0, 0, outW, outH);
+        cleanupTemps();
+        return { ...fallback, straighten: straightenShot || fallback };
+      }
+
+      // Crop from ORIGINAL pixels only — analysis black paint never reaches output
+      const result = await rectifyToIdAspect(workingOrig, sx, sy, sw, sh, ID_ASPECT);
+      cleanupTemps();
+      return { ...result, straighten: straightenShot || result };
+    }
+
+    /** Brighten a processed JPEG for better OCR readability. */
+    async function applyBrightnessToResult(result, amount = 1.04) {
+      const bmp = await toDrawableBitmap(result.blob);
+      try {
+        const out = document.createElement("canvas");
+        out.width = bmp.width;
+        out.height = bmp.height;
+        const ctx = out.getContext("2d");
+        ctx.filter = `brightness(${amount}) contrast(1.01)`;
+        ctx.drawImage(bmp, 0, 0);
+        ctx.filter = "none";
+        return await canvasToJpeg(out, 0, 0, out.width, out.height);
+      } finally {
+        if (typeof bmp.close === "function") {
+          try { bmp.close(); } catch (_) {}
+        }
+      }
+    }
+
+    /**
+     * Score a horizontal band: MRZ-like dense dark text near the bottom of biodata,
+     * vs purple/blue REMARKS header near the top of the remarks page.
+     */
+    function scorePassportHalf(rgba, w, h, y0, y1) {
+      let purple = 0;
+      let dark = 0;
+      let edge = 0;
+      let n = 0;
+      const yStart = Math.max(0, y0 | 0);
+      const yEnd = Math.min(h, y1 | 0);
+      for (let y = yStart; y < yEnd; y += 2) {
+        for (let x = 0; x < w; x += 2) {
+          const i = (y * w + x) * 4;
+          const r = rgba[i];
+          const g = rgba[i + 1];
+          const b = rgba[i + 2];
+          const lum = 0.299 * r + 0.587 * g + 0.114 * b;
+          n++;
+          if (lum < 70) dark++;
+          // REMARKS header band is soft purple/blue
+          if (b > r + 15 && b > g + 5 && b > 90 && lum > 60 && lum < 200) purple++;
+          if (x + 2 < w) {
+            const i2 = (y * w + x + 2) * 4;
+            const lum2 = 0.299 * rgba[i2] + 0.587 * rgba[i2 + 1] + 0.114 * rgba[i2 + 2];
+            if (Math.abs(lum - lum2) > 40) edge++;
+          }
+        }
+      }
+      if (!n) return { purple: 0, dark: 0, edge: 0, mrz: 0 };
+      // MRZ sits in the lower ~30% of the biodata page — dense dark + edges
+      const bandH = Math.max(1, yEnd - yStart);
+      const mrzY0 = yStart + Math.floor(bandH * 0.65);
+      let mrzDark = 0;
+      let mrzN = 0;
+      for (let y = mrzY0; y < yEnd; y += 2) {
+        for (let x = 0; x < w; x += 2) {
+          const i = (y * w + x) * 4;
+          const lum = 0.299 * rgba[i] + 0.587 * rgba[i + 1] + 0.114 * rgba[i + 2];
+          mrzN++;
+          if (lum < 85) mrzDark++;
+        }
+      }
+      return {
+        purple: purple / n,
+        dark: dark / n,
+        edge: edge / n,
+        mrz: mrzN ? mrzDark / mrzN : 0,
+      };
+    }
+
+    /**
+     * Drop the REMARKS (შენიშვნები) page from open-book passport photos.
+     * Keeps only the biodata page for the final image + OCR.
+     */
+    async function isolatePassportBiodataBitmap(bitmap) {
+      const w = bitmap.width;
+      const h = bitmap.height;
+      if (!w || !h) return bitmap;
+
+      const aspect = w / h;
+      let sx = 0;
+      let sy = 0;
+      let sw = w;
+      let sh = h;
+      let cut = false;
+
+      // Tall open book: REMARKS on top, biodata underneath
+      if (aspect < 0.95) {
+        const keepRatio = 0.52;
+        sy = Math.max(0, Math.floor(h * (1 - keepRatio)));
+        sh = h - sy;
+        cut = true;
+      } else if (aspect > 1.55) {
+        // Wide open book: REMARKS left, biodata right — keep right half
+        const keepRatio = 0.52;
+        sx = Math.max(0, Math.floor(w * (1 - keepRatio)));
+        sw = w - sx;
+        cut = true;
+      } else {
+        // Near single-page aspect: still drop top if it looks like REMARKS
+        const maxSide = 420;
+        const scale = Math.min(1, maxSide / Math.max(w, h));
+        const aw = Math.max(2, Math.round(w * scale));
+        const ah = Math.max(2, Math.round(h * scale));
+        const c = document.createElement("canvas");
+        c.width = aw;
+        c.height = ah;
+        const ctx = c.getContext("2d", { willReadFrequently: true });
+        ctx.drawImage(bitmap, 0, 0, aw, ah);
+        const { data } = ctx.getImageData(0, 0, aw, ah);
+        const mid = Math.floor(ah / 2);
+        const top = scorePassportHalf(data, aw, ah, 0, mid);
+        const bot = scorePassportHalf(data, aw, ah, mid, ah);
+        // Top has purple header and weak MRZ; bottom has stronger MRZ text
+        if (top.purple > 0.04 && bot.mrz > top.mrz + 0.04) {
+          sy = Math.floor(h * 0.48);
+          sh = h - sy;
+          cut = true;
+        }
+      }
+
+      if (!cut) return bitmap;
+
+      const canvas = document.createElement("canvas");
+      canvas.width = sw;
+      canvas.height = sh;
+      const ctx = canvas.getContext("2d");
+      ctx.drawImage(bitmap, sx, sy, sw, sh, 0, 0, sw, sh);
+      return toDrawableBitmap(canvas);
+    }
+
+    /**
+     * Final passport photo: remove REMARKS page only.
+     * No aggressive warp/deskew here — that was blanking OCR fields.
+     */
+    async function processPassportImage(bitmap) {
+      let isolated = null;
+      try {
+        isolated = await isolatePassportBiodataBitmap(bitmap);
+        return await canvasToJpeg(isolated, 0, 0, isolated.width, isolated.height);
+      } finally {
+        if (isolated && isolated !== bitmap && typeof isolated.close === "function") {
+          try { isolated.close(); } catch (_) {}
+        }
+      }
+    }
+
+    /**
+     * Camera capture: the dashed guide frame IS the final photo.
+     * No second contour crop — front and back keep exactly what was in the frame.
+     */
+    async function processFrameCaptureForGenerate(bitmap) {
+      const frame = await canvasToJpeg(bitmap, 0, 0, bitmap.width, bitmap.height);
+      let bright = frame;
+      try {
+        bright = await applyBrightnessToResult(frame);
+      } catch (_) {
+        bright = frame;
+      }
+      return {
+        crop: { blob: frame.blob, dataUrl: frame.dataUrl },
+        straighten: { blob: frame.blob, dataUrl: frame.dataUrl },
+        brightness: { blob: bright.blob, dataUrl: bright.dataUrl },
+        // Final = exact frame contents (what the user saw inside the guide)
+        final: { blob: frame.blob, dataUrl: frame.dataUrl },
+      };
+    }
+
+    /**
+     * Full generate pipeline for uploaded ID photos (no live camera frame):
+     * 1) Crop  2) Straighten  3) Brightness  → final = all three.
+     */
+    async function processDocumentForGenerate(bitmap, aspectRatio) {
+      const cropped = await cropDocumentBitmap(bitmap, aspectRatio);
+      const bright = await applyBrightnessToResult(cropped);
+      const straighten = cropped.straighten || cropped;
+      return {
+        crop: { blob: cropped.blob, dataUrl: cropped.dataUrl },
+        straighten: { blob: straighten.blob, dataUrl: straighten.dataUrl },
+        brightness: { blob: bright.blob, dataUrl: bright.dataUrl },
+        final: { blob: bright.blob, dataUrl: bright.dataUrl },
+      };
+    }
+
+    /**
+     * Rotate a JPEG data URL counter-clockwise by 90 / 180 / 270 degrees.
+     * Canvas rotates clockwise for positive angles, hence the negative radians.
+     */
+    async function rotateDataUrlCcw(dataUrl, degrees) {
+      const deg = ((degrees % 360) + 360) % 360;
+      if (!dataUrl || !deg) return dataUrl;
+      const img = new Image();
+      await new Promise((resolve, reject) => {
+        img.onload = resolve;
+        img.onerror = reject;
+        img.src = dataUrl;
+      });
+      const swap = deg === 90 || deg === 270;
+      const canvas = document.createElement("canvas");
+      canvas.width = swap ? img.height : img.width;
+      canvas.height = swap ? img.width : img.height;
+      const ctx = canvas.getContext("2d");
+      ctx.translate(canvas.width / 2, canvas.height / 2);
+      ctx.rotate((-deg * Math.PI) / 180);
+      ctx.drawImage(img, -img.width / 2, -img.height / 2);
+      return canvas.toDataURL("image/jpeg", 0.92);
+    }
+
+    async function uprightStages(stages, rotation) {
+      if (!stages || !rotation) return stages;
+      const out = {};
+      for (const key of Object.keys(stages)) {
+        const stage = stages[key] || {};
+        out[key] = {
+          blob: stage.blob,
+          dataUrl: await rotateDataUrlCcw(stage.dataUrl, rotation),
+        };
+      }
+      return out;
+    }
+
+    /**
+     * Only Vision knows which way the text runs, so upside-down and sideways
+     * captures are uprighted after OCR, using the rotation it reports.
+     */
+    async function applyDetectedOrientation(orientation) {
+      if (!orientation) return;
+      const frontRot = orientation.front || 0;
+      const backRot = orientation.back || 0;
+      if (frontRot) {
+        frontStages = await uprightStages(frontStages, frontRot);
+        frontDataUrl = await rotateDataUrlCcw(frontDataUrl, frontRot);
+      }
+      if (backRot) {
+        backStages = await uprightStages(backStages, backRot);
+        backDataUrl = await rotateDataUrlCcw(backDataUrl, backRot);
+      }
+      if (frontRot || backRot) refreshPdfPhotosFromStage();
+    }
+
+    function stageDataUrl(stages, key) {
+      if (!stages) return "";
+      if (key === "final") return (stages.final || stages.brightness || {}).dataUrl || "";
+      return (stages[key] || stages.final || {}).dataUrl || "";
+    }
+
+    function refreshPdfPhotosFromStage() {
+      const sel = document.getElementById("generate-stage");
+      const key = (sel && sel.value) || "final";
+      if (selectedMethod === "passport") {
+        const url = stageDataUrl(passportStages, key) || passportDataUrl || "";
+        document.getElementById("pdf-img-front").src = url;
+        document.getElementById("pdf-img-back").src = "";
+        return;
+      }
+      const frontUrl = stageDataUrl(frontStages, key) || frontDataUrl || "";
+      const backUrl = stageDataUrl(backStages, key) || backDataUrl || "";
+      document.getElementById("pdf-img-front").src = frontUrl;
+      document.getElementById("pdf-img-back").src = backUrl;
+    }
+
+    function onGenerateStageChange() {
+      refreshPdfPhotosFromStage();
+    }
+
+    /** Fit a line through edge samples: for horizontal sides y≈m x+b; vertical x≈m y+b. */
+    function fitEdgeLine(points, horizontal) {
+      if (!points || points.length < 6) return null;
+      // Trim outliers by sorting on the dependent axis and keeping central 70%
+      const sorted = points.slice().sort((a, b) =>
+        horizontal ? a.y - b.y : a.x - b.x
+      );
+      const lo = Math.floor(sorted.length * 0.15);
+      const hi = Math.ceil(sorted.length * 0.85);
+      const use = sorted.slice(lo, Math.max(lo + 6, hi));
+      let n = 0;
+      let sx = 0;
+      let sy = 0;
+      let sxx = 0;
+      let sxy = 0;
+      for (const p of use) {
+        const u = horizontal ? p.x : p.y;
+        const v = horizontal ? p.y : p.x;
+        sx += u;
+        sy += v;
+        sxx += u * u;
+        sxy += u * v;
+        n++;
+      }
+      const den = n * sxx - sx * sx;
+      if (Math.abs(den) < 1e-6) {
+        const meanV = sy / n;
+        return horizontal
+          ? { m: 0, b: meanV, horizontal: true }
+          : { m: 0, b: meanV, horizontal: false };
+      }
+      const m = (n * sxy - sx * sy) / den;
+      const b = (sy - m * sx) / n;
+      // Reject absurd slopes (card sides shouldn't be that diagonal in-band)
+      if (Math.abs(m) > 0.55) return null;
+      return { m, b, horizontal: !!horizontal };
+    }
+
+    function lineIntersect(a, b) {
+      if (!a || !b) return null;
+      // a/b: horizontal → y = m x + b ; vertical → x = m y + b
+      if (a.horizontal && !b.horizontal) {
+        // y = mA x + bA ; x = mB y + bB
+        const den = 1 - a.m * b.m;
+        if (Math.abs(den) < 1e-9) return null;
+        const y = (a.m * b.b + a.b) / den;
+        const x = b.m * y + b.b;
+        if (!Number.isFinite(x) || !Number.isFinite(y)) return null;
+        return { x, y };
+      }
+      if (!a.horizontal && b.horizontal) return lineIntersect(b, a);
+      return null;
+    }
+
+    /**
+     * Detect the 4 card corners (TL, TR, BR, BL) from edge gradients
+     * inside the detected axis-aligned box.
+     */
+    function findCardQuad(gray, w, h, box) {
+      const x0 = Math.max(1, box.minX | 0);
+      const y0 = Math.max(1, box.minY | 0);
+      const x1 = Math.min(w - 2, box.maxX | 0);
+      const y1 = Math.min(h - 2, box.maxY | 0);
+      const bw = x1 - x0 + 1;
+      const bh = y1 - y0 + 1;
+      if (bw < 40 || bh < 24) return null;
+
+      const bandY = Math.max(4, Math.round(bh * 0.18));
+      const bandX = Math.max(4, Math.round(bw * 0.14));
+      const topPts = [];
+      const botPts = [];
+      const leftPts = [];
+      const rightPts = [];
+
+      // Top / bottom: strongest vertical gradient per column
+      for (let x = x0 + 2; x <= x1 - 2; x += 1) {
+        let bestTop = -1;
+        let bestTopY = y0;
+        let bestBot = -1;
+        let bestBotY = y1;
+        for (let y = y0; y <= Math.min(y1, y0 + bandY); y++) {
+          const gy = Math.abs(gray[(y + 1) * w + x] - gray[(y - 1) * w + x]);
+          if (gy > bestTop) {
+            bestTop = gy;
+            bestTopY = y;
+          }
+        }
+        for (let y = Math.max(y0, y1 - bandY); y <= y1; y++) {
+          const gy = Math.abs(gray[(y + 1) * w + x] - gray[(y - 1) * w + x]);
+          if (gy > bestBot) {
+            bestBot = gy;
+            bestBotY = y;
+          }
+        }
+        if (bestTop > 18) topPts.push({ x, y: bestTopY, s: bestTop });
+        if (bestBot > 18) botPts.push({ x, y: bestBotY, s: bestBot });
+      }
+
+      // Left / right: strongest horizontal gradient per row
+      for (let y = y0 + 2; y <= y1 - 2; y += 1) {
+        let bestL = -1;
+        let bestLX = x0;
+        let bestR = -1;
+        let bestRX = x1;
+        for (let x = x0; x <= Math.min(x1, x0 + bandX); x++) {
+          const gx = Math.abs(gray[y * w + x + 1] - gray[y * w + x - 1]);
+          if (gx > bestL) {
+            bestL = gx;
+            bestLX = x;
+          }
+        }
+        for (let x = Math.max(x0, x1 - bandX); x <= x1; x++) {
+          const gx = Math.abs(gray[y * w + x + 1] - gray[y * w + x - 1]);
+          if (gx > bestR) {
+            bestR = gx;
+            bestRX = x;
+          }
+        }
+        if (bestL > 18) leftPts.push({ x: bestLX, y, s: bestL });
+        if (bestR > 18) rightPts.push({ x: bestRX, y, s: bestR });
+      }
+
+      // Keep strongest samples
+      const keepStrong = (pts, nKeep) => {
+        if (pts.length <= nKeep) return pts;
+        return pts.slice().sort((a, b) => b.s - a.s).slice(0, nKeep);
+      };
+      const top = fitEdgeLine(keepStrong(topPts, 120), true);
+      const bot = fitEdgeLine(keepStrong(botPts, 120), true);
+      const left = fitEdgeLine(keepStrong(leftPts, 120), false);
+      const right = fitEdgeLine(keepStrong(rightPts, 120), false);
+      if (!top || !bot || !left || !right) return null;
+
+      const tl = lineIntersect(top, left);
+      const tr = lineIntersect(top, right);
+      const br = lineIntersect(bot, right);
+      const bl = lineIntersect(bot, left);
+      if (!tl || !tr || !br || !bl) return null;
+
+      const quad = [tl, tr, br, bl];
+      for (const p of quad) {
+        if (p.x < -bw * 0.15 || p.y < -bh * 0.15) return null;
+        if (p.x > w + bw * 0.15 || p.y > h + bh * 0.15) return null;
+      }
+      return quad;
+    }
+
+    function quadArea(q) {
+      // Shoelace
+      let a = 0;
+      for (let i = 0; i < 4; i++) {
+        const j = (i + 1) % 4;
+        a += q[i].x * q[j].y - q[j].x * q[i].y;
+      }
+      return Math.abs(a) / 2;
+    }
+
+    function isPlausibleCardQuad(q, imgW, imgH, aspect, options = {}) {
+      if (!q || q.length !== 4) return false;
+      const passport = !!options.passport;
+      const area = quadArea(q);
+      if (area < imgW * imgH * (passport ? 0.03 : 0.04)) return false;
+
+      const dist = (a, b) => Math.hypot(a.x - b.x, a.y - b.y);
+      const top = dist(q[0], q[1]);
+      const bottom = dist(q[3], q[2]);
+      const left = dist(q[0], q[3]);
+      const right = dist(q[1], q[2]);
+      if (top < 30 || bottom < 30 || left < 18 || right < 18) return false;
+
+      // Opposite sides similar length
+      const sideTol = passport ? 1.7 : 1.55;
+      if (Math.max(top, bottom) / Math.max(1, Math.min(top, bottom)) > sideTol) return false;
+      if (Math.max(left, right) / Math.max(1, Math.min(left, right)) > sideTol) return false;
+
+      const avgW = (top + bottom) / 2;
+      const avgH = (left + right) / 2;
+      const a = avgW / Math.max(1, avgH);
+      const lo = aspect * (passport ? 0.5 : 0.55);
+      const hi = aspect * (passport ? 1.85 : 1.7);
+      if (a < lo || a > hi) return false;
+
+      // Convex + correct winding (TL-TR-BR-BL)
+      if (!(q[0].y <= q[3].y && q[1].y <= q[2].y)) return false;
+      if (!(q[0].x <= q[1].x && q[3].x <= q[2].x)) return false;
+      return true;
+    }
+
+    /** Solve 8-DOF homography mapping src quad → dst quad (column-major H 3x3). */
+    function solveHomography(src, dst) {
+      // For each point: x' = (h0 x + h1 y + h2) / (h6 x + h7 y + 1)
+      const A = [];
+      for (let i = 0; i < 4; i++) {
+        const x = src[i].x;
+        const y = src[i].y;
+        const u = dst[i].x;
+        const v = dst[i].y;
+        A.push([x, y, 1, 0, 0, 0, -u * x, -u * y, u]);
+        A.push([0, 0, 0, x, y, 1, -v * x, -v * y, v]);
+      }
+      // Gaussian elimination on 8x9 (h8 = 1 fixed → move last col)
+      const M = A.map((row) => {
+        const r = row.slice(0, 8);
+        r.push(row[8]);
+        return r;
+      });
+      const n = 8;
+      for (let col = 0; col < n; col++) {
+        let piv = col;
+        for (let r = col + 1; r < n; r++) {
+          if (Math.abs(M[r][col]) > Math.abs(M[piv][col])) piv = r;
+        }
+        if (Math.abs(M[piv][col]) < 1e-10) return null;
+        if (piv !== col) {
+          const tmp = M[col];
+          M[col] = M[piv];
+          M[piv] = tmp;
+        }
+        const div = M[col][col];
+        for (let c = col; c <= n; c++) M[col][c] /= div;
+        for (let r = 0; r < n; r++) {
+          if (r === col) continue;
+          const f = M[r][col];
+          for (let c = col; c <= n; c++) M[r][c] -= f * M[col][c];
+        }
+      }
+      const h = new Float64Array(9);
+      for (let i = 0; i < 8; i++) h[i] = M[i][8];
+      h[8] = 1;
+      return h;
+    }
+
+    function invertHomography3(h) {
+      const a = h[0];
+      const b = h[1];
+      const c = h[2];
+      const d = h[3];
+      const e = h[4];
+      const f = h[5];
+      const g = h[6];
+      const hh = h[7];
+      const i = h[8];
+      const A = e * i - f * hh;
+      const B = f * g - d * i;
+      const C = d * hh - e * g;
+      const D = c * hh - b * i;
+      const E = a * i - c * g;
+      const F = b * g - a * hh;
+      const G = b * f - c * e;
+      const H = c * d - a * f;
+      const I = a * e - b * d;
+      const det = a * A + b * B + c * C;
+      if (Math.abs(det) < 1e-12) return null;
+      const inv = new Float64Array(9);
+      inv[0] = A / det;
+      inv[1] = D / det;
+      inv[2] = G / det;
+      inv[3] = B / det;
+      inv[4] = E / det;
+      inv[5] = H / det;
+      inv[6] = C / det;
+      inv[7] = F / det;
+      inv[8] = I / det;
+      return inv;
+    }
+
+    function applyHomography(h, x, y) {
+      const w = h[6] * x + h[7] * y + h[8];
+      if (Math.abs(w) < 1e-9) return { x: 0, y: 0 };
+      return {
+        x: (h[0] * x + h[1] * y + h[2]) / w,
+        y: (h[3] * x + h[4] * y + h[5]) / w,
+      };
+    }
+
+    function sampleBilinear(data, w, h, x, y) {
+      if (x < 0 || y < 0 || x >= w - 1 || y >= h - 1) return [0, 0, 0];
+      const x0 = Math.floor(x);
+      const y0 = Math.floor(y);
+      const dx = x - x0;
+      const dy = y - y0;
+      const i00 = (y0 * w + x0) * 4;
+      const i10 = i00 + 4;
+      const i01 = i00 + w * 4;
+      const i11 = i01 + 4;
+      const out = [0, 0, 0];
+      for (let c = 0; c < 3; c++) {
+        const v =
+          data[i00 + c] * (1 - dx) * (1 - dy) +
+          data[i10 + c] * dx * (1 - dy) +
+          data[i01 + c] * (1 - dx) * dy +
+          data[i11 + c] * dx * dy;
+        out[c] = v;
+      }
+      return out;
+    }
+
+    /**
+     * Perspective-warp a card quad on the original bitmap into a flat ID rectangle.
+     */
+    async function warpQuadToIdBitmap(bitmap, quad, aspect) {
+      const targetW = Math.min(1600, Math.max(1000, Math.round(
+        (Math.hypot(quad[1].x - quad[0].x, quad[1].y - quad[0].y) +
+          Math.hypot(quad[2].x - quad[3].x, quad[2].y - quad[3].y)) / 2
+      )));
+      const targetH = Math.max(2, Math.round(targetW / aspect));
+      const dst = [
+        { x: 0, y: 0 },
+        { x: targetW - 1, y: 0 },
+        { x: targetW - 1, y: targetH - 1 },
+        { x: 0, y: targetH - 1 },
+      ];
+      const H = solveHomography(quad, dst);
+      if (!H) throw new Error("homography failed");
+      const Hinv = invertHomography3(H);
+      if (!Hinv) throw new Error("homography invert failed");
+
+      const srcCanvas = document.createElement("canvas");
+      srcCanvas.width = bitmap.width;
+      srcCanvas.height = bitmap.height;
+      const sctx = srcCanvas.getContext("2d", { willReadFrequently: true });
+      sctx.drawImage(bitmap, 0, 0);
+      const srcData = sctx.getImageData(0, 0, bitmap.width, bitmap.height).data;
+
+      const out = document.createElement("canvas");
+      out.width = targetW;
+      out.height = targetH;
+      const octx = out.getContext("2d");
+      const img = octx.createImageData(targetW, targetH);
+      const dstData = img.data;
+      const sw = bitmap.width;
+      const sh = bitmap.height;
+
+      for (let y = 0; y < targetH; y++) {
+        for (let x = 0; x < targetW; x++) {
+          const p = applyHomography(Hinv, x, y);
+          const rgb = sampleBilinear(srcData, sw, sh, p.x, p.y);
+          const i = (y * targetW + x) * 4;
+          dstData[i] = rgb[0];
+          dstData[i + 1] = rgb[1];
+          dstData[i + 2] = rgb[2];
+          dstData[i + 3] = 255;
+        }
+      }
+      octx.putImageData(img, 0, 0);
+      return toDrawableBitmap(out);
+    }
+
+    /**
+     * Estimate card tilt using near-horizontal edge orientations.
+     * Returns { angle, confident }. If unsure — angle 0 / not confident (keep original).
+     */
+    function estimateDeskewAngle(gray, w, h, box) {
+      const x0 = Math.max(1, box.minX | 0);
+      const y0 = Math.max(1, box.minY | 0);
+      const x1 = Math.min(w - 2, box.maxX | 0);
+      const y1 = Math.min(h - 2, box.maxY | 0);
+      if (x1 - x0 < 24 || y1 - y0 < 16) {
+        return { angle: 0, confident: false };
+      }
+
+      // Collect strong edge line-angles near horizontal (±28°)
+      const angles = [];
+      for (let y = y0; y <= y1; y++) {
+        for (let x = x0; x <= x1; x++) {
+          const i = y * w + x;
+          const gx = gray[i + 1] - gray[i - 1];
+          const gy = gray[i + w] - gray[i - w];
+          const mag = Math.abs(gx) + Math.abs(gy);
+          if (mag < 28) continue;
+
+          // Edge line orientation (perp to gradient), degrees in (-90, 90]
+          let deg = (Math.atan2(gy, gx) * 180) / Math.PI + 90;
+          while (deg > 90) deg -= 180;
+          while (deg <= -90) deg += 180;
+
+          // Keep nearly-horizontal edges (card long sides / text lines)
+          if (Math.abs(deg) <= 28) {
+            angles.push(deg);
+          }
+        }
+      }
+
+      if (angles.length < 50) {
+        return { angle: 0, confident: false };
+      }
+
+      angles.sort((a, b) => a - b);
+      const median = angles[Math.floor(angles.length / 2)];
+
+      // Also require projection score improvement vs upright
+      const score0 = projectionVariance(gray, w, h, x0, y0, x1, y1, 0);
+      const scoreA = projectionVariance(gray, w, h, x0, y0, x1, y1, median);
+      const improved = score0 > 0 ? scoreA / score0 : 1;
+
+      let angle = Math.max(-25, Math.min(25, median));
+      if (Math.abs(angle) < 0.6) {
+        return { angle: 0, confident: false };
+      }
+      if (improved < 1.02 && Math.abs(angle) < 3) {
+        return { angle: 0, confident: false };
+      }
+      // Strong tilt: accept even without big projection gain
+      if (improved < 1.02 && Math.abs(angle) < 8) {
+        return { angle: 0, confident: false };
+      }
+
+      return { angle, confident: true };
+    }
+
+    function projectionVariance(gray, w, h, x0, y0, x1, y1, angleDeg) {
+      const rad = (angleDeg * Math.PI) / 180;
+      const cos = Math.cos(rad);
+      const sin = Math.sin(rad);
+      const bins = Math.max(8, (y1 - y0 + 1) + (x1 - x0 + 1));
+      const proj = new Float64Array(bins * 2 + 4);
+      const mid = bins;
+      let n = 0;
+      const step = Math.max(1, Math.floor(Math.min(x1 - x0, y1 - y0) / 80));
+      for (let y = y0; y <= y1; y += step) {
+        for (let x = x0; x <= x1; x += step) {
+          const yy = -x * sin + y * cos;
+          const idx = mid + Math.round(yy);
+          if (idx >= 0 && idx < proj.length) {
+            proj[idx] += gray[y * w + x];
+            n++;
+          }
+        }
+      }
+      if (!n) return 0;
+      let sum = 0;
+      let sumSq = 0;
+      let used = 0;
+      for (let i = 0; i < proj.length; i++) {
+        if (proj[i] <= 0) continue;
+        sum += proj[i];
+        sumSq += proj[i] * proj[i];
+        used++;
+      }
+      if (used < 4) return 0;
+      const mean = sum / used;
+      return sumSq / used - mean * mean;
+    }
+
+    async function rotateBitmap(bitmap, angleDeg) {
+      const rad = (angleDeg * Math.PI) / 180;
+      const cos = Math.abs(Math.cos(rad));
+      const sin = Math.abs(Math.sin(rad));
+      const w = bitmap.width;
+      const h = bitmap.height;
+      const nw = Math.max(2, Math.ceil(w * cos + h * sin));
+      const nh = Math.max(2, Math.ceil(w * sin + h * cos));
+      const canvas = document.createElement("canvas");
+      canvas.width = nw;
+      canvas.height = nh;
+      const ctx = canvas.getContext("2d");
+      ctx.fillStyle = "#000";
+      ctx.fillRect(0, 0, nw, nh);
+      ctx.translate(nw / 2, nh / 2);
+      ctx.rotate(rad);
+      ctx.drawImage(bitmap, -w / 2, -h / 2);
+      return toDrawableBitmap(canvas);
+    }
+
+    /** Crop to axis-aligned box, then output a symmetric ID-aspect rectangle. */
+    function rectifyToIdAspect(source, sx, sy, sw, sh, aspect) {
+      return new Promise((resolve, reject) => {
+        // Fit ID aspect inside the crop (centered), or expand slightly with letterbox black
+        let outW = sw;
+        let outH = Math.round(sw / aspect);
+        let srcX = sx;
+        let srcY = sy;
+        let srcW = sw;
+        let srcH = sh;
+
+        const cropAspect = sw / Math.max(1, sh);
+        if (cropAspect > aspect) {
+          // too wide — trim sides
+          srcW = Math.round(sh * aspect);
+          srcX = sx + Math.floor((sw - srcW) / 2);
+          outW = srcW;
+          outH = sh;
+        } else {
+          // too tall — trim top/bottom
+          srcH = Math.round(sw / aspect);
+          srcY = sy + Math.floor((sh - srcH) / 2);
+          outW = sw;
+          outH = srcH;
+        }
+
+        // Normalize to a consistent output size (sharp for OCR)
+        const targetW = Math.min(1600, Math.max(outW, 900));
+        const targetH = Math.round(targetW / aspect);
+
+        const out = document.createElement("canvas");
+        out.width = targetW;
+        out.height = targetH;
+        const ctx = out.getContext("2d");
+        ctx.imageSmoothingEnabled = true;
+        ctx.imageSmoothingQuality = "high";
+        ctx.fillStyle = "#111";
+        ctx.fillRect(0, 0, targetW, targetH);
+        ctx.drawImage(
+          source,
+          srcX, srcY, srcW, srcH,
+          0, 0, targetW, targetH
+        );
+        const dataUrl = out.toDataURL("image/jpeg", 0.95);
+        out.toBlob((blob) => {
+          if (!blob) return reject(new Error("blob failed"));
+          resolve({ blob, dataUrl, width: targetW, height: targetH });
+        }, "image/jpeg", 0.95);
+      });
+    }
+
+    function boxBlurGray(src, w, h, radius) {
+      const tmp = new Float32Array(w * h);
+      const out = new Float32Array(w * h);
+      const r = Math.max(1, radius);
+      const diam = r * 2 + 1;
+
+      // horizontal
+      for (let y = 0; y < h; y++) {
+        let acc = 0;
+        for (let x = -r; x <= r; x++) {
+          acc += src[y * w + Math.min(w - 1, Math.max(0, x))];
+        }
+        for (let x = 0; x < w; x++) {
+          tmp[y * w + x] = acc / diam;
+          const add = src[y * w + Math.min(w - 1, x + r + 1)];
+          const rem = src[y * w + Math.max(0, x - r)];
+          acc += add - rem;
+        }
+      }
+      // vertical
+      for (let x = 0; x < w; x++) {
+        let acc = 0;
+        for (let y = -r; y <= r; y++) {
+          acc += tmp[Math.min(h - 1, Math.max(0, y)) * w + x];
+        }
+        for (let y = 0; y < h; y++) {
+          out[y * w + x] = acc / diam;
+          const add = tmp[Math.min(h - 1, y + r + 1) * w + x];
+          const rem = tmp[Math.max(0, y - r) * w + x];
+          acc += add - rem;
+        }
+      }
+      return out;
+    }
+
+    function regionMean(gray, w, h, x0, y0, x1, y1) {
+      x0 = Math.max(0, x0 | 0);
+      y0 = Math.max(0, y0 | 0);
+      x1 = Math.min(w - 1, x1 | 0);
+      y1 = Math.min(h - 1, y1 | 0);
+      if (x1 < x0 || y1 < y0) return 0;
+      let s = 0;
+      let n = 0;
+      for (let y = y0; y <= y1; y++) {
+        const row = y * w;
+        for (let x = x0; x <= x1; x++) {
+          s += gray[row + x];
+          n++;
+        }
+      }
+      return n ? s / n : 0;
+    }
+
+    function findBestIdWindow(blur, w, h, aspect) {
+      let best = null;
+      // Candidate widths from 35% to 98% of image
+      const widths = [];
+      for (let p = 0.98; p >= 0.35; p -= 0.04) widths.push(Math.round(w * p));
+
+      for (const rw of widths) {
+        const rh = Math.round(rw / aspect);
+        if (rh < h * 0.18 || rh > h * 0.98) continue;
+        const stepX = Math.max(2, Math.round(rw * 0.06));
+        const stepY = Math.max(2, Math.round(rh * 0.06));
+        for (let y = 0; y <= h - rh; y += stepY) {
+          for (let x = 0; x <= w - rw; x += stepX) {
+            const inside = regionMean(blur, w, h, x, y, x + rw - 1, y + rh - 1);
+            // Border ring outside the window
+            const pad = Math.max(4, Math.round(Math.min(rw, rh) * 0.08));
+            const outL = regionMean(blur, w, h, Math.max(0, x - pad), y, x - 1, y + rh - 1);
+            const outR = regionMean(blur, w, h, x + rw, y, Math.min(w - 1, x + rw + pad), y + rh - 1);
+            const outT = regionMean(blur, w, h, x, Math.max(0, y - pad), x + rw - 1, y - 1);
+            const outB = regionMean(blur, w, h, x, y + rh, x + rw - 1, Math.min(h - 1, y + rh + pad));
+            const outs = [outL, outR, outT, outB].filter((v) => v > 0);
+            const outside = outs.length ? outs.reduce((a, b) => a + b, 0) / outs.length : meanOfArray(blur);
+            const contrast = inside - outside;
+            // Prefer brighter cards and stronger contrast vs background
+            const score = contrast * 2.2 + inside * 0.35 + (rw * rh) / (w * h) * 25;
+            if (!best || score > best.score) {
+              best = {
+                minX: x,
+                minY: y,
+                maxX: x + rw - 1,
+                maxY: y + rh - 1,
+                score,
+                inside,
+              };
+            }
+          }
+        }
+      }
+      // Require meaningful contrast (card brighter than surrounds)
+      if (!best || best.score < 8 || best.inside < 70) return null;
+      return best;
+    }
+
+    function meanOfArray(arr) {
+      let s = 0;
+      for (let i = 0; i < arr.length; i++) s += arr[i];
+      return s / arr.length;
+    }
+
+    function findBrightCardBox(blur, gray, w, h, meanG, aspect) {
+      // Threshold: brighter than image mean (works for dark desks)
+      const thr = Math.max(95, meanG + 18);
+      const mask = new Uint8Array(w * h);
+      for (let i = 0; i < blur.length; i++) {
+        if (blur[i] >= thr) mask[i] = 1;
+      }
+
+      // Row / column projections
+      const rowCount = new Int32Array(h);
+      const colCount = new Int32Array(w);
+      for (let y = 0; y < h; y++) {
+        for (let x = 0; x < w; x++) {
+          if (!mask[y * w + x]) continue;
+          rowCount[y]++;
+          colCount[x]++;
+        }
+      }
+      const rowThr = w * 0.18;
+      const colThr = h * 0.18;
+      let minY = -1;
+      let maxY = -1;
+      let minX = -1;
+      let maxX = -1;
+      for (let y = 0; y < h; y++) {
+        if (rowCount[y] >= rowThr) {
+          if (minY < 0) minY = y;
+          maxY = y;
+        }
+      }
+      for (let x = 0; x < w; x++) {
+        if (colCount[x] >= colThr) {
+          if (minX < 0) minX = x;
+          maxX = x;
+        }
+      }
+      if (minX < 0 || minY < 0) return null;
+
+      let bw = maxX - minX + 1;
+      let bh = maxY - minY + 1;
+      if (bw < w * 0.25 || bh < h * 0.12) return null;
+
+      // Snap toward ID aspect
+      const a = bw / bh;
+      if (a > aspect * 1.2) {
+        const targetH = Math.round(bw / aspect);
+        const cy = (minY + maxY) / 2;
+        minY = Math.max(0, Math.round(cy - targetH / 2));
+        maxY = Math.min(h - 1, minY + targetH - 1);
+        bh = maxY - minY + 1;
+      } else if (a < aspect * 0.75) {
+        const targetW = Math.round(bh * aspect);
+        const cx = (minX + maxX) / 2;
+        minX = Math.max(0, Math.round(cx - targetW / 2));
+        maxX = Math.min(w - 1, minX + targetW - 1);
+        bw = maxX - minX + 1;
+      }
+
+      const inside = regionMean(blur, w, h, minX, minY, maxX, maxY);
+      const outside = meanG;
+      const score = (inside - outside) * 2 + inside * 0.3;
+      if (inside < 75) return null;
+      return { minX, minY, maxX, maxY, score, inside };
+    }
+
+    function findEdgeCardBox(gray, w, h, aspect) {
+      // Sobel-ish magnitude
+      const mag = new Float32Array(w * h);
+      for (let y = 1; y < h - 1; y++) {
+        for (let x = 1; x < w - 1; x++) {
+          const p = y * w + x;
+          const gx = gray[p + 1] - gray[p - 1];
+          const gy = gray[p + w] - gray[p - w];
+          mag[p] = Math.abs(gx) + Math.abs(gy);
+        }
+      }
+
+      let best = null;
+      const widths = [];
+      for (let p = 0.95; p >= 0.4; p -= 0.05) widths.push(Math.round(w * p));
+
+      for (const rw of widths) {
+        const rh = Math.round(rw / aspect);
+        if (rh < h * 0.2 || rh > h * 0.95) continue;
+        const stepX = Math.max(3, Math.round(rw * 0.08));
+        const stepY = Math.max(3, Math.round(rh * 0.08));
+        for (let y = 1; y <= h - rh - 1; y += stepY) {
+          for (let x = 1; x <= w - rw - 1; x += stepX) {
+            // Border edge strength vs interior (card border is strong)
+            let border = 0;
+            let bn = 0;
+            let interior = 0;
+            let inn = 0;
+            const t = 2;
+            for (let i = 0; i < rw; i++) {
+              border += mag[y * w + (x + i)] + mag[(y + rh - 1) * w + (x + i)];
+              bn += 2;
+            }
+            for (let j = 0; j < rh; j++) {
+              border += mag[(y + j) * w + x] + mag[(y + j) * w + (x + rw - 1)];
+              bn += 2;
+            }
+            for (let j = t; j < rh - t; j += 2) {
+              for (let i = t; i < rw - t; i += 2) {
+                interior += mag[(y + j) * w + (x + i)];
+                inn++;
+              }
+            }
+            const bAvg = border / bn;
+            const iAvg = inn ? interior / inn : 0;
+            const bright = regionMean(gray, w, h, x, y, x + rw - 1, y + rh - 1);
+            const score = bAvg - iAvg * 0.6 + bright * 0.15;
+            if (!best || score > best.score) {
+              best = {
+                minX: x,
+                minY: y,
+                maxX: x + rw - 1,
+                maxY: y + rh - 1,
+                score,
+                inside: bright,
+              };
+            }
+          }
+        }
+      }
+      if (!best || best.inside < 60) return null;
+      return best;
+    }
+
+    function tightenCardBox(blur, gray, w, h, box, meanG) {
+      let { minX, minY, maxX, maxY } = box;
+      const thr = Math.max(85, (box.inside + meanG) / 2);
+
+      // Shrink from each side only while the border strip is clearly darker than
+      // the card — a small margin is preferable to shaving off card content.
+      const maxShrinkX = Math.floor((maxX - minX) * 0.1);
+      const maxShrinkY = Math.floor((maxY - minY) * 0.1);
+      const darkMargin = 22;
+
+      for (let i = 0; i < maxShrinkY; i++) {
+        const top = regionMean(blur, w, h, minX, minY, maxX, minY + 2);
+        if (top < thr - darkMargin) minY++;
+        else break;
+      }
+      for (let i = 0; i < maxShrinkY; i++) {
+        const bot = regionMean(blur, w, h, minX, maxY - 2, maxX, maxY);
+        if (bot < thr - darkMargin) maxY--;
+        else break;
+      }
+      for (let i = 0; i < maxShrinkX; i++) {
+        const left = regionMean(blur, w, h, minX, minY, minX + 2, maxY);
+        if (left < thr - darkMargin) minX++;
+        else break;
+      }
+      for (let i = 0; i < maxShrinkX; i++) {
+        const right = regionMean(blur, w, h, maxX - 2, minY, maxX, maxY);
+        if (right < thr - darkMargin) maxX--;
+        else break;
+      }
+
+      // Expand slightly if we over-shrunk into card (bright border)
+      // keep as is
+      if (maxX - minX < 10 || maxY - minY < 10) return box;
+      return { minX, minY, maxX, maxY };
+    }
+
+    function canvasToJpeg(source, sx, sy, sw, sh) {
+      return new Promise((resolve, reject) => {
+        const out = document.createElement("canvas");
+        out.width = sw;
+        out.height = sh;
+        const ctx = out.getContext("2d");
+        ctx.imageSmoothingEnabled = true;
+        ctx.imageSmoothingQuality = "high";
+        ctx.drawImage(source, sx, sy, sw, sh, 0, 0, sw, sh);
+        const dataUrl = out.toDataURL("image/jpeg", 0.95);
+        out.toBlob((blob) => {
+          if (!blob) return reject(new Error("blob failed"));
+          resolve({ blob, dataUrl, width: sw, height: sh });
+        }, "image/jpeg", 0.95);
+      });
+    }
+
+    function toggleMrz() {
+      const panel = document.getElementById("mrz-panel");
+      const chev = document.getElementById("mrz-chevron");
+      panel.classList.toggle("collapsed");
+      chev.textContent = panel.classList.contains("collapsed") ? "▼" : "▲";
+    }
+
+    function applySlotImage(slot, payload, options = {}) {
+      const { autoOpenNext = false } = options;
+      const original = payload.original || {};
+      const final = payload.final || payload;
+      const stages = payload.stages || null;
+      const originalUrl = original.dataUrl || final.dataUrl;
+      const finalBlob = final.blob;
+      const finalUrl = final.dataUrl;
+
+      if (slot === "passport") {
+        // Top slot = original; results/OCR = bottom biodata + straighten (no steps UI).
+        passportBlob = finalBlob;
+        passportDataUrl = finalUrl;
+        passportStages = null;
+        const img = document.getElementById("img-passport");
+        img.src = originalUrl;
+        img.style.display = "block";
+        document.getElementById("slot-passport").classList.add("done");
+        applyDocLabels();
+        document.getElementById("pdf-img-front").src = finalUrl;
+        document.getElementById("pdf-img-back").src = "";
+        runPassportVerification();
+        return;
+      }
+
+      if (slot === "front") {
+        frontBlob = finalBlob;
+        frontDataUrl = finalUrl;
+        frontStages = stages;
+        const img = document.getElementById("img-front");
+        img.src = originalUrl;
+        img.style.display = "block";
+        document.getElementById("slot-front").classList.add("done");
+        document.getElementById("btn-back").disabled = false;
+        document.getElementById("btn-back-upload").disabled = false;
+      } else {
+        backBlob = finalBlob;
+        backDataUrl = finalUrl;
+        backStages = stages;
+        const img = document.getElementById("img-back");
+        img.src = originalUrl;
+        img.style.display = "block";
+        document.getElementById("slot-back").classList.add("done");
+      }
+
+      refreshPdfPhotosFromStage();
+      updateStepHint();
+
+      if (frontBlob && backBlob) {
+        runVerification();
+      } else if (slot === "front" && autoOpenNext) {
+        setTimeout(() => openCamera("back"), 400);
+      }
+    }
+
+    function newClient() {
+      closeCamera();
+      activeSlot = null;
+      frontBlob = null;
+      backBlob = null;
+      frontDataUrl = null;
+      backDataUrl = null;
+      passportBlob = null;
+      passportDataUrl = null;
+      frontStages = null;
+      backStages = null;
+      passportStages = null;
+      const genSel = document.getElementById("generate-stage");
+      if (genSel) genSel.value = "final";
+
+      ["front", "back"].forEach((side) => {
+        const img = document.getElementById(`img-${side}`);
+        if (!img) return;
+        img.src = "";
+        img.style.display = "none";
+        document.getElementById(`slot-${side}`).classList.remove("done");
+        document.getElementById(`pdf-img-${side}`).src = "";
+      });
+
+      const pImg = document.getElementById("img-passport");
+      if (pImg) {
+        pImg.src = "";
+        pImg.style.display = "none";
+      }
+      const pSlot = document.getElementById("slot-passport");
+      if (pSlot) pSlot.classList.remove("done");
+
+      document.getElementById("btn-front").disabled = false;
+      document.getElementById("btn-front-upload").disabled = false;
+      document.getElementById("btn-back").disabled = true;
+      document.getElementById("btn-back-upload").disabled = true;
+
+      [
+        "first_name", "first_name_lat", "last_name", "last_name_lat",
+        "birth_date", "birth_place", "birth_place_lat",
+        "citizenship", "gender", "personal_id", "card_number", "expiry_date", "issue_date", "mrz_strip",
+      ].forEach((id) => {
+        const el = document.getElementById(id);
+        if (el) el.value = "";
+      });
+
+      document.getElementById("mrz-panel").classList.remove("collapsed");
+      document.getElementById("mrz-chevron").textContent = "▲";
+      clearBadges();
+
+      document.getElementById("results-card").classList.remove("visible");
+      document.getElementById("btn-pdf").classList.remove("visible");
+      document.getElementById("btn-new").classList.remove("visible");
+      document.querySelector(".bottom-actions").classList.remove("visible");
+      const status = document.getElementById("ocr-status");
+      status.classList.remove("visible");
+      status.textContent = "";
+
+      document.getElementById("file-input").value = "";
+      updateStepHint();
+      showMethodChoice();
+    }
+
+    async function openCamera(slot) {
+      if (slot === "back" && !frontDataUrl) {
+        const status = document.getElementById("ocr-status");
+        if (status) {
+          status.classList.add("visible");
+          status.textContent = "Error: capture the ID front side first.";
+        } else {
+          alert("Capture or upload the front side first.");
+        }
+        return;
+      }
+      activeSlot = slot;
+      capturingNow = false;
+      readyGraceUntil = 0;
+      const titles = {
+        front: "Front side",
+        back: "Back side (MRZ)",
+        passport: "Passport (data page + MRZ)",
+      };
+      document.getElementById("camera-title").textContent = titles[slot] || "Document";
+      const vc = document.getElementById("video-container");
+      if (vc) {
+        vc.classList.toggle("passport-aspect", slot === "passport");
+      }
+
+      try {
+        videoStream = await openCameraStream();
+        video.setAttribute("playsinline", "true");
+        video.setAttribute("webkit-playsinline", "true");
+        video.muted = true;
+        video.srcObject = videoStream;
+        try {
+          await video.play();
+        } catch (_) { /* autoplay policies — stream still shows */ }
+        // Wait until Safari reports real frame size
+        if (!video.videoWidth) {
+          await new Promise((resolve) => {
+            const done = () => resolve();
+            video.addEventListener("loadedmetadata", done, { once: true });
+            video.addEventListener("playing", done, { once: true });
+            setTimeout(done, 1500);
+          });
+        }
+        cameraModal.classList.add("open");
+        idFrame.classList.remove("ready");
+        readinessStatus.className = "status-badge";
+        readinessStatus.textContent = "Place the document in the frame… or upload a photo";
+        const captureBtn = document.getElementById("capture-btn");
+        if (captureBtn) captureBtn.disabled = true;
+        readyStreak = 0;
+        if (checkInterval) clearInterval(checkInterval);
+        checkInterval = setInterval(checkClarity, 250);
+      } catch (err) {
+        console.error(err);
+        cameraModal.classList.add("open");
+        readinessStatus.className = "status-badge";
+        readinessStatus.textContent = "Camera unavailable — use Upload";
+        const captureBtn = document.getElementById("capture-btn");
+        if (captureBtn) captureBtn.disabled = true;
+        alert("Could not start the camera. You can upload a photo instead.");
+      }
+    }
+
+    function closeCamera() {
+      capturingNow = false;
+      if (checkInterval) {
+        clearInterval(checkInterval);
+        checkInterval = null;
+      }
+      if (videoStream) {
+        videoStream.getTracks().forEach((t) => t.stop());
+        videoStream = null;
+      }
+      cameraModal.classList.remove("open");
+    }
+
+    function laplacianVariance(gray, w, h) {
+      let sum = 0;
+      let sumSq = 0;
+      let n = 0;
+      for (let y = 1; y < h - 1; y++) {
+        for (let x = 1; x < w - 1; x++) {
+          const i = y * w + x;
+          const v =
+            -4 * gray[i] +
+            gray[i - 1] +
+            gray[i + 1] +
+            gray[i - w] +
+            gray[i + w];
+          sum += v;
+          sumSq += v * v;
+          n++;
+        }
+      }
+      if (!n) return 0;
+      const mean = sum / n;
+      return sumSq / n - mean * mean;
+    }
+
+    /** Detect document presence + OCR-readiness (sharp printed text). */
+    function assessDocumentQuality(gray, w, h) {
+      const out = {
+        hasDoc: false,
+        ocrReady: false,
+        contrast: 0,
+        centerStd: 0,
+        edgeDensity: 0,
+        strongEdgeDensity: 0,
+        overPct: 0,
+        underPct: 0,
+      };
+      if (w < 20 || h < 20) return out;
+
+      const bx = Math.max(2, Math.floor(w * 0.12));
+      const by = Math.max(2, Math.floor(h * 0.12));
+
+      let borderSum = 0;
+      let borderN = 0;
+      let centerSum = 0;
+      let centerN = 0;
+      let centerSq = 0;
+      let overN = 0;
+      let underN = 0;
+      let allN = 0;
+
+      for (let y = 0; y < h; y++) {
+        for (let x = 0; x < w; x++) {
+          const g = gray[y * w + x];
+          allN++;
+          if (g >= 245) overN++;
+          if (g <= 20) underN++;
+          const onBorder = x < bx || x >= w - bx || y < by || y >= h - by;
+          if (onBorder) {
+            borderSum += g;
+            borderN++;
+          } else {
+            centerSum += g;
+            centerN++;
+            centerSq += g * g;
+          }
+        }
+      }
+      if (!borderN || !centerN) return out;
+
+      const borderMean = borderSum / borderN;
+      const centerMean = centerSum / centerN;
+      out.contrast = Math.abs(centerMean - borderMean);
+      out.centerStd = Math.sqrt(Math.max(0, centerSq / centerN - centerMean * centerMean));
+      out.overPct = overN / allN;
+      out.underPct = underN / allN;
+
+      let edgeCount = 0;
+      let strongEdge = 0;
+      let edgeN = 0;
+      for (let y = by + 1; y < h - by - 1; y++) {
+        for (let x = bx + 1; x < w - bx - 1; x++) {
+          const i = y * w + x;
+          const gx = Math.abs(gray[i + 1] - gray[i - 1]);
+          const gy = Math.abs(gray[i + w] - gray[i - w]);
+          const mag = gx + gy;
+          if (mag > 28) edgeCount++;
+          if (mag > 55) strongEdge++; // ink / MRZ / printed glyphs
+          edgeN++;
+        }
+      }
+      out.edgeDensity = edgeN ? edgeCount / edgeN : 0;
+      out.strongEdgeDensity = edgeN ? strongEdge / edgeN : 0;
+
+      // Document present in frame (lenient)
+      out.hasDoc =
+        out.contrast >= 6 &&
+        out.centerStd >= 8 &&
+        out.edgeDensity >= 0.015;
+
+      // Good enough to capture — much less strict than before
+      out.ocrReady =
+        out.hasDoc &&
+        out.contrast >= 10 &&
+        out.centerStd >= 12 &&
+        out.edgeDensity >= 0.028 &&
+        out.strongEdgeDensity >= 0.008 &&
+        out.overPct < 0.28 &&
+        out.underPct < 0.28;
+
+      // Back/MRZ pages: shiny plastic + dense text — softer gate
+      out.mrzReady =
+        out.hasDoc &&
+        out.edgeDensity >= 0.012 &&
+        out.overPct < 0.4 &&
+        out.underPct < 0.35;
+
+      return out;
+    }
+
+    function checkClarity() {
+      if (capturingNow) return;
+      if (!video.videoWidth) return;
+
+      const captureBtn = document.getElementById("capture-btn");
+      const vc = document.getElementById("video-container");
+      const mapped = getVisibleVideoRect(video, vc);
+      if (!mapped) return;
+
+      // Sample the same region the user sees inside the dashed frame
+      const sampleMax = 280;
+      const scale = Math.min(1, sampleMax / Math.max(mapped.frame.w, mapped.frame.h));
+      const cropW = Math.max(2, Math.round(mapped.frame.w * scale));
+      const cropH = Math.max(2, Math.round(mapped.frame.h * scale));
+      const ctx = hiddenCanvas.getContext("2d", { willReadFrequently: true });
+      hiddenCanvas.width = cropW;
+      hiddenCanvas.height = cropH;
+      ctx.drawImage(
+        video,
+        mapped.frame.x, mapped.frame.y, mapped.frame.w, mapped.frame.h,
+        0, 0, cropW, cropH
+      );
+
+      const imgData = ctx.getImageData(0, 0, cropW, cropH);
+      const pixels = imgData.data;
+      const gray = new Float32Array(cropW * cropH);
+      let brightnessSum = 0;
+
+      for (let i = 0, g = 0; i < pixels.length; i += 4, g++) {
+        const avg = (pixels[i] + pixels[i + 1] + pixels[i + 2]) / 3;
+        gray[g] = avg;
+        brightnessSum += avg;
+      }
+
+      const meanBrightness = brightnessSum / gray.length;
+      const sharpness = laplacianVariance(gray, cropW, cropH);
+      const q = assessDocumentQuality(gray, cropW, cropH);
+
+      // Back (MRZ) / passport: much easier to enable Capture
+      const softSlot = activeSlot === "back" || activeSlot === "passport";
+      const brightOk = softSlot
+        ? meanBrightness > 28 && meanBrightness < 245
+        : meanBrightness > 40 && meanBrightness < 230;
+      const sharpOk = softSlot ? sharpness > 22 : sharpness > 55;
+      const qualityOk = softSlot
+        ? q.mrzReady && brightOk && (sharpOk || q.edgeDensity >= 0.02)
+        : q.hasDoc && brightOk && sharpOk && q.ocrReady;
+      const needStreak = softSlot ? 1 : 2;
+      const graceMs = softSlot ? 4000 : 2500;
+
+      const setNotReady = (msg) => {
+        // Keep Capture tappable briefly so a flicker doesn't eat the tap
+        if (Date.now() < readyGraceUntil) {
+          readinessStatus.textContent = softSlot
+            ? "Ready — tap Capture"
+            : "Ready — tap Capture (hold steady)";
+          readinessStatus.className = "status-badge status-ready";
+          idFrame.classList.add("ready");
+          if (captureBtn) captureBtn.disabled = false;
+          return;
+        }
+        readyStreak = 0;
+        readinessStatus.textContent = msg;
+        readinessStatus.className = "status-badge";
+        idFrame.classList.remove("ready");
+        if (captureBtn) captureBtn.disabled = true;
+      };
+
+      if (!q.hasDoc) {
+        setNotReady(
+          softSlot
+            ? "Place the back side in the frame (MRZ visible)"
+            : "Place the document in the frame"
+        );
+      } else if (!brightOk) {
+        setNotReady("Lighting is poor — move closer or adjust light");
+      } else if (!qualityOk) {
+        setNotReady(
+          softSlot
+            ? "Hold steady — keep the MRZ strip in the frame"
+            : "Hold steady — keep the full document in the frame"
+        );
+      } else {
+        readyStreak += 1;
+        if (readyStreak < needStreak) {
+          readinessStatus.textContent = "Checking quality… hold steady";
+          readinessStatus.className = "status-badge";
+          idFrame.classList.remove("ready");
+          if (captureBtn && Date.now() >= readyGraceUntil) captureBtn.disabled = true;
+        } else {
+          readyGraceUntil = Date.now() + graceMs;
+          readinessStatus.textContent = softSlot
+            ? "MRZ looks good — ready to capture!"
+            : "Document looks good — ready to capture!";
+          readinessStatus.className = "status-badge status-ready";
+          idFrame.classList.add("ready");
+          if (captureBtn) captureBtn.disabled = false;
+        }
+      }
+    }
+
+    async function fetchMrzCheck(blob) {
+      const apiUrl = `${window.location.origin}/check-mrz`;
+      const formData = new FormData();
+      // filename matters for some multipart parsers
+      formData.append("image", blob, "capture.jpg");
+
+      const res = await fetch(apiUrl, { method: "POST", body: formData });
+      if (!res.ok) {
+        throw new Error(`check-mrz failed: ${res.status}`);
+      }
+      return await res.json();
+    }
+
+    async function validateCapturedSide(slot, blob) {
+      // If backend is down, do not block the user.
+      try {
+        const data = await fetchMrzCheck(blob);
+        const hasMrz = Boolean(data && data.has_mrz);
+        const stripHint = String(
+          (data && (data.passport_mrz_strip || data.mrz_strip)) || ""
+        );
+        const hasTd3 = Boolean(
+          (data && data.has_td3) ||
+          /P<[A-Z0-9]{3}/.test(stripHint.replace(/\s+/g, ""))
+        );
+
+        if (slot === "front" && hasMrz) {
+          readinessStatus.textContent =
+            "MRZ detected on the front side. Please retake only the front side.";
+          readinessStatus.className = "status-badge";
+          idFrame.classList.remove("ready");
+          return false;
+        }
+
+        if (slot === "back" && !hasMrz) {
+          // Soft warn only — hard-reject made Android back capture painful
+          // (frame photo is often still usable; full verify will re-OCR).
+          readinessStatus.textContent =
+            "Note: MRZ looks weak — continuing. Retake if fields stay empty.";
+          readinessStatus.className = "status-badge";
+          return true;
+        }
+
+        // Passport: never block upload. Only soft-warn in camera if MRZ missing.
+        if (slot === "passport" && !hasTd3) {
+          readinessStatus.textContent =
+            "Note: MRZ looks weak — continuing anyway. For better results, keep the full page in the frame.";
+          readinessStatus.className = "status-badge";
+          // Do not return false — allow photo through
+        }
+
+        return true;
+      } catch (e) {
+        console.warn("MRZ check skipped:", e);
+        // fallback: do not block.
+        return true;
+      }
+    }
+
+    async function capturePhoto() {
+      if (capturingNow) return;
+      const slot = activeSlot;
+      if (!slot) return;
+
+      const captureBtn = document.getElementById("capture-btn");
+      const vc = document.getElementById("video-container");
+      const mapped = getVisibleVideoRect(video, vc);
+      if (!mapped || !video.videoWidth) {
+        readinessStatus.textContent = "Camera not ready — wait a moment and try again";
+        readinessStatus.className = "status-badge";
+        return;
+      }
+
+      capturingNow = true;
+      if (captureBtn) captureBtn.disabled = true;
+      readinessStatus.textContent = "Capturing…";
+      readinessStatus.className = "status-badge status-ready";
+
+      const cropW = Math.max(2, Math.round(mapped.frame.w));
+      const cropH = Math.max(2, Math.round(mapped.frame.h));
+      const cropCanvas = document.createElement("canvas");
+      cropCanvas.width = cropW;
+      cropCanvas.height = cropH;
+      const cropCtx = cropCanvas.getContext("2d");
+      cropCtx.drawImage(
+        video,
+        mapped.frame.x, mapped.frame.y, mapped.frame.w, mapped.frame.h,
+        0, 0, cropW, cropH
+      );
+
+      try {
+        const originalBlob = await canvasToBlobJpeg(cropCanvas, 0.95);
+        const originalDataUrl = cropCanvas.toDataURL("image/jpeg", 0.95);
+        let stages = null;
+        let final = { blob: originalBlob, dataUrl: originalDataUrl };
+
+        readinessStatus.textContent = "Processing photo…";
+        let bitmap = null;
+        try {
+          bitmap = await toDrawableBitmap(cropCanvas);
+          if (slot === "passport") {
+            // Final photo = biodata only (REMARKS / შენიშვნები cut off)
+            final = await processPassportImage(bitmap);
+          } else {
+            // Front / back: keep exactly what was inside the camera guide frame
+            stages = await processFrameCaptureForGenerate(bitmap);
+            final = stages.final;
+          }
+        } catch (procErr) {
+          console.warn("Processing failed, using original frame:", procErr);
+          final = { blob: originalBlob, dataUrl: originalDataUrl };
+          stages = {
+            crop: final,
+            straighten: final,
+            brightness: final,
+            final,
+          };
+        } finally {
+          if (bitmap && typeof bitmap.close === "function") {
+            try { bitmap.close(); } catch (_) {}
+          }
+        }
+
+        // Validate MRZ on the frame photo (same pixels the user framed)
+        const ok = await validateCapturedSide(slot, final.blob);
+        if (!ok) {
+          capturingNow = false;
+          readyGraceUntil = Date.now() + 2500;
+          if (captureBtn) captureBtn.disabled = false;
+          return;
+        }
+
+        applySlotImage(
+          slot,
+          {
+            original: { blob: originalBlob, dataUrl: originalDataUrl },
+            final,
+            stages,
+          },
+          { autoOpenNext: true }
+        );
+        closeCamera();
+      } catch (err) {
+        console.error(err);
+        readinessStatus.textContent =
+          "Capture failed on this device — try Upload, or retake.";
+        readinessStatus.className = "status-badge";
+        capturingNow = false;
+        readyGraceUntil = Date.now() + 2500;
+        if (captureBtn) captureBtn.disabled = false;
+      } finally {
+        capturingNow = false;
+      }
+    }
+
+    const KA_TO_LAT = {
+      "ა":"a","ბ":"b","გ":"g","დ":"d","ე":"e","ვ":"v","ზ":"z","თ":"t","ი":"i",
+      "კ":"k","ლ":"l","მ":"m","ნ":"n","ო":"o","პ":"p","ჟ":"zh","რ":"r","ს":"s",
+      "ტ":"t","უ":"u","ფ":"p","ქ":"k","ღ":"gh","ყ":"q","შ":"sh","ჩ":"ch","ც":"ts",
+      "ძ":"dz","წ":"ts","ჭ":"ch","ხ":"kh","ჯ":"j","ჰ":"h",
+    };
+
+    function titleLatin(s) {
+      return String(s || "")
+        .split(/(\s+|-)/)
+        .map((p) => (/^\s+$/.test(p) || p === "-" ? p : p ? p[0].toUpperCase() + p.slice(1).toLowerCase() : p))
+        .join("");
+    }
+
+    function transliterateKa(geo) {
+      let out = "";
+      for (const ch of String(geo || "")) {
+        if (KA_TO_LAT[ch]) out += KA_TO_LAT[ch];
+        else if (" -'".includes(ch)) out += ch;
+      }
+      return titleLatin(out);
+    }
+
+    function splitGeoLatin(value) {
+      const raw = String(value || "").trim();
+      if (!raw) return { geo: "", lat: "" };
+      const geoRe = /[\u10D0-\u10FF]+(?:[\s\-'][\u10D0-\u10FF]+)*/;
+      if (raw.includes("/")) {
+        const [left, ...rest] = raw.split("/");
+        const geoMatch = left.match(geoRe);
+        const geo = geoMatch ? geoMatch[0] : left.trim();
+        let lat = rest.join("/").trim();
+        if (!/^[A-Za-z\s\-']+$/.test(lat) && geo) lat = transliterateKa(geo);
+        else lat = titleLatin(lat);
+        return { geo, lat };
+      }
+      const geoMatch = raw.match(geoRe);
+      if (geoMatch) {
+        const geo = geoMatch[0];
+        return { geo, lat: transliterateKa(geo) };
+      }
+      if (/^[A-Za-z\s\-']+$/.test(raw)) return { geo: "", lat: titleLatin(raw) };
+      return { geo: raw, lat: "" };
+    }
+
+    function formatCitizenship() {
+      return "GEO";
+    }
+
+    function formatGender(value) {
+      const raw = String(value || "");
+      const upper = raw.toUpperCase();
+      if (/მდ|FEMALE|მდედრ/i.test(raw) || /\bF\b/.test(upper)) return "მდ / F";
+      if (/მმ|MALE|მამრ/i.test(raw) || /\bM\b/.test(upper)) return "მმ / M";
+      return raw.trim();
+    }
+
+    function normalizeMrzBlob(mrzText) {
+      return String(mrzText || "")
+        .toUpperCase()
+        .replace(/[\s\n\r]/g, "")
+        .replace(/«|‹|>/g, "<")
+        .replace(/I0GEO/g, "IDGEO")
+        .replace(/IDGE0/g, "IDGEO")
+        .replace(/1DGEO/g, "IDGEO");
+    }
+
+    function fixGeorgianCardNumber(raw) {
+      let s = String(raw || "").toUpperCase().replace(/[^A-Z0-9]/g, "");
+      if (s.startsWith("IDGE")) s = s.slice(4);
+      if (s.length < 9) return s;
+      s = s.slice(0, 9);
+      const digitFromLetter = { O: "0", Q: "0", D: "0", I: "1", L: "1", Z: "2", S: "5", B: "8", G: "6" };
+      const letterFromDigit = { 0: "O", 1: "I", 2: "Z", 5: "S", 8: "B", 6: "G" };
+      return [...s].map((ch, idx) => {
+        if (idx === 2 || idx === 3) {
+          return /\d/.test(ch) ? (letterFromDigit[ch] || ch) : ch;
+        }
+        return /[A-Z]/.test(ch) ? (digitFromLetter[ch] || ch) : ch;
+      }).join("");
+    }
+
+    /** Parse TD1 (ID) or TD3 (passport) MRZ into structured fields. */
+    function parseMrzStructure(mrzText) {
+      const out = {
+        firstName: "",
+        lastName: "",
+        personalId: "",
+        cardNumber: "",
+        birthYymmdd: "",
+        expiryYymmdd: "",
+        sex: "",
+        citizenship: "",
+        raw: "",
+        lines: ["", "", ""],
+        ranges: {},
+        type: "td1",
+      };
+
+      let blob = normalizeMrzBlob(mrzText);
+      out.raw = blob;
+      if (!blob) return out;
+
+      let lines = String(mrzText || "")
+        .toUpperCase()
+        .replace(/«|‹|>/g, "<")
+        .split(/\r?\n/)
+        .map((l) => l.replace(/[^A-Z0-9<]/g, ""))
+        .filter(Boolean);
+
+      // Passport only — never reinterpret ID (TD1) MRZ as TD3
+      const isPassport = selectedMethod === "passport";
+
+      if (isPassport) {
+        out.type = "td3";
+        if (lines.length < 2 || (lines[0] && lines[0].length < 40)) {
+          const start = blob.indexOf("P<");
+          if (start >= 0) {
+            const chunk = blob.slice(start).replace(/[^A-Z0-9<]/g, "");
+            lines = [
+              chunk.slice(0, 44).padEnd(44, "<"),
+              chunk.slice(44, 88).padEnd(44, "<"),
+            ];
+          }
+        } else {
+          lines = lines.slice(0, 2).map((l) => l.padEnd(44, "<").slice(0, 44));
+        }
+
+        const line1 = lines[0] || "";
+        const line2 = lines[1] || "";
+        out.lines = [line1, line2];
+
+        if (line1.startsWith("P<") && line1.length >= 5) {
+          const nat = line1.slice(2, 5).replace(/0/g, "O");
+          if (nat === "GEO" || nat === "GFO") out.citizenship = "GEO";
+          const namePart = line1.slice(5);
+          const sep = namePart.indexOf("<<");
+          if (sep >= 0) {
+            out.lastName = namePart.slice(0, sep).replace(/</g, "").replace(/[^A-Z]/g, "");
+            out.firstName = namePart.slice(sep + 2).replace(/</g, " ").replace(/[^A-Z ]/g, "").trim().replace(/ /g, "");
+            if (out.lastName) out.ranges.last_name_lat = { line: 0, start: 5, end: 5 + out.lastName.length };
+            if (out.firstName) {
+              const fnStart = 5 + sep + 2;
+              out.ranges.first_name_lat = { line: 0, start: fnStart, end: fnStart + out.firstName.length };
+            }
+          }
+          out.ranges.citizenship = { line: 0, start: 2, end: 5 };
+        }
+
+        if (line2.length >= 28) {
+          out.cardNumber = fixGeorgianCardNumber(line2.slice(0, 9));
+          out.ranges.card_number = { line: 1, start: 0, end: 9 };
+          const birth6 = line2.slice(13, 19);
+          if (/^\d{6}$/.test(birth6)) out.birthYymmdd = birth6;
+          out.ranges.birth_date = { line: 1, start: 13, end: 19 };
+          const sex = line2[20];
+          if (sex === "M" || sex === "F") out.sex = sex;
+          out.ranges.gender = { line: 1, start: 20, end: 21 };
+          const exp6 = line2.slice(21, 27);
+          if (/^\d{6}$/.test(exp6)) out.expiryYymmdd = exp6;
+          out.ranges.expiry_date = { line: 1, start: 21, end: 27 };
+          const nat2 = line2.slice(10, 13).replace(/0/g, "O");
+          if (nat2 === "GEO") {
+            out.citizenship = "GEO";
+            out.ranges.citizenship = { line: 1, start: 10, end: 13 };
+          }
+          // Georgian passport MRZ does not carry personal number — leave uncheckable
+        }
+        return out;
+      }
+
+      // Prefer 3×30 lines if present (TD1 ID)
+      if (lines.length < 3) {
+        let start = blob.indexOf("IDGEO");
+        if (start < 0) start = blob.indexOf("IDGE");
+        if (start >= 0) {
+          const chunk = blob.slice(start).replace(/[^A-Z0-9<]/g, "");
+          lines = [
+            chunk.slice(0, 30).padEnd(30, "<"),
+            chunk.slice(30, 60).padEnd(30, "<"),
+            chunk.slice(60, 90).padEnd(30, "<"),
+          ];
+        }
+      } else {
+        lines = lines.slice(0, 3).map((l) => l.padEnd(30, "<").slice(0, 30));
+        if (lines[0].startsWith("IDGE") && !lines[0].startsWith("IDGEO")) {
+          const fifth = lines[0][4];
+          lines[0] = fifth === "0" || fifth === "O"
+            ? "IDGEO" + lines[0].slice(5)
+            : "IDGEO" + lines[0].slice(4);
+          lines[0] = lines[0].padEnd(30, "<").slice(0, 30);
+        }
+      }
+
+      const line1 = lines[0] || "";
+      const line2 = lines[1] || "";
+      const line3 = lines[2] || "";
+      out.lines = [line1, line2, line3];
+
+      // Line 1 (1-based): card 6–14, personal 16–26
+      if (line1.length >= 14) {
+        out.cardNumber = fixGeorgianCardNumber(line1.slice(5, 14));
+        out.ranges.card_number = { line: 0, start: 5, end: 14 };
+      }
+      if (line1.length >= 26) {
+        out.personalId = line1.slice(15, 26);
+        out.ranges.personal_id = { line: 0, start: 15, end: 26 };
+      }
+
+      // Line 2: birth YYMMDD (chars 1–6), sex (8th), expiry YYMMDD (chars 9–14)
+      if (line2.length >= 6) {
+        const birth6 = line2.slice(0, 6);
+        if (/^\d{6}$/.test(birth6)) out.birthYymmdd = birth6;
+        out.ranges.birth_date = { line: 1, start: 0, end: 6 };
+      }
+      if (line2.length >= 8) {
+        const sexAt8 = line2[7];
+        if (sexAt8 === "M" || sexAt8 === "F") out.sex = sexAt8;
+        out.ranges.gender = { line: 1, start: 7, end: 8 };
+      }
+      if (line2.length >= 14) {
+        const exp6 = line2.slice(8, 14);
+        if (/^\d{6}$/.test(exp6)) out.expiryYymmdd = exp6;
+        out.ranges.expiry_date = { line: 1, start: 8, end: 14 };
+      }
+      const ds = line2.match(/^(\d{6})\d([MF])(\d{6})\d([A-Z0-9]{3})/);
+      if (ds) {
+        if (!out.birthYymmdd) out.birthYymmdd = ds[1];
+        if (!out.sex) out.sex = ds[2];
+        if (!out.expiryYymmdd) out.expiryYymmdd = ds[3];
+        out.citizenship = ds[4].replace(/0/g, "O");
+        const natIdx = line2.indexOf(ds[4]);
+        if (natIdx >= 0) {
+          out.ranges.citizenship = { line: 1, start: natIdx, end: natIdx + 3 };
+        }
+      } else {
+        const soft = line2.match(/(\d{6})\d?([MF])(\d{6})/);
+        if (soft) {
+          if (!out.birthYymmdd) out.birthYymmdd = soft[1];
+          if (!out.sex) out.sex = soft[2];
+          if (!out.expiryYymmdd) out.expiryYymmdd = soft[3];
+        }
+        const geoIdx = line2.indexOf("GEO");
+        if (geoIdx >= 0) {
+          out.citizenship = "GEO";
+          out.ranges.citizenship = { line: 1, start: geoIdx, end: geoIdx + 3 };
+        }
+      }
+
+      // Line 3: SURNAME << GIVEN
+      const nameClean = line3.replace(/[0-9]/g, "");
+      const sep = nameClean.indexOf("<<");
+      if (sep >= 0) {
+        out.lastName = nameClean.slice(0, sep).replace(/</g, "").replace(/[^A-Z]/g, "");
+        out.firstName = nameClean.slice(sep + 2).replace(/</g, "").replace(/[^A-Z]/g, "");
+        if (out.lastName) {
+          out.ranges.last_name_lat = { line: 2, start: 0, end: out.lastName.length };
+        }
+        if (out.firstName) {
+          const givenStart = sep + 2;
+          out.ranges.first_name_lat = {
+            line: 2,
+            start: givenStart,
+            end: givenStart + out.firstName.length,
+          };
+        }
+      }
+
+      return out;
+    }
+
+    function escapeHtml(s) {
+      return String(s)
+        .replace(/&/g, "&amp;")
+        .replace(/</g, "&lt;")
+        .replace(/>/g, "&gt;");
+    }
+
+    function renderMrzView(mrzText, highlightRange) {
+      const view = document.getElementById("mrz-view");
+      if (!view) return;
+      const parsed = parseMrzStructure(mrzText);
+      const lines = parsed.lines && parsed.lines.some(Boolean)
+        ? parsed.lines
+        : String(mrzText || "").split(/\r?\n/);
+
+      const html = lines.map((line, lineIdx) => {
+        const safe = String(line || "");
+        if (
+          highlightRange &&
+          highlightRange.line === lineIdx &&
+          highlightRange.start >= 0 &&
+          highlightRange.end > highlightRange.start
+        ) {
+          const a = Math.max(0, highlightRange.start);
+          const b = Math.min(safe.length, highlightRange.end);
+          return (
+            escapeHtml(safe.slice(0, a)) +
+            '<mark class="mrz-hl">' +
+            escapeHtml(safe.slice(a, b)) +
+            "</mark>" +
+            escapeHtml(safe.slice(b))
+          );
+        }
+        return escapeHtml(safe);
+      }).join("\n");
+
+      view.innerHTML = html || "";
+    }
+
+    function setMrzDisplay(mrzText, highlightFieldId) {
+      const ta = document.getElementById("mrz_strip");
+      if (ta) ta.value = mrzText || "";
+      let range = null;
+      if (highlightFieldId) {
+        const parsed = parseMrzStructure(mrzText);
+        range = parsed.ranges[highlightFieldId] || null;
+      }
+      renderMrzView(mrzText, range);
+    }
+
+    function highlightMrzForField(fieldId) {
+      const ta = document.getElementById("mrz_strip");
+      const mrzText = ta ? ta.value : "";
+      if (!mrzText) return;
+
+      // Expand MRZ panel
+      const panel = document.getElementById("mrz-panel");
+      const chev = document.getElementById("mrz-chevron");
+      if (panel) panel.classList.remove("collapsed");
+      if (chev) chev.textContent = "▲";
+
+      setMrzDisplay(mrzText, fieldId);
+
+      // Scroll to MRZ + highlight
+      const view = document.getElementById("mrz-view");
+      const mark = view ? view.querySelector(".mrz-hl") : null;
+      if (view) view.scrollIntoView({ behavior: "smooth", block: "nearest" });
+      if (mark) {
+        mark.scrollIntoView({ behavior: "smooth", block: "nearest", inline: "nearest" });
+      }
+    }
+
+    function lettersOnly(value) {
+      return String(value || "")
+        .toUpperCase()
+        .replace(/[^A-Z]/g, "");
+    }
+
+    function exactLetterMatch(a, b) {
+      const x = lettersOnly(a);
+      const y = lettersOnly(b);
+      return Boolean(x && y && x === y);
+    }
+
+    function dateToYymmdd(value) {
+      const m = String(value || "").trim().match(/(\d{1,2})[./\-](\d{1,2})[./\-](\d{2,4})/);
+      if (m) {
+        const dd = m[1].padStart(2, "0");
+        const mm = m[2].padStart(2, "0");
+        const yy = m[3].length === 2 ? m[3] : m[3].slice(-2);
+        return yy + mm + dd;
+      }
+      const digits = String(value || "").replace(/\D/g, "");
+      if (digits.length === 6) return digits;
+      if (digits.length === 8) return digits.slice(2);
+      return "";
+    }
+
+    function fieldMatchesMrz(fieldId, value, mrzText) {
+      const v = String(value || "").trim();
+      const mrz = parseMrzStructure(mrzText);
+      if (!v || !mrz.raw) return false;
+
+      switch (fieldId) {
+        case "first_name_lat":
+          return exactLetterMatch(v, mrz.firstName);
+        case "last_name_lat":
+          return exactLetterMatch(v, mrz.lastName);
+        case "personal_id": {
+          const a = String(v).replace(/\D/g, "");
+          const e = String(mrz.personalId).replace(/\D/g, "");
+          return Boolean(a && e && a === e);
+        }
+        case "card_number": {
+          const a = fixGeorgianCardNumber(v);
+          const e = fixGeorgianCardNumber(mrz.cardNumber);
+          return Boolean(a && e && a === e);
+        }
+        case "citizenship": {
+          const a = String(v).toUpperCase().replace(/[^A-Z]/g, "");
+          return a === "GEO" && mrz.citizenship === "GEO";
+        }
+        case "gender": {
+          const fieldSex = (String(v).toUpperCase().match(/\b([MF])\b/) || [])[1] || "";
+          const line2 = mrz.lines[1] || "";
+          const mrzSex = mrz.sex || (mrz.type === "td3" ? line2[20] : line2[7]) || "";
+          return Boolean(fieldSex && mrzSex && fieldSex === mrzSex);
+        }
+        case "birth_date": {
+          const fieldYy = dateToYymmdd(v);
+          const line2 = mrz.lines[1] || "";
+          const mrzYy = mrz.birthYymmdd || (mrz.type === "td3" ? line2.slice(13, 19) : line2.slice(0, 6));
+          return Boolean(fieldYy && mrzYy && /^\d{6}$/.test(mrzYy) && fieldYy === mrzYy);
+        }
+        case "expiry_date": {
+          const fieldYy = dateToYymmdd(v);
+          const line2 = mrz.lines[1] || "";
+          const mrzYy = mrz.expiryYymmdd || (mrz.type === "td3" ? line2.slice(21, 27) : line2.slice(8, 14));
+          return Boolean(fieldYy && mrzYy && /^\d{6}$/.test(mrzYy) && fieldYy === mrzYy);
+        }
+        default:
+          return false;
+      }
+    }
+
+    const BADGE_FIELDS = [
+      "first_name_lat",
+      "last_name_lat",
+      "citizenship",
+      "gender",
+      "birth_date",
+      "expiry_date",
+      "personal_id",
+      "card_number",
+    ];
+
+    // Always yellow Uncheckable (MRZ does not verify this field)
+    const STATIC_BADGE_FIELDS = [
+      "first_name",
+      "last_name",
+      "birth_place",
+      "issue_date",
+    ];
+
+    // Snapshot from OCR — if user edits geo/lat away from this, Latin badge → Error
+    let birthPlaceOriginal = { geo: "", lat: "" };
+
+    function latinNormCmp(s) {
+      return String(s || "")
+        .toUpperCase()
+        .replace(/[^A-Z]/g, "");
+    }
+
+    function rememberBirthPlaceOriginal(geo, lat) {
+      birthPlaceOriginal = {
+        geo: String(geo || "").trim(),
+        lat: String(lat || "").trim(),
+      };
+    }
+
+    /** Georgian ↔ Latin match, and Georgian still equals OCR original. */
+    function birthPlaceGeoMatchesLatin() {
+      const geoEl = document.getElementById("birth_place");
+      const latEl = document.getElementById("birth_place_lat");
+      const geo = geoEl ? geoEl.value.trim() : "";
+      const lat = latEl ? latEl.value.trim() : "";
+      if (!geo || !lat) return true; // nothing to compare → Uncheckable
+
+      // Edited Georgian (Latin may auto-sync) → Error on Latin vs OCR original
+      if (birthPlaceOriginal.geo && geo !== birthPlaceOriginal.geo) {
+        return false;
+      }
+
+      const fromGeo = latinNormCmp(transliterateKa(geo));
+      const fromLat = latinNormCmp(lat);
+      if (!fromGeo || !fromLat) return true;
+      return (
+        fromGeo === fromLat
+        || fromGeo.startsWith(fromLat)
+        || fromLat.startsWith(fromGeo)
+      );
+    }
+
+    function setBirthPlaceLatBadge() {
+      const fieldId = "birth_place_lat";
+      const badge = document.getElementById(`badge-${fieldId}`);
+      const input = document.getElementById(fieldId);
+      const wrap = input ? input.closest(".input-with-badge") : null;
+      if (!badge) return;
+
+      const matches = birthPlaceGeoMatchesLatin();
+      badge.classList.remove("hidden", "checked", "not-checked", "uncheckable", "error");
+      if (wrap) wrap.classList.remove("ok", "bad", "neutral");
+      badge.onclick = null;
+
+      if (matches) {
+        badge.textContent = "Uncheckable";
+        badge.classList.add("uncheckable");
+        badge.title = "";
+        if (wrap) wrap.classList.add("neutral");
+      } else {
+        badge.textContent = "Error";
+        badge.classList.add("error");
+        badge.title = "Place of birth does not match or was changed after OCR";
+        if (wrap) wrap.classList.add("bad");
+      }
+    }
+
+    function setBadge(fieldId, checked) {
+      const badge = document.getElementById(`badge-${fieldId}`);
+      const input = document.getElementById(fieldId);
+      const wrap = input ? input.closest(".input-with-badge") : null;
+      if (!badge) return;
+      badge.classList.remove("hidden", "checked", "not-checked", "uncheckable", "error");
+      if (wrap) wrap.classList.remove("ok", "bad", "neutral");
+      if (checked) {
+        badge.textContent = "Checked";
+        badge.classList.add("checked");
+        badge.title = "Click to highlight in MRZ";
+        badge.onclick = (e) => {
+          e.preventDefault();
+          e.stopPropagation();
+          highlightMrzForField(fieldId);
+        };
+        if (wrap) wrap.classList.add("ok");
+      } else {
+        badge.textContent = "Error";
+        badge.classList.add("error");
+        badge.title = "Does not match MRZ — click to highlight";
+        badge.onclick = (e) => {
+          e.preventDefault();
+          e.stopPropagation();
+          highlightMrzForField(fieldId);
+        };
+        if (wrap) wrap.classList.add("bad");
+      }
+      if (input) input.style.borderColor = "";
+    }
+
+    function setStaticNotCheckedBadge(fieldId) {
+      const badge = document.getElementById(`badge-${fieldId}`);
+      const input = document.getElementById(fieldId);
+      const wrap = input ? input.closest(".input-with-badge") : null;
+      if (!badge) return;
+      badge.classList.remove("hidden", "checked", "not-checked", "error");
+      badge.classList.add("uncheckable");
+      badge.textContent = "Uncheckable";
+      badge.onclick = null;
+      badge.title = "";
+      if (wrap) {
+        wrap.classList.remove("ok", "bad");
+        wrap.classList.add("neutral");
+      }
+    }
+
+    function clearBadges() {
+      birthPlaceOriginal = { geo: "", lat: "" };
+      [...BADGE_FIELDS, ...STATIC_BADGE_FIELDS, "birth_place_lat"].forEach((id) => {
+        const badge = document.getElementById(`badge-${id}`);
+        const input = document.getElementById(id);
+        const wrap = input ? input.closest(".input-with-badge") : null;
+        if (badge) {
+          badge.classList.remove("checked", "not-checked", "uncheckable", "error");
+          badge.classList.add("hidden");
+          badge.onclick = null;
+        }
+        if (wrap) wrap.classList.remove("ok", "bad", "neutral");
+        if (input) input.style.borderColor = "";
+      });
+      setMrzDisplay("", null);
+    }
+
+    function updateMrzBadges(mrzText) {
+      BADGE_FIELDS.forEach((id) => {
+        // Passport MRZ has no personal number → Uncheckable
+        if (selectedMethod === "passport" && id === "personal_id") {
+          setStaticNotCheckedBadge(id);
+          return;
+        }
+        const el = document.getElementById(id);
+        const value = el ? el.value.trim() : "";
+        if (!value) {
+          setBadge(id, false);
+          return;
+        }
+        setBadge(id, fieldMatchesMrz(id, value, mrzText));
+      });
+      STATIC_BADGE_FIELDS.forEach((id) => setStaticNotCheckedBadge(id));
+      setBirthPlaceLatBadge();
+      setMrzDisplay(mrzText, null);
+    }
+
+    // Live re-check when user edits an MRZ-verified field
+    BADGE_FIELDS.forEach((id) => {
+      const el = document.getElementById(id);
+      if (!el) return;
+      el.addEventListener("input", () => {
+        if (selectedMethod === "passport" && id === "personal_id") {
+          setStaticNotCheckedBadge(id);
+          return;
+        }
+        const ta = document.getElementById("mrz_strip");
+        const mrzText = ta ? ta.value : "";
+        if (!mrzText) return;
+        setBadge(id, fieldMatchesMrz(id, el.value.trim(), mrzText));
+      });
+    });
+
+    // Georgian → Latin live sync (name, surname, birth place)
+    [
+      ["first_name", "first_name_lat"],
+      ["last_name", "last_name_lat"],
+      ["birth_place", "birth_place_lat"],
+    ].forEach(([geoId, latId]) => {
+      const geoEl = document.getElementById(geoId);
+      const latEl = document.getElementById(latId);
+      if (!geoEl || !latEl) return;
+      geoEl.addEventListener("input", () => {
+        const geo = geoEl.value;
+        const lat = geo.trim() ? transliterateKa(geo) : "";
+        latEl.value = lat;
+        // Re-check Latin against MRZ when applicable
+        if (BADGE_FIELDS.includes(latId)) {
+          const ta = document.getElementById("mrz_strip");
+          const mrzText = ta ? ta.value : "";
+          if (mrzText) setBadge(latId, fieldMatchesMrz(latId, lat.trim(), mrzText));
+        }
+        if (latId === "birth_place_lat") setBirthPlaceLatBadge();
+      });
+    });
+
+    // Birth place Latin edited manually → geo/latin match badge
+    {
+      const latEl = document.getElementById("birth_place_lat");
+      if (latEl) {
+        latEl.addEventListener("input", () => setBirthPlaceLatBadge());
+      }
+    }
+
+    function setField(id, value) {
+      const el = document.getElementById(id);
+      if (!el) return false;
+      el.value = value || "";
+      if (value) {
+        el.style.backgroundColor = "#e8f0fe";
+        setTimeout(() => { el.style.backgroundColor = ""; }, 1500);
+        return true;
+      }
+      return false;
+    }
+
+    function applyExtractedData(data, options = {}) {
+      const ext = data.extracted_data || {};
+      const mrz = data.mrz_fields || {};
+      let filled = 0;
+
+      // If visual OCR missed Latin names, MRZ still has them
+      if (!(ext.first_name_lat || "").trim() && (mrz.first_name || "").trim()) {
+        ext.first_name_lat = mrz.first_name;
+      }
+      if (!(ext.last_name_lat || "").trim() && (mrz.last_name || "").trim()) {
+        ext.last_name_lat = mrz.last_name;
+      }
+      if (!(ext.birth_date || "").trim() && (mrz.birth_date || "").trim()) {
+        ext.birth_date = mrz.birth_date;
+      }
+      if (!(ext.expiry_date || "").trim() && (mrz.expiry_date || "").trim()) {
+        ext.expiry_date = mrz.expiry_date;
+      }
+      if (!(ext.card_number || "").trim() && (mrz.card_number || "").trim()) {
+        ext.card_number = mrz.card_number;
+      }
+      if (!(ext.gender || "").trim() && (mrz.gender || "").trim()) {
+        ext.gender = mrz.gender;
+      }
+
+      ["first_name", "last_name", "birth_place"].forEach((key) => {
+        let geo = (ext[key] || "").trim();
+        let lat = (ext[`${key}_lat`] || "").trim();
+        if (geo.includes("/") || (!lat && geo)) {
+          const split = splitGeoLatin(geo.includes("/") ? geo : (lat ? `${geo} / ${lat}` : geo));
+          geo = split.geo || geo.replace(/\s*\/.*$/, "").trim();
+          lat = lat || split.lat;
+        }
+        if (!lat && geo) lat = transliterateKa(geo);
+        if (setField(key, geo)) filled += 1;
+        if (setField(`${key}_lat`, lat)) filled += 1;
+        if (key === "birth_place") rememberBirthPlaceOriginal(geo, lat);
+      });
+
+      ["birth_date", "personal_id", "card_number", "expiry_date", "issue_date"].forEach((id) => {
+        let val = (ext[id] || "").trim();
+        // ID card numbers only — passport format must not go through ID digit/letter fix
+        if (id === "card_number" && selectedMethod !== "passport") {
+          val = fixGeorgianCardNumber(val);
+        }
+        if (setField(id, val)) filled += 1;
+      });
+      if (setField("citizenship", formatCitizenship((ext.citizenship || "").trim()))) filled += 1;
+      if (setField("gender", formatGender((ext.gender || "").trim()))) filled += 1;
+
+      const mrzEl = document.getElementById("mrz_strip");
+      let mrzText = (ext.mrz_strip || "").trim();
+      if (!mrzText && data.raw_text) {
+        const raw = data.raw_text.back || data.raw_text.passport || "";
+        const picked = String(raw)
+          .split(/\r?\n/)
+          .map((l) => l.trim().toUpperCase().replace(/\s+/g, ""))
+          .filter((l) =>
+            l.includes("IDGE") ||
+            l.startsWith("P<") ||
+            (l.includes("<<") && /[A-Z]{3,}/.test(l)) ||
+            /\d{6}[MF]\d{6}/.test(l)
+          );
+        if (picked.length) mrzText = picked.slice(0, selectedMethod === "passport" ? 2 : 3).join("\n");
+      }
+      mrzEl.value = mrzText;
+      document.getElementById("mrz-panel").classList.remove("collapsed");
+      document.getElementById("mrz-chevron").textContent = "▲";
+      updateMrzBadges(mrzText);
+      return { filled, ext };
+    }
+
+    async function runPassportVerification() {
+      if (selectedMethod !== "passport" || !passportBlob) return;
+
+      const status = document.getElementById("ocr-status");
+      const results = document.getElementById("results-card");
+      const pdfBtn = document.getElementById("btn-pdf");
+      const newBtn = document.getElementById("btn-new");
+      const actionBar = document.querySelector(".bottom-actions");
+
+      results.classList.remove("visible");
+      pdfBtn.classList.remove("visible");
+      newBtn.classList.remove("visible");
+      actionBar.classList.remove("visible");
+      status.classList.add("visible");
+      applyDocLabels();
+
+      const startedAt = performance.now();
+      let tickTimer = setInterval(() => {
+        const sec = ((performance.now() - startedAt) / 1000).toFixed(1);
+        status.textContent = `Reading passport with Google Vision… ${sec}s`;
+      }, 200);
+
+      const formData = new FormData();
+      formData.append("image", passportBlob, "passport.jpg");
+
+      try {
+        const apiUrl = `${window.location.origin}/verify-passport`;
+        const response = await fetch(apiUrl, { method: "POST", body: formData });
+        clearInterval(tickTimer);
+
+        const contentType = response.headers.get("content-type") || "";
+        if (!response.ok || !contentType.includes("application/json")) {
+          const preview = await response.text();
+          console.error("verify-passport failed:", response.status, preview.slice(0, 200));
+          status.textContent =
+            "API not found. Run: python main.py and open http://localhost:8000";
+          results.classList.add("visible");
+          pdfBtn.classList.add("visible");
+          actionBar.classList.add("visible");
+          return;
+        }
+
+        const data = await response.json();
+        if (data.error) {
+          status.textContent = "Error: " + data.error;
+          results.classList.add("visible");
+          pdfBtn.classList.add("visible");
+          actionBar.classList.add("visible");
+          return;
+        }
+
+        console.log("=== Passport Vision result ===", data.extracted_data);
+
+        const passportRot = (data.orientation || {}).passport || 0;
+        if (passportRot) {
+          passportDataUrl = await rotateDataUrlCcw(passportDataUrl, passportRot);
+          document.getElementById("pdf-img-front").src = passportDataUrl;
+        }
+
+        const { filled, ext } = applyExtractedData(data);
+
+        results.classList.add("visible");
+        pdfBtn.classList.add("visible");
+        newBtn.classList.add("visible");
+        actionBar.classList.add("visible");
+
+        const totalSec = ((performance.now() - startedAt) / 1000).toFixed(1);
+        if (filled === 0) {
+          status.textContent =
+            "Vision read text but could not fill fields. Try a clearer photo.";
+        } else {
+          const doc = ext.card_number || "—";
+          const pid = ext.personal_id || "—";
+          status.textContent =
+            `Ready · ${totalSec}s | filled ${filled} fields | Passport: ${doc} | Personal: ${pid}`;
+        }
+      } catch (err) {
+        clearInterval(tickTimer);
+        console.error(err);
+        status.textContent = "Error: " + (err.message || err);
+        results.classList.add("visible");
+        actionBar.classList.add("visible");
+        newBtn.classList.add("visible");
+      }
+    }
+
+    async function runVerification() {
+      // ID only — never run ID pipeline in passport mode
+      if (selectedMethod !== "id" || !frontBlob || !backBlob) return;
+
+      const status = document.getElementById("ocr-status");
+      const results = document.getElementById("results-card");
+      const pdfBtn = document.getElementById("btn-pdf");
+      const newBtn = document.getElementById("btn-new");
+      const actionBar = document.querySelector(".bottom-actions");
+
+      results.classList.remove("visible");
+      pdfBtn.classList.remove("visible");
+      newBtn.classList.remove("visible");
+      actionBar.classList.remove("visible");
+      status.classList.add("visible");
+
+      const startedAt = performance.now();
+      let tickTimer = setInterval(() => {
+        const sec = ((performance.now() - startedAt) / 1000).toFixed(1);
+        status.textContent = `Reading data with Google Vision… ${sec}s`;
+      }, 200);
+      status.textContent = "Reading data with Google Vision… 0.0s";
+      console.log("Scan starting…");
+
+      const formData = new FormData();
+      formData.append("front", frontBlob, "front.jpg");
+      formData.append("back", backBlob, "back.jpg");
+
+      try {
+        const apiUrl = `${window.location.origin}/verify-id`;
+        const response = await fetch(apiUrl, {
+          method: "POST",
+          body: formData,
+        });
+
+        clearInterval(tickTimer);
+        const elapsed = ((performance.now() - startedAt) / 1000).toFixed(1);
+
+        const contentType = response.headers.get("content-type") || "";
+        if (!response.ok || !contentType.includes("application/json")) {
+          const preview = await response.text();
+          console.error("verify-id failed:", response.status, preview.slice(0, 200));
+          status.textContent =
+            "API not found (404). Run: python main.py and open http://localhost:8000";
+          results.classList.add("visible");
+          pdfBtn.classList.add("visible");
+          actionBar.classList.add("visible");
+          return;
+        }
+
+        const data = await response.json();
+
+        if (data.error) {
+          status.textContent = "Error: " + data.error;
+          results.classList.add("visible");
+          pdfBtn.classList.add("visible");
+          actionBar.classList.add("visible");
+          return;
+        }
+
+        await applyDetectedOrientation(data.orientation);
+
+        const ext = data.extracted_data || {};
+        console.log("=== Vision result ===");
+        console.log("extracted_data:", ext);
+        console.log("debug (MRZ):", data.debug);
+        if (data.raw_text) console.log("raw_text.back:", data.raw_text.back);
+
+        let filled = 0;
+
+        ["first_name", "last_name", "birth_place"].forEach((key) => {
+          let geo = (ext[key] || "").trim();
+          let lat = (ext[`${key}_lat`] || "").trim();
+          if (geo.includes("/") || (!lat && geo)) {
+            const split = splitGeoLatin(geo.includes("/") ? geo : (lat ? `${geo} / ${lat}` : geo));
+            geo = split.geo || geo.replace(/\s*\/.*$/, "").trim();
+            lat = lat || split.lat;
+          }
+          if (!lat && geo) lat = transliterateKa(geo);
+          if (setField(key, geo)) filled += 1;
+          if (setField(`${key}_lat`, lat)) filled += 1;
+          if (key === "birth_place") rememberBirthPlaceOriginal(geo, lat);
+        });
+
+        ["birth_date", "personal_id", "card_number", "expiry_date", "issue_date"].forEach((id) => {
+          let val = (ext[id] || "").trim();
+          if (id === "card_number") val = fixGeorgianCardNumber(val);
+          if (setField(id, val)) filled += 1;
+        });
+        if (setField("citizenship", formatCitizenship((ext.citizenship || "").trim()))) filled += 1;
+        if (setField("gender", formatGender((ext.gender || "").trim()))) filled += 1;
+
+        const mrzEl = document.getElementById("mrz_strip");
+        let mrzText = (ext.mrz_strip || "").trim();
+        if (!mrzText && data.raw_text && data.raw_text.back) {
+          const backLines = String(data.raw_text.back).split(/\r?\n/);
+          const picked = backLines
+            .map((l) => l.trim().toUpperCase().replace(/\s+/g, ""))
+            .filter((l) =>
+              l.includes("IDGE") ||
+              (l.includes("<<") && /[A-Z]{3,}/.test(l)) ||
+              /\d{6}[MF]\d{6}/.test(l)
+            );
+          if (picked.length) mrzText = picked.slice(0, 3).join("\n");
+        }
+        mrzEl.value = mrzText;
+        document.getElementById("mrz-panel").classList.remove("collapsed");
+        document.getElementById("mrz-chevron").textContent = "▲";
+        updateMrzBadges(mrzText);
+
+        results.classList.add("visible");
+        pdfBtn.classList.add("visible");
+        newBtn.classList.add("visible");
+        actionBar.classList.add("visible");
+
+        const totalSec = ((performance.now() - startedAt) / 1000).toFixed(1);
+        if (filled === 0) {
+          status.classList.add("visible");
+          status.textContent =
+            "Vision read text but could not fill fields. Try clearer photos.";
+          console.log("Vision raw_text:", data.raw_text);
+        } else {
+          status.classList.add("visible");
+          const card = ext.card_number || "—";
+          const pid = ext.personal_id || "—";
+          status.textContent =
+            `Ready · ${totalSec}s | filled ${filled} fields | Document: ${card} | Personal: ${pid}`;
+          setTimeout(() => status.classList.remove("visible"), 8000);
+        }
+        updateStepHint();
+      } catch (e) {
+        clearInterval(tickTimer);
+        console.error(e);
+        status.textContent = "Could not connect to the server. Start the backend on port 8000.";
+        results.classList.add("visible");
+        pdfBtn.classList.add("visible");
+      }
+    }
+
+    function loadImage(src) {
+      return new Promise((resolve, reject) => {
+        const img = new Image();
+        img.onload = () => resolve(img);
+        img.onerror = reject;
+        img.src = src;
+      });
+    }
+
+    function getJsPDF() {
+      if (window.jspdf && window.jspdf.jsPDF) return window.jspdf.jsPDF;
+      if (window.jsPDF) return window.jsPDF;
+      return null;
+    }
+
+    function loadScript(src) {
+      return new Promise((resolve, reject) => {
+        const existing = document.querySelector(`script[src="${src}"]`);
+        if (existing && getJsPDF()) {
+          resolve();
+          return;
+        }
+        const s = document.createElement("script");
+        s.src = src;
+        s.onload = () => resolve();
+        s.onerror = () => reject(new Error("script load failed: " + src));
+        document.head.appendChild(s);
+      });
+    }
+
+    async function ensureJsPDF() {
+      let JsPDF = getJsPDF();
+      if (JsPDF) return JsPDF;
+
+      const cdns = [
+        "https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js",
+        "https://cdn.jsdelivr.net/npm/jspdf@2.5.1/dist/jspdf.umd.min.js",
+      ];
+      for (const url of cdns) {
+        try {
+          await loadScript(url);
+          JsPDF = getJsPDF();
+          if (JsPDF) return JsPDF;
+        } catch (e) {
+          console.warn(e);
+        }
+      }
+      return null;
+    }
+
+    async function downloadPDF() {
+      const isPassport = selectedMethod === "passport";
+      if (isPassport && !passportDataUrl) {
+        alert("Capture or upload a passport photo first.");
+        return;
+      }
+      if (!isPassport && (!frontDataUrl || !backDataUrl)) {
+        alert("Capture or upload both sides first.");
+        return;
+      }
+
+      const JsPDF = await ensureJsPDF();
+      if (!JsPDF) {
+        alert("PDF library failed to load. Check your internet and try again.");
+        return;
+      }
+
+      const pdf = new JsPDF({ orientation: "portrait", unit: "mm", format: "a4" });
+      const pageW = pdf.internal.pageSize.getWidth();
+      const pageH = pdf.internal.pageSize.getHeight();
+      const margin = 12;
+      const maxW = pageW - margin * 2;
+      const gap = 10;
+
+      const placeImage = (img, y, maxHFrac) => {
+        const ratio = img.width / img.height;
+        let w = maxW;
+        let h = w / ratio;
+        const maxH = (pageH - margin * 2 - gap) * maxHFrac;
+        if (h > maxH) {
+          h = maxH;
+          w = h * ratio;
+        }
+        const x = margin + (maxW - w) / 2;
+        pdf.addImage(img.src, "JPEG", x, y, w, h, undefined, "MEDIUM");
+        return y + h;
+      };
+
+      if (isPassport) {
+        const img = await loadImage(passportDataUrl);
+        placeImage(img, margin, 0.9);
+        pdf.save("georgian_passport.pdf");
+        return;
+      }
+
+      const frontImg = await loadImage(frontDataUrl);
+      const backImg = await loadImage(backDataUrl);
+      let y = margin;
+      y = placeImage(frontImg, y, 0.5);
+      y += gap;
+      placeImage(backImg, y, 0.5);
+      pdf.save("georgian_id_documents.pdf");
+    }
+  </script>
+</body>
+</html>
