@@ -65,7 +65,7 @@ async def verify_id(
         result["debug"] = {
             "mrz_card": mrz_ids.get("card_number", ""),
             "mrz_personal": mrz_ids.get("personal_id", ""),
-            "back_has_idgeo": "IDGE" in back_text.upper(),
+            "back_has_idgeo": ("IDGE" in back_text.upper()) or ("TRGE" in back_text.upper()),
         }
         print(
             "OCR card:", result["extracted_data"].get("card_number"),
@@ -114,7 +114,7 @@ async def verify_passport(image: UploadFile = File(...)):
 async def check_mrz(image: UploadFile = File(...)):
     """
     Capture helper:
-    - ID front/back: has_mrz = TD1 (IDGEO…)
+    - ID front/back: has_mrz = TD1 (IDGEO… or TRGEO…)
     - Passport: has_td3 = TD3 (P<…)
     """
     try:

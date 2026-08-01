@@ -3134,8 +3134,29 @@
       return { geo: raw, lat: "" };
     }
 
-    function formatCitizenship() {
-      return "GEO";
+    function formatCitizenship(value) {
+      const raw = String(value || "").trim();
+      if (!raw) return "";
+      const aliases = {
+        საქართველო: "GEO", georgia: "GEO", georgian: "GEO",
+        უკრაინა: "UKR", ukraine: "UKR", ukrainian: "UKR",
+        რუსეთი: "RUS", russia: "RUS", russian: "RUS",
+        თურქეთი: "TUR", turkey: "TUR", turkiye: "TUR", turkish: "TUR",
+        ბელარუსი: "BLR", belarus: "BLR", belarusian: "BLR",
+        სომხეთი: "ARM", armenia: "ARM",
+        აზერბაიჯანი: "AZE", azerbaijan: "AZE",
+        ყაზახეთი: "KAZ", kazakhstan: "KAZ",
+        ისრაელი: "ISR", israel: "ISR",
+        გერმანია: "DEU", germany: "DEU", german: "DEU",
+        აშშ: "USA", usa: "USA", america: "USA",
+      };
+      const lower = raw.toLowerCase();
+      for (const [name, code] of Object.entries(aliases)) {
+        if (lower.includes(name)) return code;
+      }
+      const code = raw.toUpperCase().replace(/[^A-Z]/g, "");
+      if (code.length >= 3) return code.slice(0, 3);
+      return raw;
     }
 
     function formatGender(value) {
@@ -3153,12 +3174,15 @@
         .replace(/«|‹|>/g, "<")
         .replace(/I0GEO/g, "IDGEO")
         .replace(/IDGE0/g, "IDGEO")
-        .replace(/1DGEO/g, "IDGEO");
+        .replace(/1DGEO/g, "IDGEO")
+        .replace(/TRGE0/g, "TRGEO")
+        .replace(/T0GEO/g, "TRGEO");
     }
 
     function fixGeorgianCardNumber(raw) {
       let s = String(raw || "").toUpperCase().replace(/[^A-Z0-9]/g, "");
-      if (s.startsWith("IDGE")) s = s.slice(4);
+      if (s.startsWith("IDGEO") || s.startsWith("TRGEO")) s = s.slice(5);
+      else if (s.startsWith("IDGE") || s.startsWith("TRGE")) s = s.slice(4);
       if (s.length < 9) return s;
       s = s.slice(0, 9);
       const digitFromLetter = { O: "0", Q: "0", D: "0", I: "1", L: "1", Z: "2", S: "5", B: "8", G: "6" };
@@ -3223,7 +3247,7 @@
 
         if (line1.startsWith("P<") && line1.length >= 5) {
           const nat = line1.slice(2, 5).replace(/0/g, "O");
-          if (nat === "GEO" || nat === "GFO") out.citizenship = "GEO";
+          if (/^[A-Z]{3}$/.test(nat)) out.citizenship = nat === "GFO" ? "GEO" : nat;
           const namePart = line1.slice(5);
           const sep = namePart.indexOf("<<");
           if (sep >= 0) {
@@ -3251,8 +3275,8 @@
           if (/^\d{6}$/.test(exp6)) out.expiryYymmdd = exp6;
           out.ranges.expiry_date = { line: 1, start: 21, end: 27 };
           const nat2 = line2.slice(10, 13).replace(/0/g, "O");
-          if (nat2 === "GEO") {
-            out.citizenship = "GEO";
+          if (/^[A-Z]{3}$/.test(nat2)) {
+            out.citizenship = nat2 === "GFO" ? "GEO" : nat2;
             out.ranges.citizenship = { line: 1, start: 10, end: 13 };
           }
           // Georgian passport MRZ does not carry personal number — leave uncheckable
@@ -3260,10 +3284,12 @@
         return out;
       }
 
-      // Prefer 3×30 lines if present (TD1 ID)
+      // Prefer 3×30 lines if present (TD1 ID — IDGEO citizen or TRGEO foreigner)
       if (lines.length < 3) {
         let start = blob.indexOf("IDGEO");
+        if (start < 0) start = blob.indexOf("TRGEO");
         if (start < 0) start = blob.indexOf("IDGE");
+        if (start < 0) start = blob.indexOf("TRGE");
         if (start >= 0) {
           const chunk = blob.slice(start).replace(/[^A-Z0-9<]/g, "");
           lines = [
@@ -3279,6 +3305,12 @@
           lines[0] = fifth === "0" || fifth === "O"
             ? "IDGEO" + lines[0].slice(5)
             : "IDGEO" + lines[0].slice(4);
+          lines[0] = lines[0].padEnd(30, "<").slice(0, 30);
+        } else if (lines[0].startsWith("TRGE") && !lines[0].startsWith("TRGEO")) {
+          const fifth = lines[0][4];
+          lines[0] = fifth === "0" || fifth === "O"
+            ? "TRGEO" + lines[0].slice(5)
+            : "TRGEO" + lines[0].slice(4);
           lines[0] = lines[0].padEnd(30, "<").slice(0, 30);
         }
       }
@@ -3320,6 +3352,7 @@
         if (!out.sex) out.sex = ds[2];
         if (!out.expiryYymmdd) out.expiryYymmdd = ds[3];
         out.citizenship = ds[4].replace(/0/g, "O");
+        if (out.citizenship === "GFO") out.citizenship = "GEO";
         const natIdx = line2.indexOf(ds[4]);
         if (natIdx >= 0) {
           out.ranges.citizenship = { line: 1, start: natIdx, end: natIdx + 3 };
@@ -3331,10 +3364,13 @@
           if (!out.sex) out.sex = soft[2];
           if (!out.expiryYymmdd) out.expiryYymmdd = soft[3];
         }
-        const geoIdx = line2.indexOf("GEO");
-        if (geoIdx >= 0) {
-          out.citizenship = "GEO";
-          out.ranges.citizenship = { line: 1, start: geoIdx, end: geoIdx + 3 };
+        // TD1 nationality is chars 16–18 (0-based 15–18)
+        if (line2.length >= 18) {
+          const nat = line2.slice(15, 18).replace(/0/g, "O");
+          if (/^[A-Z]{3}$/.test(nat)) {
+            out.citizenship = nat === "GFO" ? "GEO" : nat;
+            out.ranges.citizenship = { line: 1, start: 15, end: 18 };
+          }
         }
       }
 
@@ -3479,8 +3515,9 @@
           return Boolean(a && e && a === e);
         }
         case "citizenship": {
-          const a = String(v).toUpperCase().replace(/[^A-Z]/g, "");
-          return a === "GEO" && mrz.citizenship === "GEO";
+          const a = String(v).toUpperCase().replace(/[^A-Z]/g, "").slice(0, 3);
+          const e = String(mrz.citizenship || "").toUpperCase().replace(/[^A-Z]/g, "").slice(0, 3);
+          return Boolean(a && e && a === e);
         }
         case "gender": {
           const fieldSex = (String(v).toUpperCase().match(/\b([MF])\b/) || [])[1] || "";
@@ -3790,6 +3827,7 @@
           .map((l) => l.trim().toUpperCase().replace(/\s+/g, ""))
           .filter((l) =>
             l.includes("IDGE") ||
+            l.includes("TRGE") ||
             l.startsWith("P<") ||
             (l.includes("<<") && /[A-Z]{3,}/.test(l)) ||
             /\d{6}[MF]\d{6}/.test(l)
@@ -3989,6 +4027,7 @@
             .map((l) => l.trim().toUpperCase().replace(/\s+/g, ""))
             .filter((l) =>
               l.includes("IDGE") ||
+              l.includes("TRGE") ||
               (l.includes("<<") && /[A-Z]{3,}/.test(l)) ||
               /\d{6}[MF]\d{6}/.test(l)
             );

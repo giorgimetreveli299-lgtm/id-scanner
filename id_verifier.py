@@ -264,6 +264,49 @@ def _ocr_token_as_digits(token: str) -> str:
     return "".join(ch for ch in token.translate(table) if ch.isdigit())
 
 
+def _strip_td1_doc_prefix(s: str) -> str:
+    """Remove Georgian TD1 doc-type+issuer prefix (IDGEO / TRGEO / soft OCR)."""
+    s = (s or "").upper()
+    for pref in ("IDGEO", "TRGEO", "IDGE", "TRGE"):
+        if s.startswith(pref):
+            return s[len(pref) :]
+    return s
+
+
+def _find_td1_line1(cleaned: str) -> tuple[int, str]:
+    """
+    Locate Georgian-issued TD1 MRZ line-1 prefix.
+      IDGEO — citizen identity card
+      TRGEO — residence / foreigner ID (same layout as IDGEO)
+    Returns (start_index, canonical_prefix) or (-1, "").
+    """
+    s = cleaned or ""
+    s = (
+        s.replace("I0GEO", "IDGEO")
+        .replace("1DGEO", "IDGEO")
+        .replace("ID6EO", "IDGEO")
+        .replace("IDGE0", "IDGEO")
+        .replace("TRGE0", "TRGEO")
+        .replace("T0GEO", "TRGEO")
+        .replace("1RGEO", "TRGEO")
+    )
+    for pref in ("IDGEO", "TRGEO"):
+        i = s.find(pref)
+        if i >= 0:
+            return i, pref
+    for soft, full in (("IDGE", "IDGEO"), ("TRGE", "TRGEO")):
+        i = s.find(soft)
+        if i < 0:
+            continue
+        fifth = s[i + 4 : i + 5] if i + 4 < len(s) else ""
+        if fifth in ("O", "0"):
+            return i, full
+        if fifth and (fifth.isdigit() or fifth.isalpha()):
+            # Missing issuer O: IDGE20… / TRGE25…
+            return i, soft
+    return -1, ""
+
+
 def _fix_georgian_card_number(raw: str) -> str:
     """
     Georgian ID card number format (always 9 chars):
@@ -273,8 +316,7 @@ def _fix_georgian_card_number(raw: str) -> str:
     Example: 20IF22661
     """
     s = re.sub(r"[^A-Za-z0-9]", "", (raw or "")).upper()
-    if s.startswith("IDGE"):
-        s = s[4:]
+    s = _strip_td1_doc_prefix(s)
     if len(s) < 9:
         return s[:9] if s else ""
 
@@ -297,8 +339,7 @@ def _fix_georgian_card_number(raw: str) -> str:
 def _normalize_card_number(raw: str) -> str:
     """Georgian ID card no: 2 digits + 2 letters + 5 digits (e.g. 00IB12345)."""
     s = re.sub(r"[^A-Za-z0-9]", "", raw).upper()
-    if s.startswith("IDGE"):
-        s = s[4:]
+    s = _strip_td1_doc_prefix(s)
 
     # Take best 9-char window that looks like card number
     for i in range(max(0, len(s) - 8)):
@@ -331,7 +372,7 @@ def _find_card_numbers(text: str) -> list[str]:
         if re.fullmatch(r"\d{2}[A-Z]{2}\d{5}", norm) and norm not in found:
             found.append(norm)
 
-    for m in re.finditer(r"IDGE([A-Z0-9]{9})", compact):
+    for m in re.finditer(r"(?:IDGEO|TRGEO|IDGE|TRGE)([A-Z0-9]{9})", compact):
         norm = _normalize_card_number(m.group(1))
         if re.fullmatch(r"\d{2}[A-Z]{2}\d{5}", norm) and norm not in found:
             found.append(norm)
@@ -419,30 +460,37 @@ def _mrz_personal_from_raw(raw: str) -> str:
 
 def parse_mrz_document_line(line: str) -> dict:
     """
-    Georgian ID MRZ line 1:
-      IDGEO + [9 alnum doc] + [1 check SKIP] + [11 digit personal]
+    Georgian-issued TD1 MRZ line 1 (citizen IDGEO or foreigner TRGEO):
+      XXGEO + [9 alnum doc] + [1 check SKIP] + [11 digit personal]
     """
     out = {}
     cleaned = _normalize_mrz_line(line)
+    start, pref = _find_td1_line1(cleaned)
+    if start < 0:
+        return out
+
+    # Align cleaned with OCR fixes used by finder
     cleaned = (
         cleaned.replace("I0GEO", "IDGEO")
         .replace("1DGEO", "IDGEO")
         .replace("ID6EO", "IDGEO")
         .replace("IDGE0", "IDGEO")
-        .replace("I0GE", "IDGE")
-        .replace("1DGE", "IDGE")
+        .replace("TRGE0", "TRGEO")
+        .replace("T0GEO", "TRGEO")
+        .replace("1RGEO", "TRGEO")
     )
-
-    # Locate IDGEO / IDGE prefix (OCR often reads O as 0: IDGE0 → IDGEO)
-    start = cleaned.find("IDGEO")
-    skip = 5
+    # Re-find after normalize (indices stay valid for equal-length fixes)
+    start, pref = _find_td1_line1(cleaned)
     if start < 0:
-        start = cleaned.find("IDGE")
-        if start < 0:
-            return out
-        # IDGE + O or 0 = IDGEO
-        fifth = cleaned[start + 4 : start + 5] if start + 4 < len(cleaned) else ""
-        skip = 5 if fifth in ("O", "0") else 4
+        return out
+
+    skip = len(pref)
+    # Soft 4-char prefix: promote to 5-char canonical when 5th is O/0 already consumed
+    if pref in ("IDGE", "TRGE"):
+        fifth = cleaned[start + 4 : start + 5]
+        if fifth in ("O", "0"):
+            skip = 5
+            pref = "IDGEO" if pref.startswith("ID") else "TRGEO"
 
     rest = cleaned[start + skip :].replace("<", "")
     if len(rest) < 20:
@@ -486,7 +534,11 @@ def extract_mrz_ids(text: str) -> dict:
     mrz_bits = []
     for l in lines:
         c = _normalize_mrz_line(l)
-        if "IDGE" in c or (c.count("<") >= 2 and re.search(r"\d{6}", c)):
+        if (
+            "IDGE" in c
+            or "TRGE" in c
+            or (c.count("<") >= 2 and re.search(r"\d{6}", c))
+        ):
             mrz_bits.append(c)
     if mrz_bits:
         joined = "".join(mrz_bits)
@@ -507,10 +559,9 @@ def _fix_mrz_line(s: str, length: int = 30) -> str:
 def extract_mrz_strip(text: str) -> str:
     """
     Return the full 3-line TD1 MRZ (30 chars each) from back-side OCR.
-    Example:
+    Examples:
       IDGEO22IB34231204501015786<<<<
-      0601120M2703132GEO<<<<<<<<<<<9
-      MURUSIDZE<<DAVIT<<<<<<<<<<<<<
+      TRGE025RT25836101991053297<<<<
     """
     if not text:
         return ""
@@ -521,13 +572,20 @@ def extract_mrz_strip(text: str) -> str:
         .replace("1DGEO", "IDGEO")
         .replace("IDGE0", "IDGEO")
         .replace("ID6EO", "IDGEO")
+        .replace("TRGE0", "TRGEO")
+        .replace("T0GEO", "TRGEO")
+        .replace("1RGEO", "TRGEO")
         .replace("I0GE", "IDGE")
         .replace("1DGE", "IDGE")
     )
 
     lines = [_normalize_mrz_line(l) for l in text.splitlines() if l.strip()]
     lines = [
-        l.replace("IDGE0", "IDGEO").replace("I0GEO", "IDGEO").replace("1DGEO", "IDGEO")
+        l.replace("IDGE0", "IDGEO")
+        .replace("I0GEO", "IDGEO")
+        .replace("1DGEO", "IDGEO")
+        .replace("TRGE0", "TRGEO")
+        .replace("T0GEO", "TRGEO")
         for l in lines
     ]
 
@@ -535,52 +593,48 @@ def extract_mrz_strip(text: str) -> str:
     line2 = ""
     line3 = ""
 
-    # --- Line 1: IDGEO + document + personal ---
+    # --- Line 1: IDGEO/TRGEO + document + personal ---
     for l in lines:
-        if "IDGE" in l:
-            start = l.find("IDGEO")
-            if start < 0:
-                start = l.find("IDGE")
-            if start >= 0:
-                chunk = l[start:].replace(" ", "")
-                # Ensure IDGEO prefix
-                if chunk.startswith("IDGE") and not chunk.startswith("IDGEO"):
-                    fifth = chunk[4:5]
-                    if fifth in ("O", "0"):
-                        chunk = "IDGEO" + chunk[5:]
-                    else:
-                        chunk = "IDGEO" + chunk[4:]
-                line1 = _fix_mrz_line(chunk, 30)
-                break
+        start, pref = _find_td1_line1(l)
+        if start < 0:
+            continue
+        chunk = l[start:].replace(" ", "")
+        if chunk.startswith("IDGE") and not chunk.startswith("IDGEO"):
+            fifth = chunk[4:5]
+            chunk = ("IDGEO" + chunk[5:]) if fifth in ("O", "0") else ("IDGEO" + chunk[4:])
+        elif chunk.startswith("TRGE") and not chunk.startswith("TRGEO"):
+            fifth = chunk[4:5]
+            chunk = ("TRGEO" + chunk[5:]) if fifth in ("O", "0") else ("TRGEO" + chunk[4:])
+        line1 = _fix_mrz_line(chunk, 30)
+        break
 
     if not line1:
-        start = blob.find("IDGEO")
-        skip = 5
-        if start < 0:
-            start = blob.find("IDGE")
-            skip = 4
+        start, pref = _find_td1_line1(blob)
         if start >= 0:
             chunk = blob[start:]
-            if not chunk.startswith("IDGEO"):
-                chunk = "IDGEO" + chunk[skip:]
+            if pref == "IDGE" or (chunk.startswith("IDGE") and not chunk.startswith("IDGEO")):
+                chunk = "IDGEO" + chunk[len(pref) if pref else 4 :]
+            elif pref == "TRGE" or (chunk.startswith("TRGE") and not chunk.startswith("TRGEO")):
+                chunk = "TRGEO" + chunk[len(pref) if pref else 4 :]
             line1 = _fix_mrz_line(chunk, 30)
 
-    # --- Line 2: birth + sex + expiry + GEO ---
+    # --- Line 2: birth + sex + expiry + nationality (GEO, BLR, …) ---
     line2_re = re.compile(
-        r"(\d{6})(\d)([MF<])(\d{6})(\d)(GE[O0]|GEO)([A-Z0-9<]{0,12})"
+        r"(\d{6})(\d)([MF<])(\d{6})(\d)([A-Z]{3})([A-Z0-9<]{0,12})"
     )
     for src in lines + [blob]:
         m = line2_re.search(src)
         if m:
-            geo = "GEO"
+            nat = m.group(6).replace("0", "O")
+            if nat == "GFO":
+                nat = "GEO"
             fillers = re.sub(r"[^A-Z0-9<]", "", m.group(7))
-            # Keep final check digit if present at end of fillers
-            body = f"{m.group(1)}{m.group(2)}{m.group(3)}{m.group(4)}{m.group(5)}{geo}{fillers}"
+            body = f"{m.group(1)}{m.group(2)}{m.group(3)}{m.group(4)}{m.group(5)}{nat}{fillers}"
             line2 = _fix_mrz_line(body, 30)
             break
 
     if not line2:
-        m = re.search(r"(\d{6}\d?[MF<]\d{6}\d?GE[O0][A-Z0-9<]*)", blob)
+        m = re.search(r"(\d{6}\d?[MF<]\d{6}\d?[A-Z]{3}[A-Z0-9<]*)", blob)
         if m:
             body = m.group(1).replace("GE0", "GEO")
             line2 = _fix_mrz_line(body, 30)
@@ -589,9 +643,10 @@ def extract_mrz_strip(text: str) -> str:
     for l in lines:
         if "<<" not in l:
             continue
-        if "IDGE" in l or re.search(r"\d{6}[MF<]", l):
+        if "IDGE" in l or "TRGE" in l or re.search(r"\d{6}[MF<]", l):
             continue
         name = re.sub(r"[^A-Z<]", "", l.upper())
+        name = re.sub(r"^[IT]R?GE[OA]?", "", name)
         name = re.sub(r"^I?D?GE[OA]?", "", name)
         if re.search(r"[A-Z]{2,}<<[A-Z]{2,}", name):
             line3 = _fix_mrz_line(name, 30)
@@ -627,9 +682,14 @@ def parse_mrz(lines: list[str]) -> dict:
     candidates = []
     for raw in list(lines) + strip_lines:
         cleaned = _normalize_mrz_line(raw)
-        cleaned = cleaned.replace("IDGE0", "IDGEO").replace("I0GEO", "IDGEO")
+        cleaned = (
+            cleaned.replace("IDGE0", "IDGEO")
+            .replace("I0GEO", "IDGEO")
+            .replace("TRGE0", "TRGEO")
+        )
         if (
             "IDGE" in cleaned
+            or "TRGE" in cleaned
             or cleaned.count("<") >= 2
             or re.search(r"\d{6}[MF<\d]\d{6}", cleaned)
         ):
@@ -650,13 +710,17 @@ def parse_mrz(lines: list[str]) -> dict:
                 mrz["gender"] = "მდ / F"
             if nat:
                 code = nat.replace("0", "O")
-                if code in ("GEO", "GFO"):
-                    mrz["citizenship_code"] = "GEO"
+                if code == "GFO":
+                    code = "GEO"
+                # Nationality (not issuing state) — BLR, GEO, UKR, …
+                if re.fullmatch(r"[A-Z]{3}", code):
+                    mrz["citizenship_code"] = code
 
         if "<<" in line and not mrz.get("_mrz_last_name"):
-            if re.search(r"\d{6}", line) or "IDGE" in line:
+            if re.search(r"\d{6}", line) or "IDGE" in line or "TRGE" in line:
                 continue
-            name_part = re.sub(r"^I?D?GE[OA]?", "", line)
+            name_part = re.sub(r"^[IT]R?GE[OA]?", "", line)
+            name_part = re.sub(r"^I?D?GE[OA]?", "", name_part)
             name_part = re.sub(r"[0-9]", "", name_part)
             parts = name_part.split("<<")
             if len(parts) >= 2 and re.search(r"[A-Z]{2,}", parts[0]):
@@ -667,9 +731,7 @@ def parse_mrz(lines: list[str]) -> dict:
                 if first and not re.search(r"\d", first):
                     mrz["_mrz_first_name"] = first.upper()
 
-    if not mrz.get("citizenship_code") and "GEO" in blob.upper():
-        mrz["citizenship_code"] = "GEO"
-
+    # Do NOT infer GEO from "TRGEO"/"IDGEO" issuing-state prefix — nationality is line 2
     return mrz
 
 
@@ -873,8 +935,30 @@ for _place in (
     "ლენტეხი", "ყვარელი", "ლაგოდეხი", "დედოფლისწყარო", "სიღნაღი", "გურჯაანი",
     "თეთრიწყარო", "წალკა", "დმანისი", "ქედა", "შუახევი", "ხულო", "ჩოხატაური",
     "ქობულეთი", "ხელვაჩაური", "ასპინძა", "ადიგენი", "ახალქალაქი",
+    # Countries (foreign birth place on Georgian IDs)
+    "ბელარუსი", "უკრაინა", "რუსეთი", "თურქეთი", "სომხეთი", "აზერბაიჯანი",
+    "ყაზახეთი", "ისრაელი", "გერმანია", "ამერიკის შეერთებული შტატები",
 ):
     _KNOWN_PLACE_BY_LATIN[_latin_norm(transliterate_ka(_place))] = _place
+
+# English / alternate Latin spellings on the card (not national transliteration)
+for _lat, _geo in (
+    ("BELARUS", "ბელარუსი"),
+    ("BELARUSSIA", "ბელარუსი"),
+    ("UKRAINE", "უკრაინა"),
+    ("RUSSIA", "რუსეთი"),
+    ("TURKEY", "თურქეთი"),
+    ("TURKIYE", "თურქეთი"),
+    ("ARMENIA", "სომხეთი"),
+    ("AZERBAIJAN", "აზერბაიჯანი"),
+    ("KAZAKHSTAN", "ყაზახეთი"),
+    ("ISRAEL", "ისრაელი"),
+    ("GERMANY", "გერმანია"),
+    ("USA", "ამერიკის შეერთებული შტატები"),
+    ("UNITEDSTATES", "ამერიკის შეერთებული შტატები"),
+    ("UNITEDSTATESOFAMERICA", "ამერიკის შეერთებული შტატები"),
+):
+    _KNOWN_PLACE_BY_LATIN[_latin_norm(_lat)] = _geo
 
 # Longest first, so «ახალქალაქი» is not shadowed by a shorter name
 _KNOWN_PLACES_GEO = tuple(
@@ -1083,13 +1167,12 @@ def verify_against_mrz(data: dict, mrz: dict) -> dict:
             add("last_name", True, mrz["_mrz_last_name"], data.get("last_name", ""))
 
     if mrz.get("citizenship_code"):
-        raw = (data.get("citizenship") or "").upper()
-        ok = (
-            "GEO" in raw
-            or "GEORGIA" in raw
-            or "საქართველო" in (data.get("citizenship") or "")
-        )
-        add("citizenship", ok, "GEO", data.get("citizenship", ""))
+        expected = re.sub(r"[^A-Z]", "", mrz["citizenship_code"].upper())[:3]
+        actual = _format_citizenship(data.get("citizenship", "")) or re.sub(
+            r"[^A-Z]", "", (data.get("citizenship") or "").upper()
+        )[:3]
+        ok = bool(expected and actual and expected == actual)
+        add("citizenship", ok, expected, data.get("citizenship", ""))
 
     return {
         "status": "Checked" if not mismatches else "Error",
@@ -1164,8 +1247,54 @@ def _value_after_labels(lines: list[str], labels: list[str], prefer_georgian: bo
 
 
 def _format_citizenship(value: str = "") -> str:
-    """Always return GEO for Georgian IDs."""
-    return "GEO"
+    """Normalize citizenship to any ICAO 3-letter code (GEO, UKR, RUS, TUR, …)."""
+    raw = (value or "").strip()
+    if not raw:
+        return ""
+
+    aliases = {
+        "საქართველო": "GEO",
+        "GEORGIA": "GEO",
+        "GEORGIAN": "GEO",
+        "უკრაინა": "UKR",
+        "UKRAINE": "UKR",
+        "UKRAINIAN": "UKR",
+        "რუსეთი": "RUS",
+        "RUSSIA": "RUS",
+        "RUSSIAN": "RUS",
+        "თურქეთი": "TUR",
+        "TURKEY": "TUR",
+        "TURKIYE": "TUR",
+        "TÜRKIYE": "TUR",
+        "TURKISH": "TUR",
+        "ბელარუსი": "BLR",
+        "BELARUS": "BLR",
+        "BELARUSIAN": "BLR",
+        "სომხეთი": "ARM",
+        "ARMENIA": "ARM",
+        "აზერბაიჯანი": "AZE",
+        "AZERBAIJAN": "AZE",
+        "ყაზახეთი": "KAZ",
+        "KAZAKHSTAN": "KAZ",
+        "ისრაელი": "ISR",
+        "ISRAEL": "ISR",
+        "გერმანია": "DEU",
+        "GERMANY": "DEU",
+        "GERMAN": "DEU",
+        "აშშ": "USA",
+        "USA": "USA",
+        "UNITEDSTATES": "USA",
+        "AMERICA": "USA",
+    }
+    upper = raw.upper()
+    for name, code in aliases.items():
+        if name.lower() in raw.lower() or name.upper() in upper:
+            return code
+
+    letters = re.sub(r"[^A-Z]", "", upper)
+    if len(letters) >= 3:
+        return letters[:3]
+    return raw
 
 
 def _format_gender_display(value: str = "") -> str:
@@ -1517,7 +1646,7 @@ def _birth_place_from_back(back_lines: list[str]) -> str:
         t = line.strip()
         if not t or len(t) < 2:
             continue
-        if "<" in t or "IDGE" in t.upper():
+        if "<" in t or "IDGE" in t.upper() or "TRGE" in t.upper():
             continue
         if _BACK_SKIP.search(t):
             continue
@@ -1929,7 +2058,9 @@ def extract_id_info(front_bytes: bytes, back_bytes: bytes) -> dict:
     data["birth_place"] = place_geo
     data["birth_place_lat"] = place_lat
 
-    data["citizenship"] = _format_citizenship()
+    data["citizenship"] = _format_citizenship(
+        mrz.get("citizenship_code") or data.get("citizenship", "")
+    ) or (mrz.get("citizenship_code") or "GEO")
 
     if mrz.get("gender"):
         data["gender"] = _format_gender_display(mrz["gender"])
@@ -1958,12 +2089,14 @@ def extract_id_info(front_bytes: bytes, back_bytes: bytes) -> dict:
         parts = mrz_strip.splitlines()
         if parts:
             line1 = parts[0].ljust(30, "<")[:30]
-            if line1.startswith("IDGE"):
-                # IDGEO(5) + card(9)
-                prefix = "IDGEO" if line1.startswith("IDGEO") else line1[:5]
-                if prefix == "IDGEO" or (prefix.startswith("IDGE") and len(prefix) >= 4):
-                    prefix = "IDGEO"
+            if line1.startswith("IDGEO") or line1.startswith("TRGEO"):
+                prefix = line1[:5]
                 rest = line1[5:]
+                parts[0] = (prefix + data["card_number"] + rest[9:])[:30]
+                mrz_strip = "\n".join(parts)
+            elif line1.startswith("IDGE") or line1.startswith("TRGE"):
+                prefix = "IDGEO" if line1.startswith("ID") else "TRGEO"
+                rest = line1[4:]
                 parts[0] = (prefix + data["card_number"] + rest[9:])[:30]
                 mrz_strip = "\n".join(parts)
 
@@ -1985,7 +2118,7 @@ def extract_id_info(front_bytes: bytes, back_bytes: bytes) -> dict:
             "birth_date": data.get("birth_date", ""),
             "birth_place": data.get("birth_place", ""),
             "birth_place_lat": data.get("birth_place_lat", ""),
-            "citizenship": "GEO",
+            "citizenship": data.get("citizenship", "") or "GEO",
             "gender": data.get("gender", ""),
             "personal_id": data.get("personal_id", ""),
             "expiry_date": data.get("expiry_date", ""),

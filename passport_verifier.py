@@ -622,7 +622,7 @@ def _fix_passport_number(raw: str) -> str:
 _MRZ_D = r"[0-9ODQILZSBG]"
 _TD3_LINE2_RE = re.compile(
     rf"(?P<doc>[A-Z0-9]{{9}}){_MRZ_D}"
-    rf"(?P<nat>GE[O0])"
+    rf"(?P<nat>[A-Z]{{3}})"
     rf"(?P<birth>{_MRZ_D}{{6}}){_MRZ_D}"
     rf"(?P<sex>[MF<])"
     rf"(?P<exp>{_MRZ_D}{{6}})"
@@ -758,8 +758,8 @@ def parse_passport_mrz(text: str, lines: list[str] | None = None) -> dict:
         rest = line1[2:] if line1.startswith("P<") else line1[1:]
         if len(rest) >= 3:
             nat = rest[:3].replace("0", "O")
-            if nat in ("GEO", "GFO"):
-                mrz["citizenship_code"] = "GEO"
+            if re.fullmatch(r"[A-Z]{3}", nat):
+                mrz["citizenship_code"] = "GEO" if nat == "GFO" else nat
             name_part = rest[3:]
             if "<<" in name_part:
                 last, first = name_part.split("<<", 1)
@@ -773,8 +773,8 @@ def parse_passport_mrz(text: str, lines: list[str] | None = None) -> dict:
     if len(line2) >= 28:
         mrz["card_number"] = _fix_passport_number(line2[0:9])
         nat = line2[10:13].replace("0", "O")
-        if nat in ("GEO", "GFO"):
-            mrz["citizenship_code"] = "GEO"
+        if re.fullmatch(r"[A-Z]{3}", nat):
+            mrz["citizenship_code"] = "GEO" if nat == "GFO" else nat
         b_raw = line2[13:19]
         sex = line2[20:21]
         e_raw = line2[21:27]
@@ -796,7 +796,9 @@ def parse_passport_mrz(text: str, lines: list[str] | None = None) -> dict:
         if m:
             if not mrz.get("card_number"):
                 mrz["card_number"] = _fix_passport_number(m.group("doc"))
-            mrz["citizenship_code"] = "GEO"
+            nat = m.group("nat").replace("0", "O")
+            if re.fullmatch(r"[A-Z]{3}", nat):
+                mrz["citizenship_code"] = "GEO" if nat == "GFO" else nat
             if not mrz.get("birth_date"):
                 birth = _mrz_yymmdd(m.group("birth"), True)
                 if birth:
@@ -956,7 +958,9 @@ def extract_passport_info(image_bytes: bytes) -> dict:
     data["last_name_lat"] = last_lat
     data["birth_place"] = place_geo
     data["birth_place_lat"] = place_lat
-    data["citizenship"] = _format_citizenship()
+    data["citizenship"] = _format_citizenship(
+        mrz.get("citizenship_code") or data.get("citizenship", "")
+    ) or (mrz.get("citizenship_code") or "GEO")
 
     if mrz.get("gender"):
         data["gender"] = _format_gender_display(mrz["gender"])
@@ -999,7 +1003,7 @@ def extract_passport_info(image_bytes: bytes) -> dict:
             "birth_date": data.get("birth_date", ""),
             "birth_place": data.get("birth_place", ""),
             "birth_place_lat": data.get("birth_place_lat", ""),
-            "citizenship": "GEO",
+            "citizenship": data.get("citizenship", "") or "GEO",
             "gender": data.get("gender", ""),
             "personal_id": data.get("personal_id", ""),
             "expiry_date": data.get("expiry_date", ""),
@@ -1084,13 +1088,12 @@ def verify_against_passport_mrz(data: dict, mrz: dict) -> dict:
             add("last_name", True, mrz["_mrz_last_name"], data.get("last_name", ""))
 
     if mrz.get("citizenship_code"):
-        raw = (data.get("citizenship") or "").upper()
-        ok = (
-            "GEO" in raw
-            or "GEORGIA" in raw
-            or "საქართველო" in (data.get("citizenship") or "")
-        )
-        add("citizenship", ok, "GEO", data.get("citizenship", ""))
+        expected = re.sub(r"[^A-Z]", "", mrz["citizenship_code"].upper())[:3]
+        actual = _format_citizenship(data.get("citizenship", "")) or re.sub(
+            r"[^A-Z]", "", (data.get("citizenship") or "").upper()
+        )[:3]
+        ok = bool(expected and actual and expected == actual)
+        add("citizenship", ok, expected, data.get("citizenship", ""))
 
     return {
         "status": "Checked" if not mismatches else "Error",
