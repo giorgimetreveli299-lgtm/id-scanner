@@ -1224,13 +1224,20 @@ def _fix_person_geo_name(geo: str, latin_hint: str, *, kind: str = "first") -> s
     Repair a person name (first/last) using MRZ Latin as source of truth.
     E.g. OCR «გემა» + MRZ BEKA → «ბექა».
     If Georgian OCR is empty, reverse-transliterate from MRZ Latin.
+    When MRZ Latin is also missing, preserve the original non-junk input
+    (bilingual / Latin-only OCR) instead of returning empty.
     """
-    geo = (_georgian_only(geo) or "").strip()
+    raw = (geo or "").strip()
+    geo = (_georgian_only(raw) or "").strip()
     if geo and _is_name_junk(geo):
         geo = ""
+    if raw and _is_name_junk(raw):
+        raw = ""
+
     hint = _latin_norm(latin_hint)
     if not hint:
-        return geo
+        # No MRZ to rebuild from — keep Georgian extract, else original input
+        return geo or raw
 
     if geo and _latin_norm(transliterate_ka(geo)) == hint:
         return _restore_final_i(geo, latin_hint)
@@ -1253,7 +1260,8 @@ def _fix_person_geo_name(geo: str, latin_hint: str, *, kind: str = "first") -> s
             return _restore_final_i(fixed, latin_hint)
         return _restore_final_i(geo, latin_hint)
 
-    # No usable Georgian OCR — rebuild from MRZ Latin
+    # No usable Georgian letters — rebuild from MRZ Latin (do not keep raw Latin
+    # in the Georgian field when a hint exists; that blocked reverse-translit).
     if kind == "first":
         known = _KNOWN_GIVEN_BY_LATIN.get(hint)
         if known:
@@ -2092,16 +2100,8 @@ def _georgian_names_from_front(front_lines: list[str], latin_hints: dict | None 
         if score_swapped > score_ok + 0.3:
             data["first_name"], data["last_name"] = data["last_name"], data["first_name"]
 
-    for key, hint_key in (("last_name", "_mrz_last_name"), ("first_name", "_mrz_first_name")):
-        if data.get(key):
-            geo = _georgian_only(data[key])
-            if geo:
-                kind = "first" if key == "first_name" else "last"
-                data[key] = _fix_person_geo_name(
-                    geo, latin_hints.get(hint_key, ""), kind=kind
-                )
-            elif _LATIN_ONLY.match(data[key]):
-                data.pop(key, None)
+    # Do not call _fix_person_geo_name here — extract_id_info runs a single
+    # final repair pass so synthesized / corrected names are not re-processed.
 
     return data
 
@@ -2218,12 +2218,12 @@ def extract_id_info(front_bytes: bytes, back_bytes: bytes) -> dict:
 
     for key, hint_key in (("first_name", "_mrz_first_name"), ("last_name", "_mrz_last_name")):
         kind = "first" if key == "first_name" else "last"
-        geo = _georgian_only(data.get(key, "")) or ""
-        if geo and _is_name_junk(geo):
-            geo = ""
+        raw = (data.get(key, "") or "").strip()
         hint = latin_hints.get(hint_key, "")
-        if geo or hint:
-            data[key] = _fix_person_geo_name(geo, hint, kind=kind)
+        if raw or hint:
+            # Pass raw so Latin/bilingual fallbacks inside the fixer are preserved
+            # when MRZ Latin is missing; fixer still strips to Georgian when possible.
+            data[key] = _fix_person_geo_name(raw, hint, kind=kind)
         else:
             data[key] = ""
 
