@@ -485,12 +485,50 @@
       background: #fff;
     }
 
+    .portrait-slot {
+      display: none;
+      margin: 0 0 18px;
+      text-align: center;
+    }
+    .portrait-slot.visible {
+      display: block;
+    }
+    .portrait-slot .portrait-label {
+      font-size: 12px;
+      font-weight: 600;
+      color: var(--muted);
+      margin-bottom: 8px;
+    }
+    .portrait-frame {
+      /* Same proportions as ID / passport printed photo (~3:4) */
+      width: 120px;
+      height: 160px;
+      margin: 0 auto;
+      border: 1px solid #ccd3db;
+      border-radius: 8px;
+      background: #f1f5f9;
+      overflow: hidden;
+      box-shadow: 0 1px 2px rgba(15, 23, 42, 0.06);
+    }
+    .portrait-frame img {
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+      object-position: center top;
+      display: block;
+    }
+
     .mrz-block {
       grid-column: 1 / -1;
       margin-top: 4px;
     }
+    .mrz-header {
+      display: flex;
+      align-items: stretch;
+      gap: 10px;
+    }
     .mrz-toggle {
-      width: 100%;
+      flex: 1;
       text-align: left;
       background: #f0f4f8;
       border: 1px solid #ccd3db;
@@ -505,6 +543,63 @@
       align-items: center;
     }
     .mrz-toggle:hover { background: #e8eef5; }
+    .mrz-overall-status {
+      flex-shrink: 0;
+      min-width: 118px;
+      padding: 12px 20px;
+      border-radius: 10px;
+      font-size: 16px;
+      font-weight: 800;
+      letter-spacing: 0.3px;
+      line-height: 1.2;
+      border: 2px solid transparent;
+      cursor: default;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      transition: background 0.2s, border-color 0.2s, box-shadow 0.2s;
+    }
+    .mrz-overall-status.ok {
+      color: #0f5c28;
+      background: #d8f3e3;
+      border-color: #3da86a;
+      box-shadow: 0 2px 8px rgba(31, 138, 76, 0.18);
+    }
+    .mrz-overall-status.err {
+      color: #8b1515;
+      background: #fde0e0;
+      border-color: #e07070;
+      box-shadow: 0 2px 8px rgba(192, 57, 43, 0.2);
+      cursor: pointer;
+    }
+    .mrz-overall-status.err:hover {
+      background: #f8cccc;
+      box-shadow: 0 0 0 3px rgba(192, 57, 43, 0.22);
+    }
+    .mrz-overall-status.hidden {
+      display: none;
+    }
+    @keyframes field-error-flash {
+      0%, 100% {
+        box-shadow: 0 0 0 0 rgba(192, 57, 43, 0);
+        border-color: #f5b5b5;
+        background: #fff8f8;
+      }
+      25%, 75% {
+        box-shadow: 0 0 0 4px rgba(192, 57, 43, 0.45);
+        border-color: #e04545;
+        background: #ffe4e4;
+      }
+      50% {
+        box-shadow: 0 0 0 6px rgba(192, 57, 43, 0.25);
+        border-color: #c0392b;
+        background: #ffd0d0;
+      }
+    }
+    .input-with-badge.flash-error {
+      animation: field-error-flash 0.55s ease-in-out 4;
+      border-width: 2px;
+    }
     .mrz-panel {
       position: relative;
       margin-top: 8px;
@@ -629,9 +724,8 @@
           <label for="generate-stage">Generate</label>
           <select id="generate-stage" onchange="onGenerateStageChange()">
             <option value="final">Final (Crop + Straighten + Brightness)</option>
-            <option value="crop">1. Crop</option>
-            <option value="straighten">2. Straighten</option>
-            <option value="brightness">3. Brightness</option>
+            <option value="crop_straighten">1. Crop + Straighten</option>
+            <option value="brightness">2. Brightness</option>
           </select>
           <p class="generate-hint">Top photos are originals; here you see processing stages and their combination.</p>
         </div>
@@ -644,6 +738,12 @@
             <figcaption>Back side</figcaption>
             <img id="pdf-img-back" alt="Back">
           </figure>
+        </div>
+        <div class="portrait-slot" id="portrait-slot">
+          <div class="portrait-label" id="portrait-label">ID photo</div>
+          <div class="portrait-frame">
+            <img id="portrait-img" alt="ID portrait">
+          </div>
         </div>
         <div class="grid">
           <div class="field-group">
@@ -735,10 +835,15 @@
             </div>
           </div>
           <div class="mrz-block">
-            <button type="button" class="mrz-toggle" id="mrz-toggle" onclick="toggleMrz()">
-              <span>MRZ</span>
-              <span id="mrz-chevron">▲</span>
-            </button>
+            <div class="mrz-header">
+              <button type="button" class="mrz-toggle" id="mrz-toggle" onclick="toggleMrz()">
+                <span>MRZ</span>
+                <span id="mrz-chevron">▲</span>
+              </button>
+              <button type="button" id="mrz-overall-status" class="mrz-overall-status hidden" aria-live="polite">
+                Checked
+              </button>
+            </div>
             <div class="mrz-panel" id="mrz-panel">
               <textarea id="mrz_strip" readonly placeholder="MRZ…"></textarea>
               <pre id="mrz-view" class="mrz-view" aria-label="MRZ display"></pre>
@@ -797,22 +902,26 @@
       const frontCap = document.getElementById("pdf-caption-front");
       const backFig = document.getElementById("pdf-figure-back");
       const generateBar = document.getElementById("generate-bar");
+      const portraitLabel = document.getElementById("portrait-label");
       if (selectedMethod === "passport") {
         if (docLabel) docLabel.textContent = "პასპორტის ნომერი / Passport Number";
         if (frontCap) frontCap.textContent = "Passport";
         if (backFig) backFig.classList.add("hidden-side");
         if (generateBar) generateBar.style.display = "none";
+        if (portraitLabel) portraitLabel.textContent = "Passport photo";
       } else {
         if (docLabel) docLabel.textContent = "ბარათის ნომერი / Card Number";
         if (frontCap) frontCap.textContent = "Front side";
         if (backFig) backFig.classList.remove("hidden-side");
         if (generateBar) generateBar.style.display = "flex";
+        if (portraitLabel) portraitLabel.textContent = "ID photo";
       }
     }
 
     function showMethodChoice() {
       closeCamera();
       selectedMethod = null;
+      setPortrait("");
       document.getElementById("method-choice").classList.remove("hidden");
       document.getElementById("scanner-view").classList.remove("visible");
       document.getElementById("passport-view").classList.remove("visible");
@@ -1012,7 +1121,7 @@
         const bitmap = await toDrawableBitmap(file);
         try {
           if (activeSlot === "passport") {
-            // Drop REMARKS page from final photo; keep biodata for OCR
+            // Results photo: biodata only (REMARKS cut). Original stays in top slot.
             final = await processPassportImage(bitmap);
           } else {
             stages = await processDocumentForGenerate(bitmap);
@@ -1022,7 +1131,11 @@
           if (bitmap && typeof bitmap.close === "function") bitmap.close();
         }
 
-        const ok = await validateCapturedSide(activeSlot, final.blob);
+        const validateBlob =
+          activeSlot === "passport"
+            ? (final.cropped ? final.blob : originalBlob)
+            : final.blob;
+        const ok = await validateCapturedSide(activeSlot, validateBlob);
         if (!ok) {
           if (!cameraModal.classList.contains("open")) {
             alert(readinessStatus.textContent || "Photo rejected. Please capture it correctly.");
@@ -1468,9 +1581,19 @@
       }
     }
 
+    /** Georgian REMARKS page wash — lavender/magenta (low green, mid luminance). */
+    function isRemarksPurple(r, g, b) {
+      const lum = 0.299 * r + 0.587 * g + 0.114 * b;
+      if (lum < 70 || lum > 210) return false;
+      // Classic blue-purple header OR pink-lavender illustration wash
+      if (b > r + 12 && b > g + 8 && b > 90) return true;
+      if (g + 14 < r && g + 14 < b && Math.max(r, b) > 110) return true;
+      return false;
+    }
+
     /**
      * Score a horizontal band: MRZ-like dense dark text near the bottom of biodata,
-     * vs purple/blue REMARKS header near the top of the remarks page.
+     * vs purple/lavender REMARKS wash on page 03.
      */
     function scorePassportHalf(rgba, w, h, y0, y1) {
       let purple = 0;
@@ -1488,8 +1611,7 @@
           const lum = 0.299 * r + 0.587 * g + 0.114 * b;
           n++;
           if (lum < 70) dark++;
-          // REMARKS header band is soft purple/blue
-          if (b > r + 15 && b > g + 5 && b > 90 && lum > 60 && lum < 200) purple++;
+          if (isRemarksPurple(r, g, b)) purple++;
           if (x + 2 < w) {
             const i2 = (y * w + x + 2) * 4;
             const lum2 = 0.299 * rgba[i2] + 0.587 * rgba[i2 + 1] + 0.114 * rgba[i2 + 2];
@@ -1519,14 +1641,52 @@
       };
     }
 
+    function scorePassportVStrip(rgba, w, h, x0, x1) {
+      let purple = 0;
+      let n = 0;
+      let mrzDark = 0;
+      let mrzN = 0;
+      const xa = Math.max(0, x0 | 0);
+      const xb = Math.min(w, x1 | 0);
+      const mrzY0 = Math.floor(h * 0.55);
+      for (let y = 0; y < h; y += 2) {
+        for (let x = xa; x < xb; x += 2) {
+          const i = (y * w + x) * 4;
+          const r = rgba[i], g = rgba[i + 1], b = rgba[i + 2];
+          const lum = 0.299 * r + 0.587 * g + 0.114 * b;
+          n++;
+          if (isRemarksPurple(r, g, b)) purple++;
+          if (y >= mrzY0) {
+            mrzN++;
+            if (lum < 85) mrzDark++;
+          }
+        }
+      }
+      return {
+        purple: n ? purple / n : 0,
+        mrz: mrzN ? mrzDark / mrzN : 0,
+      };
+    }
+
     /**
-     * Drop the REMARKS (შენიშვნები) page from open-book passport photos.
-     * Keeps only the biodata page for the final image + OCR.
+     * Drop REMARKS (შენიშვნები / page 03) when the open book clearly has two pages.
+     * Returns { bitmap, cropped }. Never blind-crops a single biodata page.
      */
     async function isolatePassportBiodataBitmap(bitmap) {
       const w = bitmap.width;
       const h = bitmap.height;
-      if (!w || !h) return bitmap;
+      if (!w || !h) return { bitmap, cropped: false };
+
+      const maxSide = 420;
+      const scale = Math.min(1, maxSide / Math.max(w, h));
+      const aw = Math.max(2, Math.round(w * scale));
+      const ah = Math.max(2, Math.round(h * scale));
+      const c = document.createElement("canvas");
+      c.width = aw;
+      c.height = ah;
+      const ctx = c.getContext("2d", { willReadFrequently: true });
+      ctx.drawImage(bitmap, 0, 0, aw, ah);
+      const { data } = ctx.getImageData(0, 0, aw, ah);
 
       const aspect = w / h;
       let sx = 0;
@@ -1535,60 +1695,66 @@
       let sh = h;
       let cut = false;
 
-      // Tall open book: REMARKS on top, biodata underneath
       if (aspect < 0.95) {
-        const keepRatio = 0.52;
-        sy = Math.max(0, Math.floor(h * (1 - keepRatio)));
-        sh = h - sy;
-        cut = true;
-      } else if (aspect > 1.55) {
-        // Wide open book: REMARKS left, biodata right — keep right half
-        const keepRatio = 0.52;
-        sx = Math.max(0, Math.floor(w * (1 - keepRatio)));
-        sw = w - sx;
-        cut = true;
-      } else {
-        // Near single-page aspect: still drop top if it looks like REMARKS
-        const maxSide = 420;
-        const scale = Math.min(1, maxSide / Math.max(w, h));
-        const aw = Math.max(2, Math.round(w * scale));
-        const ah = Math.max(2, Math.round(h * scale));
-        const c = document.createElement("canvas");
-        c.width = aw;
-        c.height = ah;
-        const ctx = c.getContext("2d", { willReadFrequently: true });
-        ctx.drawImage(bitmap, 0, 0, aw, ah);
-        const { data } = ctx.getImageData(0, 0, aw, ah);
+        // Tall open book: REMARKS on top, biodata (+ MRZ) underneath
         const mid = Math.floor(ah / 2);
         const top = scorePassportHalf(data, aw, ah, 0, mid);
         const bot = scorePassportHalf(data, aw, ah, mid, ah);
-        // Top has purple header and weak MRZ; bottom has stronger MRZ text
-        if (top.purple > 0.04 && bot.mrz > top.mrz + 0.04) {
+        // Require purple REMARKS wash OR very tall double-page + clear MRZ below
+        const remarksLikely =
+          (top.purple > 0.04 && bot.mrz > top.mrz + 0.02) ||
+          (top.purple > 0.08) ||
+          (aspect < 0.55 && bot.mrz > top.mrz + 0.05 && bot.mrz > 0.08 && top.purple > 0.02);
+        if (remarksLikely) {
+          sy = Math.floor(h * 0.48);
+          sh = h - sy;
+          cut = true;
+        }
+      } else if (aspect > 1.55) {
+        // Wide open book: REMARKS left, biodata right — purple REQUIRED
+        // (MRZ-only signal would wrongly cut a single landscape biodata page)
+        const mid = Math.floor(aw / 2);
+        const left = scorePassportVStrip(data, aw, ah, 0, mid);
+        const right = scorePassportVStrip(data, aw, ah, mid, aw);
+        if (left.purple > 0.04 && (right.mrz >= left.mrz || left.purple > 0.08)) {
+          sx = Math.floor(w * 0.48);
+          sw = w - sx;
+          cut = true;
+        }
+      } else {
+        const mid = Math.floor(ah / 2);
+        const top = scorePassportHalf(data, aw, ah, 0, mid);
+        const bot = scorePassportHalf(data, aw, ah, mid, ah);
+        if (top.purple > 0.05 && bot.mrz > top.mrz + 0.02) {
           sy = Math.floor(h * 0.48);
           sh = h - sy;
           cut = true;
         }
       }
 
-      if (!cut) return bitmap;
+      if (!cut) return { bitmap, cropped: false };
 
       const canvas = document.createElement("canvas");
       canvas.width = sw;
       canvas.height = sh;
-      const ctx = canvas.getContext("2d");
-      ctx.drawImage(bitmap, sx, sy, sw, sh, 0, 0, sw, sh);
-      return toDrawableBitmap(canvas);
+      const octx = canvas.getContext("2d");
+      octx.drawImage(bitmap, sx, sy, sw, sh, 0, 0, sw, sh);
+      const out = await toDrawableBitmap(canvas);
+      return { bitmap: out, cropped: true };
     }
 
     /**
-     * Final passport photo: remove REMARKS page only.
-     * No aggressive warp/deskew here — that was blanking OCR fields.
+     * Results photo: drop REMARKS when detected. Top capture slot stays original.
+     * When cropped, OCR should also use this biodata image (Vision focuses on MRZ).
      */
     async function processPassportImage(bitmap) {
       let isolated = null;
       try {
-        isolated = await isolatePassportBiodataBitmap(bitmap);
-        return await canvasToJpeg(isolated, 0, 0, isolated.width, isolated.height);
+        const result = await isolatePassportBiodataBitmap(bitmap);
+        isolated = result.bitmap;
+        const jpeg = await canvasToJpeg(isolated, 0, 0, isolated.width, isolated.height);
+        jpeg.cropped = !!result.cropped;
+        return jpeg;
       } finally {
         if (isolated && isolated !== bitmap && typeof isolated.close === "function") {
           try { isolated.close(); } catch (_) {}
@@ -1692,6 +1858,10 @@
     function stageDataUrl(stages, key) {
       if (!stages) return "";
       if (key === "final") return (stages.final || stages.brightness || {}).dataUrl || "";
+      // Combined preview: crop + straighten (after warp/deskew, before brightness)
+      if (key === "crop_straighten" || key === "crop" || key === "straighten") {
+        return (stages.straighten || stages.crop || stages.final || {}).dataUrl || "";
+      }
       return (stages[key] || stages.final || {}).dataUrl || "";
     }
 
@@ -2531,12 +2701,18 @@
       const finalUrl = final.dataUrl;
 
       if (slot === "passport") {
-        // Top slot = original; results/OCR = bottom biodata + straighten (no steps UI).
-        passportBlob = finalBlob;
+        // Top slot = original capture (unchanged).
+        // Below fields = cropped biodata when REMARKS was cut.
+        // OCR: use cropped biodata when cut succeeded (Vision focuses on MRZ);
+        // otherwise keep the full original.
+        const origBlob = original.blob || finalBlob;
+        const origUrl = original.dataUrl || finalUrl;
+        const useCroppedForOcr = !!final.cropped;
+        passportBlob = useCroppedForOcr ? finalBlob : origBlob;
         passportDataUrl = finalUrl;
         passportStages = null;
         const img = document.getElementById("img-passport");
-        img.src = originalUrl;
+        img.src = origUrl;
         img.style.display = "block";
         document.getElementById("slot-passport").classList.add("done");
         applyDocLabels();
@@ -3035,7 +3211,7 @@
         try {
           bitmap = await toDrawableBitmap(cropCanvas);
           if (slot === "passport") {
-            // Final photo = biodata only (REMARKS / შენიშვნები cut off)
+            // Results photo: biodata only (REMARKS cut). Original stays in top slot.
             final = await processPassportImage(bitmap);
           } else {
             // Front / back: keep exactly what was inside the camera guide frame
@@ -3057,8 +3233,12 @@
           }
         }
 
-        // Validate MRZ on the frame photo (same pixels the user framed)
-        const ok = await validateCapturedSide(slot, final.blob);
+        // Passport: validate on the same image OCR will use
+        const validateBlob =
+          slot === "passport"
+            ? (final.cropped ? final.blob : originalBlob)
+            : final.blob;
+        const ok = await validateCapturedSide(slot, validateBlob);
         if (!ok) {
           capturingNow = false;
           readyGraceUntil = Date.now() + 2500;
@@ -3247,7 +3427,7 @@
 
         if (line1.startsWith("P<") && line1.length >= 5) {
           const nat = line1.slice(2, 5).replace(/0/g, "O");
-          if (/^[A-Z]{3}$/.test(nat)) out.citizenship = nat === "GFO" ? "GEO" : nat;
+          if (nat === "GEO" || nat === "GFO") out.citizenship = "GEO";
           const namePart = line1.slice(5);
           const sep = namePart.indexOf("<<");
           if (sep >= 0) {
@@ -3263,7 +3443,7 @@
         }
 
         if (line2.length >= 28) {
-          out.cardNumber = fixGeorgianCardNumber(line2.slice(0, 9));
+          out.cardNumber = line2.slice(0, 9);
           out.ranges.card_number = { line: 1, start: 0, end: 9 };
           const birth6 = line2.slice(13, 19);
           if (/^\d{6}$/.test(birth6)) out.birthYymmdd = birth6;
@@ -3275,11 +3455,10 @@
           if (/^\d{6}$/.test(exp6)) out.expiryYymmdd = exp6;
           out.ranges.expiry_date = { line: 1, start: 21, end: 27 };
           const nat2 = line2.slice(10, 13).replace(/0/g, "O");
-          if (/^[A-Z]{3}$/.test(nat2)) {
-            out.citizenship = nat2 === "GFO" ? "GEO" : nat2;
+          if (nat2 === "GEO") {
+            out.citizenship = "GEO";
             out.ranges.citizenship = { line: 1, start: 10, end: 13 };
           }
-          // Georgian passport MRZ does not carry personal number — leave uncheckable
         }
         return out;
       }
@@ -3609,7 +3788,7 @@
 
       const matches = birthPlaceGeoMatchesLatin();
       badge.classList.remove("hidden", "checked", "not-checked", "uncheckable", "error");
-      if (wrap) wrap.classList.remove("ok", "bad", "neutral");
+      if (wrap) wrap.classList.remove("ok", "bad", "neutral", "flash-error");
       badge.onclick = null;
 
       if (matches) {
@@ -3623,6 +3802,7 @@
         badge.title = "Place of birth does not match or was changed after OCR";
         if (wrap) wrap.classList.add("bad");
       }
+      updateOverallMrzStatus();
     }
 
     function setBadge(fieldId, checked) {
@@ -3631,7 +3811,7 @@
       const wrap = input ? input.closest(".input-with-badge") : null;
       if (!badge) return;
       badge.classList.remove("hidden", "checked", "not-checked", "uncheckable", "error");
-      if (wrap) wrap.classList.remove("ok", "bad", "neutral");
+      if (wrap) wrap.classList.remove("ok", "bad", "neutral", "flash-error");
       if (checked) {
         badge.textContent = "Checked";
         badge.classList.add("checked");
@@ -3654,6 +3834,7 @@
         if (wrap) wrap.classList.add("bad");
       }
       if (input) input.style.borderColor = "";
+      updateOverallMrzStatus();
     }
 
     function setStaticNotCheckedBadge(fieldId) {
@@ -3667,14 +3848,95 @@
       badge.onclick = null;
       badge.title = "";
       if (wrap) {
-        wrap.classList.remove("ok", "bad");
+        wrap.classList.remove("ok", "bad", "flash-error");
         wrap.classList.add("neutral");
+      }
+      updateOverallMrzStatus();
+    }
+
+    function allBadgeFieldIds() {
+      return [...BADGE_FIELDS, ...STATIC_BADGE_FIELDS, "birth_place_lat"];
+    }
+
+    function collectErrorFieldIds() {
+      return allBadgeFieldIds().filter((id) => {
+        const badge = document.getElementById(`badge-${id}`);
+        return (
+          badge &&
+          !badge.classList.contains("hidden") &&
+          badge.classList.contains("error")
+        );
+      });
+    }
+
+    function anyFieldBadgeVisible() {
+      return allBadgeFieldIds().some((id) => {
+        const badge = document.getElementById(`badge-${id}`);
+        return badge && !badge.classList.contains("hidden");
+      });
+    }
+
+    function flashErrorField(fieldId) {
+      const input = document.getElementById(fieldId);
+      if (!input) return;
+      const wrap = input.closest(".input-with-badge") || input.closest(".field-group");
+      if (!wrap) return;
+      wrap.scrollIntoView({ behavior: "smooth", block: "center" });
+      wrap.classList.remove("flash-error");
+      // Restart CSS animation
+      void wrap.offsetWidth;
+      wrap.classList.add("flash-error");
+      window.clearTimeout(flashErrorField._timer);
+      flashErrorField._timer = window.setTimeout(() => {
+        wrap.classList.remove("flash-error");
+      }, 2400);
+      try {
+        input.focus({ preventScroll: true });
+      } catch (_) {
+        input.focus();
+      }
+    }
+
+    function onOverallMrzStatusClick() {
+      const errors = collectErrorFieldIds();
+      if (!errors.length) return;
+      flashErrorField(errors[0]);
+    }
+
+    function updateOverallMrzStatus() {
+      const el = document.getElementById("mrz-overall-status");
+      if (!el) return;
+      el.classList.remove("ok", "err");
+      el.onclick = null;
+
+      if (!anyFieldBadgeVisible()) {
+        el.classList.add("hidden");
+        el.textContent = "Checked";
+        el.title = "";
+        return;
+      }
+
+      el.classList.remove("hidden");
+      const errors = collectErrorFieldIds();
+      if (errors.length) {
+        el.textContent = "Error";
+        el.classList.add("err");
+        el.title = "Click to jump to the first field with an error";
+        el.onclick = (e) => {
+          e.preventDefault();
+          e.stopPropagation();
+          onOverallMrzStatusClick();
+        };
+      } else {
+        el.textContent = "Checked";
+        el.classList.add("ok");
+        el.title = "All checked fields match MRZ";
       }
     }
 
     function clearBadges() {
       birthPlaceOriginal = { geo: "", lat: "" };
-      [...BADGE_FIELDS, ...STATIC_BADGE_FIELDS, "birth_place_lat"].forEach((id) => {
+      allBadgeFieldIds().forEach((id) => {
         const badge = document.getElementById(`badge-${id}`);
         const input = document.getElementById(id);
         const wrap = input ? input.closest(".input-with-badge") : null;
@@ -3683,10 +3945,11 @@
           badge.classList.add("hidden");
           badge.onclick = null;
         }
-        if (wrap) wrap.classList.remove("ok", "bad", "neutral");
+        if (wrap) wrap.classList.remove("ok", "bad", "neutral", "flash-error");
         if (input) input.style.borderColor = "";
       });
       setMrzDisplay("", null);
+      updateOverallMrzStatus();
     }
 
     function updateMrzBadges(mrzText) {
@@ -3707,6 +3970,7 @@
       STATIC_BADGE_FIELDS.forEach((id) => setStaticNotCheckedBadge(id));
       setBirthPlaceLatBadge();
       setMrzDisplay(mrzText, null);
+      updateOverallMrzStatus();
     }
 
     // Live re-check when user edits an MRZ-verified field
@@ -3768,10 +4032,25 @@
       return false;
     }
 
+    function setPortrait(dataUrl) {
+      const slot = document.getElementById("portrait-slot");
+      const img = document.getElementById("portrait-img");
+      if (!slot || !img) return;
+      if (dataUrl && String(dataUrl).startsWith("data:image")) {
+        img.src = dataUrl;
+        slot.classList.add("visible");
+      } else {
+        img.removeAttribute("src");
+        slot.classList.remove("visible");
+      }
+    }
+
     function applyExtractedData(data, options = {}) {
       const ext = data.extracted_data || {};
       const mrz = data.mrz_fields || {};
       let filled = 0;
+
+      setPortrait(ext.portrait || "");
 
       // If visual OCR missed Latin names, MRZ still has them
       if (!(ext.first_name_lat || "").trim() && (mrz.first_name || "").trim()) {
@@ -3809,7 +4088,6 @@
 
       ["birth_date", "personal_id", "card_number", "expiry_date", "issue_date"].forEach((id) => {
         let val = (ext[id] || "").trim();
-        // ID card numbers only — passport format must not go through ID digit/letter fix
         if (id === "card_number" && selectedMethod !== "passport") {
           val = fixGeorgianCardNumber(val);
         }
@@ -3834,7 +4112,7 @@
           );
         if (picked.length) mrzText = picked.slice(0, selectedMethod === "passport" ? 2 : 3).join("\n");
       }
-      mrzEl.value = mrzText;
+      if (mrzEl) mrzEl.value = mrzText;
       document.getElementById("mrz-panel").classList.remove("collapsed");
       document.getElementById("mrz-chevron").textContent = "▲";
       updateMrzBadges(mrzText);
@@ -3994,6 +4272,8 @@
         console.log("extracted_data:", ext);
         console.log("debug (MRZ):", data.debug);
         if (data.raw_text) console.log("raw_text.back:", data.raw_text.back);
+
+        setPortrait(ext.portrait || "");
 
         let filled = 0;
 

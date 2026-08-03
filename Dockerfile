@@ -9,7 +9,7 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
-COPY main.py id_verifier.py passport_verifier.py index.html ./
+COPY main.py id_verifier.py passport_verifier.py portrait_extract.py index.html ./
 
 EXPOSE 8080
 

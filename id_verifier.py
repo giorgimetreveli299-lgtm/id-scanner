@@ -1002,18 +1002,73 @@ def _is_unambiguous_letter(ch: str) -> bool:
     """
     True when the Latin spelling of this letter can come from one Georgian letter
     only. Twins like თ/ტ, ქ/კ, ფ/პ, ჩ/ჭ, ც/წ share a Latin form, so MRZ Latin
-    cannot tell them apart — those are never guessed.
+    cannot tell them apart — those are never guessed for *places*.
     """
     return len(_GEO_LETTERS_BY_LATIN.get(_KA_TO_LAT.get(ch, ""), ())) == 1
 
 
-def _correct_geo_using_latin(geo: str, latin: str) -> str:
-    """
-    If Latin place/name is correct but Georgian OCR has ~1 wrong letter,
-    repair Georgian so its transliteration matches Latin.
+# Common given names: MRZ Latin → correct Georgian (OCR often swaps ბ/გ, ქ/მ, …)
+_KNOWN_GIVEN_BY_LATIN = {
+    "BEKA": "ბექა",
+    "BEKAN": "ბექანი",
+    "GIORGI": "გიორგი",
+    "GIVI": "გივი",
+    "GIA": "გია",
+    "GELA": "გელა",
+    "GOCHA": "გოჩა",
+    "NINO": "ნინო",
+    "NIKA": "ნიკა",
+    "NIKOLOZ": "ნიკოლოზი",
+    "DAVIT": "დავითი",
+    "DAVID": "დავითი",
+    "DATO": "დათო",
+    "LEVAN": "ლევანი",
+    "LUKA": "ლუკა",
+    "LASHA": "ლაშა",
+    "IRAKLI": "ირაკლი",
+    "TAMAR": "თამარი",
+    "ANA": "ანა",
+    "ANUKI": "ანუკი",
+    "MARIAM": "მარიამი",
+    "SALOME": "სალომე",
+    "SOPIO": "სოფიო",
+    "SOPO": "სოფო",
+    "KETEVAN": "ქეთევანი",
+    "KETI": "ქეთი",
+    "EKATERINE": "ეკატერინე",
+    "ALEXANDRE": "ალექსანდრე",
+    "ALEKSANDRE": "ალექსანდრე",
+    "ZURAB": "ზურაბი",
+    "VAZHA": "ვაჟა",
+    "OTAR": "ოთარი",
+    "SHOTA": "შოთა",
+    "TEIMURAZ": "თეიმურაზი",
+    "KAKHA": "კახა",
+    "KAKHABER": "კახაბერი",
+    "MERAB": "მერაბი",
+    "MAMUKA": "მამუკა",
+    "ZVIAD": "ზვიადი",
+    "PAATA": "პაატა",
+    "REVAZ": "რევაზი",
+    "SANDRO": "სანდრო",
+    "SABA": "საბა",
+    "TORNIKE": "თორნიკე",
+    "TSOTNE": "ცოტნე",
+    "ELENE": "ელენე",
+    "NATIA": "ნათია",
+    "MAIA": "მაია",
+    "MAKA": "მაკა",
+    "OLEGI": "ოლეგი",
+    "OLEG": "ოლეგი",
+}
 
-    Never swap to a different place/name: repairs are accepted only when a single
-    Georgian letter edit makes the transliteration match the Latin exactly.
+
+def _correct_geo_using_latin(geo: str, latin: str, *, max_edits: int = 1, allow_ambiguous: bool = False) -> str:
+    """
+    If Latin (MRZ) is correct but Georgian OCR has a few wrong letters,
+    repair Georgian so its transliteration matches Latin exactly.
+
+    max_edits=1 keeps place repairs conservative; names may use 2 + ambiguous.
     """
     geo = (_georgian_only(geo) or geo or "").strip()
     latin_n = _latin_norm(latin)
@@ -1024,39 +1079,98 @@ def _correct_geo_using_latin(geo: str, latin: str) -> str:
     if geo_lat == latin_n:
         return geo
 
-    # One Georgian letter can be worth two Latin chars (ხ→KH, ძ→DZ, შ→SH …),
-    # so the budget is counted per Georgian letter, not per Latin character.
-    if _edit_distance(geo_lat, latin_n) > 2:
+    if _edit_distance(geo_lat, latin_n) > max(2, max_edits):
         return geo
 
-    # Single substitution
-    for i, cur in enumerate(geo):
-        if cur not in _KA_TO_LAT:
+    def letter_ok(ch: str) -> bool:
+        return allow_ambiguous or _is_unambiguous_letter(ch)
+
+    # BFS over Georgian letter edits; keep closest to OCR among exact Latin matches
+    from collections import deque
+
+    best: list[str] = []
+    best_dist = 10**9
+    seen = {geo}
+    q: deque[tuple[str, int]] = deque([(geo, 0)])
+    while q:
+        cur, dist = q.popleft()
+        if _latin_norm(transliterate_ka(cur)) == latin_n:
+            d0 = _edit_distance(cur, geo)
+            if d0 < best_dist:
+                best_dist = d0
+                best = [cur]
+            elif d0 == best_dist:
+                best.append(cur)
             continue
-        for ch in _KA_LETTERS:
-            if ch == cur or not _is_unambiguous_letter(ch):
+        if dist >= max_edits:
+            continue
+
+        for i, cur_ch in enumerate(cur):
+            if cur_ch not in _KA_TO_LAT:
                 continue
-            cand = geo[:i] + ch + geo[i + 1 :]
-            if _latin_norm(transliterate_ka(cand)) == latin_n:
-                return cand
+            for ch in _KA_LETTERS:
+                if ch == cur_ch or not letter_ok(ch):
+                    continue
+                cand = cur[:i] + ch + cur[i + 1 :]
+                if cand not in seen:
+                    seen.add(cand)
+                    q.append((cand, dist + 1))
 
-    # Single deletion
-    if len(geo) >= 2:
-        for i in range(len(geo)):
-            cand = geo[:i] + geo[i + 1 :]
-            if _GEO_RE.search(cand) and _latin_norm(transliterate_ka(cand)) == latin_n:
-                return cand
+        if len(cur) >= 2:
+            for i in range(len(cur)):
+                cand = cur[:i] + cur[i + 1 :]
+                if cand and cand not in seen:
+                    seen.add(cand)
+                    q.append((cand, dist + 1))
 
-    # Single insertion
-    for i in range(len(geo) + 1):
-        for ch in _KA_LETTERS:
-            if not _is_unambiguous_letter(ch):
-                continue
-            cand = geo[:i] + ch + geo[i:]
-            if _latin_norm(transliterate_ka(cand)) == latin_n:
-                return cand
+        for i in range(len(cur) + 1):
+            for ch in _KA_LETTERS:
+                if not letter_ok(ch):
+                    continue
+                cand = cur[:i] + ch + cur[i:]
+                if cand not in seen:
+                    seen.add(cand)
+                    q.append((cand, dist + 1))
 
-    return geo
+    if not best:
+        return geo
+    # Prefer the OCR-closest form; stable unique
+    return sorted(set(best), key=lambda s: (_edit_distance(s, geo), s))[0]
+
+
+def _fix_person_geo_name(geo: str, latin_hint: str, *, kind: str = "first") -> str:
+    """
+    Repair a person name (first/last) using MRZ Latin as source of truth.
+    E.g. OCR «გემა» + MRZ BEKA → «ბექა».
+    """
+    geo = (_georgian_only(geo) or geo or "").strip()
+    hint = _latin_norm(latin_hint)
+    if not hint:
+        return geo
+
+    if geo and _latin_norm(transliterate_ka(geo)) == hint:
+        return _restore_final_i(geo, latin_hint)
+
+    if kind == "first":
+        known = _KNOWN_GIVEN_BY_LATIN.get(hint)
+        if known:
+            if (
+                not geo
+                or _edit_distance(geo, known) <= 2
+                or _geo_match_score(geo, hint) < 0.75
+            ):
+                return known
+
+    if geo:
+        fixed = _correct_geo_using_latin(
+            geo, latin_hint, max_edits=2, allow_ambiguous=True
+        )
+        if _latin_norm(transliterate_ka(fixed)) == hint:
+            return _restore_final_i(fixed, latin_hint)
+
+    if geo:
+        return _restore_final_i(geo, latin_hint)
+    return known if kind == "first" and (known := _KNOWN_GIVEN_BY_LATIN.get(hint)) else ""
 
 
 def _is_known_geo_city(geo: str) -> bool:
@@ -1887,7 +2001,10 @@ def _georgian_names_from_front(front_lines: list[str], latin_hints: dict | None 
         if data.get(key):
             geo = _georgian_only(data[key])
             if geo:
-                data[key] = _restore_final_i(geo, latin_hints.get(hint_key, ""))
+                kind = "first" if key == "first_name" else "last"
+                data[key] = _fix_person_geo_name(
+                    geo, latin_hints.get(hint_key, ""), kind=kind
+                )
             elif _LATIN_ONLY.match(data[key]):
                 data.pop(key, None)
 
@@ -2007,7 +2124,17 @@ def extract_id_info(front_bytes: bytes, back_bytes: bytes) -> dict:
     for key, hint_key in (("first_name", "_mrz_first_name"), ("last_name", "_mrz_last_name")):
         if data.get(key):
             geo = _georgian_only(data[key])
-            data[key] = _restore_final_i(geo, latin_hints.get(hint_key, "")) if geo else ""
+            kind = "first" if key == "first_name" else "last"
+            data[key] = (
+                _fix_person_geo_name(geo, latin_hints.get(hint_key, ""), kind=kind)
+                if geo
+                else ""
+            )
+        elif latin_hints.get(hint_key) and key == "first_name":
+            # OCR missed Georgian given name — recover from MRZ when known
+            recovered = _fix_person_geo_name("", latin_hints[hint_key], kind="first")
+            if recovered:
+                data[key] = recovered
 
     back_place = _birth_place_from_back(back_lines)
     if back_place:
@@ -2109,6 +2236,13 @@ def extract_id_info(front_bytes: bytes, back_bytes: bytes) -> dict:
 
     verification = verify_against_mrz(verify_data, mrz)
 
+    portrait = ""
+    try:
+        from portrait_extract import extract_portrait_data_url
+        portrait = extract_portrait_data_url(front_bytes, kind="id") or ""
+    except Exception:
+        portrait = ""
+
     return {
         "extracted_data": {
             "first_name": data.get("first_name", ""),
@@ -2125,6 +2259,7 @@ def extract_id_info(front_bytes: bytes, back_bytes: bytes) -> dict:
             "card_number": data.get("card_number", ""),
             "issue_date": data.get("issue_date", ""),
             "mrz_strip": mrz_strip,
+            "portrait": portrait,
         },
         "mrz_fields": {
             "personal_id": mrz.get("personal_id", ""),
