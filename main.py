@@ -1,4 +1,5 @@
 import os
+import re
 from pathlib import Path
 
 from fastapi import FastAPI, File, UploadFile
@@ -50,6 +51,63 @@ async def serve_index():
     )
 
 
+def _detect_doc_type(full_text: str) -> dict:
+    """Classify Georgian ID vs passport from OCR text."""
+    blob = (full_text or "").upper().replace(" ", "")
+    mrz_strip = extract_mrz_strip(full_text)
+    mrz_ids = extract_mrz_ids(full_text)
+    has_mrz = bool(mrz_strip) or bool(
+        mrz_ids.get("card_number") and mrz_ids.get("personal_id")
+    )
+    # Soft TD1 cue even when full strip parse fails (common on phone photos)
+    if not has_mrz and ("IDGEO" in blob or "TRGEO" in blob or "IDGE" in blob or "TRGE" in blob):
+        has_mrz = True
+
+    passport_strip = extract_passport_mrz_strip(full_text) or ""
+    # Strong passport only: real TD3 P< row (not a loose line-2 false positive)
+    has_td3 = bool(
+        passport_strip.startswith("P<")
+        or re.search(r"P<[A-Z0-9]{3}", blob)
+    )
+
+    id_label = bool(
+        re.search(
+            r"პირადობ|მოწმობ|IDGEO|TRGEO|ID\s*CARD|IDENTITY\s*CARD|"
+            r"ბარათის\s*№|CARD\s*NO|PERSONAL\s*N",
+            full_text or "",
+            re.I,
+        )
+    ) or ("IDGE" in blob or "TRGE" in blob)
+
+    passport_label = bool(
+        re.search(
+            r"პასპორტის?\s|PASSPORT|REMARKS|შენიშვნებ|"
+            r"TYPE\s*/?\s*P\b|DOCUMENT\s*TYPE\s*P\b",
+            full_text or "",
+            re.I,
+        )
+    )
+
+    # TD1 always wins over weak passport cues (ID back must never be blocked)
+    doc_type = "unknown"
+    if has_mrz:
+        doc_type = "id"
+    elif has_td3:
+        doc_type = "passport"
+    elif passport_label and not id_label:
+        doc_type = "passport"
+    elif id_label and not passport_label:
+        doc_type = "id"
+
+    return {
+        "has_mrz": has_mrz,
+        "has_td3": has_td3,
+        "doc_type": doc_type,
+        "mrz_strip": mrz_strip,
+        "passport_mrz_strip": passport_strip if has_td3 else "",
+    }
+
+
 @app.post("/verify-id")
 async def verify_id(
     front: UploadFile = File(...),
@@ -59,6 +117,16 @@ async def verify_id(
     try:
         front_bytes = await front.read()
         back_bytes = await back.read()
+        # Reject only when passport is clear AND this is not an ID (TD1)
+        for label, raw in (("front", front_bytes), ("back", back_bytes)):
+            text, _lines, _words = ocr_image(raw)
+            hint = _detect_doc_type(text)
+            if hint["doc_type"] == "passport" and not hint["has_mrz"]:
+                return {
+                    "error": f"Passport detected on the {label} photo. Use Passport mode.",
+                    "extracted_data": {},
+                    "is_valid": False,
+                }
         result = extract_id_info(front_bytes, back_bytes)
         back_text = result.get("raw_text", {}).get("back", "")
         mrz_ids = extract_mrz_ids(back_text)
@@ -91,6 +159,14 @@ async def verify_passport(image: UploadFile = File(...)):
     """Passport only — one photo → passport_verifier."""
     try:
         image_bytes = await image.read()
+        text, _lines, _words = ocr_image(image_bytes)
+        hint = _detect_doc_type(text)
+        if hint["doc_type"] == "id" and not hint["has_td3"]:
+            return {
+                "error": "ID card detected. Use ID mode instead of Passport.",
+                "extracted_data": {},
+                "is_valid": False,
+            }
         result = extract_passport_info(image_bytes)
         mrz = result.get("mrz_fields", {})
         print(
@@ -116,27 +192,17 @@ async def check_mrz(image: UploadFile = File(...)):
     Capture helper:
     - ID front/back: has_mrz = TD1 (IDGEO… or TRGEO…)
     - Passport: has_td3 = TD3 (P<…)
+    - doc_type: "id" | "passport" | "unknown"
     """
     try:
         image_bytes = await image.read()
         full_text, _lines, _words = ocr_image(image_bytes)
-        mrz_strip = extract_mrz_strip(full_text)
-        mrz_ids = extract_mrz_ids(full_text)
-        has_mrz = bool(mrz_strip) or bool(
-            mrz_ids.get("card_number") and mrz_ids.get("personal_id")
-        )
-        passport_strip = extract_passport_mrz_strip(full_text)
-        has_td3 = has_passport_mrz(passport_strip)
-        return {
-            "has_mrz": has_mrz,
-            "has_td3": has_td3,
-            "mrz_strip": mrz_strip,
-            "passport_mrz_strip": passport_strip if has_td3 else "",
-        }
+        return _detect_doc_type(full_text)
     except Exception as e:
         return {
             "has_mrz": False,
             "has_td3": False,
+            "doc_type": "unknown",
             "mrz_strip": "",
             "error": str(e),
         }

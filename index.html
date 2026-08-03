@@ -513,9 +513,10 @@
     .portrait-frame img {
       width: 100%;
       height: 100%;
-      object-fit: cover;
-      object-position: center top;
+      object-fit: contain;
+      object-position: center center;
       display: block;
+      background: #f1f5f9;
     }
 
     .mrz-block {
@@ -750,7 +751,7 @@
             <label>სახელი / Name</label>
             <div class="dual-inputs">
               <div class="input-with-badge">
-                <input type="text" id="first_name" placeholder="Georgian">
+                <input type="text" id="first_name" placeholder="ქართული">
                 <span class="field-badge uncheckable hidden" id="badge-first_name">Uncheckable</span>
               </div>
               <div class="input-with-badge">
@@ -763,7 +764,7 @@
             <label>გვარი / Surname</label>
             <div class="dual-inputs">
               <div class="input-with-badge">
-                <input type="text" id="last_name" placeholder="Georgian">
+                <input type="text" id="last_name" placeholder="ქართული">
                 <span class="field-badge uncheckable hidden" id="badge-last_name">Uncheckable</span>
               </div>
               <div class="input-with-badge">
@@ -783,7 +784,7 @@
             <label>დაბადების ადგილი / Place of Birth</label>
             <div class="dual-inputs">
               <div class="input-with-badge">
-                <input type="text" id="birth_place" placeholder="Georgian">
+                <input type="text" id="birth_place" placeholder="ქართული">
                 <span class="field-badge uncheckable hidden" id="badge-birth_place">Uncheckable</span>
               </div>
               <div class="input-with-badge">
@@ -3128,13 +3129,41 @@
       try {
         const data = await fetchMrzCheck(blob);
         const hasMrz = Boolean(data && data.has_mrz);
+        const passportStrip = String((data && data.passport_mrz_strip) || "");
         const stripHint = String(
           (data && (data.passport_mrz_strip || data.mrz_strip)) || ""
         );
         const hasTd3 = Boolean(
           (data && data.has_td3) ||
+          /^P</.test(passportStrip.replace(/\s+/g, "")) ||
           /P<[A-Z0-9]{3}/.test(stripHint.replace(/\s+/g, ""))
         );
+        const docType = String((data && data.doc_type) || "unknown");
+        // Strong signals only — never block ID back (TD1) as a passport
+        const looksPassport = docType === "passport" && !hasMrz && hasTd3;
+        const looksId = docType === "id" || hasMrz;
+
+        // Wrong document for the selected method — hard reject
+        if ((slot === "front" || slot === "back") && looksPassport) {
+          readinessStatus.textContent =
+            "This looks like a passport. Switch to Passport mode, or retake an ID card.";
+          readinessStatus.className = "status-badge";
+          idFrame.classList.remove("ready");
+          if (!cameraModal.classList.contains("open")) {
+            alert("Passport detected in ID mode. Please use Passport, or capture an ID card.");
+          }
+          return false;
+        }
+        if (slot === "passport" && looksId && !hasTd3) {
+          readinessStatus.textContent =
+            "This looks like an ID card. Switch to ID mode, or retake a passport data page.";
+          readinessStatus.className = "status-badge";
+          idFrame.classList.remove("ready");
+          if (!cameraModal.classList.contains("open")) {
+            alert("ID card detected in Passport mode. Please use ID, or capture a passport page.");
+          }
+          return false;
+        }
 
         if (slot === "front" && hasMrz) {
           readinessStatus.textContent =
@@ -3153,12 +3182,11 @@
           return true;
         }
 
-        // Passport: never block upload. Only soft-warn in camera if MRZ missing.
+        // Passport: soft-warn if TD3 MRZ missing (after wrong-doc check above)
         if (slot === "passport" && !hasTd3) {
           readinessStatus.textContent =
             "Note: MRZ looks weak — continuing anyway. For better results, keep the full page in the frame.";
           readinessStatus.className = "status-badge";
-          // Do not return false — allow photo through
         }
 
         return true;

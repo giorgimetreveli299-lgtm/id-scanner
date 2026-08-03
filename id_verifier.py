@@ -1138,12 +1138,96 @@ def _correct_geo_using_latin(geo: str, latin: str, *, max_edits: int = 1, allow_
     return sorted(set(best), key=lambda s: (_edit_distance(s, geo), s))[0]
 
 
+def _latin_to_geo_approx(latin: str) -> str:
+    """
+    Best-effort reverse of national transliteration (MRZ Latin → Georgian).
+    Digraphs first. Ambiguous letters use the more common personal-name form
+    (თ/კ/პ/ჩ/ც). Used only when OCR Georgian is missing.
+    """
+    s = _latin_norm(latin)
+    if not s:
+        return ""
+    # Longest digraphs first
+    mapping = (
+        ("ZH", "ჟ"),
+        ("GH", "ღ"),
+        ("SH", "შ"),
+        ("CH", "ჩ"),
+        ("TS", "ც"),
+        ("DZ", "ძ"),
+        ("KH", "ხ"),
+        ("A", "ა"),
+        ("B", "ბ"),
+        ("G", "გ"),
+        ("D", "დ"),
+        ("E", "ე"),
+        ("V", "ვ"),
+        ("Z", "ზ"),
+        ("T", "თ"),
+        ("I", "ი"),
+        ("K", "კ"),
+        ("L", "ლ"),
+        ("M", "მ"),
+        ("N", "ნ"),
+        ("O", "ო"),
+        ("P", "პ"),
+        ("R", "რ"),
+        ("S", "ს"),
+        ("U", "უ"),
+        ("Q", "ყ"),
+        ("J", "ჯ"),
+        ("H", "ჰ"),
+        ("F", "ფ"),
+        ("W", "ვ"),
+        ("Y", "ი"),
+        ("X", "ქ"),
+    )
+    out: list[str] = []
+    i = 0
+    while i < len(s):
+        matched = False
+        for lat, geo in mapping:
+            if s.startswith(lat, i):
+                out.append(geo)
+                i += len(lat)
+                matched = True
+                break
+        if not matched:
+            i += 1
+    geo = "".join(out)
+    # Round-trip check: only accept if we recover the same Latin
+    if geo and _latin_norm(transliterate_ka(geo)) == s:
+        return geo
+    return geo  # still return best effort — better than empty for long surnames
+
+
+def _is_name_junk(value: str) -> bool:
+    """Reject OCR labels / nationality leaked into name fields."""
+    raw = (value or "").strip()
+    if not raw:
+        return True
+    low = raw.lower().replace(" ", "")
+    junk = {
+        "georgian", "georgia", "surname", "name", "lastname", "firstname",
+        "givenname", "familyname", "nationality", "citizenship", "passport",
+        "identity", "card", "სახელი", "გვარი", "მოქალაქეობა", "საქართველო",
+    }
+    if low in junk:
+        return True
+    if re.search(r"გვარი|სახელი|მოქალაქ|national|surname|given\s*name", raw, re.I):
+        return True
+    return False
+
+
 def _fix_person_geo_name(geo: str, latin_hint: str, *, kind: str = "first") -> str:
     """
     Repair a person name (first/last) using MRZ Latin as source of truth.
     E.g. OCR «გემა» + MRZ BEKA → «ბექა».
+    If Georgian OCR is empty, reverse-transliterate from MRZ Latin.
     """
-    geo = (_georgian_only(geo) or geo or "").strip()
+    geo = (_georgian_only(geo) or "").strip()
+    if geo and _is_name_junk(geo):
+        geo = ""
     hint = _latin_norm(latin_hint)
     if not hint:
         return geo
@@ -1167,10 +1251,15 @@ def _fix_person_geo_name(geo: str, latin_hint: str, *, kind: str = "first") -> s
         )
         if _latin_norm(transliterate_ka(fixed)) == hint:
             return _restore_final_i(fixed, latin_hint)
-
-    if geo:
         return _restore_final_i(geo, latin_hint)
-    return known if kind == "first" and (known := _KNOWN_GIVEN_BY_LATIN.get(hint)) else ""
+
+    # No usable Georgian OCR — rebuild from MRZ Latin
+    if kind == "first":
+        known = _KNOWN_GIVEN_BY_LATIN.get(hint)
+        if known:
+            return known
+    synthesized = _latin_to_geo_approx(hint)
+    return synthesized or ""
 
 
 def _is_known_geo_city(geo: str) -> bool:
@@ -1919,7 +2008,13 @@ def _collect_geo_name_candidates(front_lines: list[str]) -> list[str]:
             continue
         word = _merge_geo_continuation(front_lines, i + 1, item)
         word = _georgian_only(word) or word
-        if word and word.lower() not in skip_places and len(word) >= 2 and word not in geo_words:
+        if (
+            word
+            and word.lower() not in skip_places
+            and len(word) >= 2
+            and word not in geo_words
+            and not _is_name_junk(word)
+        ):
             geo_words.append(word)
         i += 1
     return geo_words
@@ -2122,19 +2217,15 @@ def extract_id_info(front_bytes: bytes, back_bytes: bytes) -> dict:
             data["last_name"] = extra["last_name"]
 
     for key, hint_key in (("first_name", "_mrz_first_name"), ("last_name", "_mrz_last_name")):
-        if data.get(key):
-            geo = _georgian_only(data[key])
-            kind = "first" if key == "first_name" else "last"
-            data[key] = (
-                _fix_person_geo_name(geo, latin_hints.get(hint_key, ""), kind=kind)
-                if geo
-                else ""
-            )
-        elif latin_hints.get(hint_key) and key == "first_name":
-            # OCR missed Georgian given name — recover from MRZ when known
-            recovered = _fix_person_geo_name("", latin_hints[hint_key], kind="first")
-            if recovered:
-                data[key] = recovered
+        kind = "first" if key == "first_name" else "last"
+        geo = _georgian_only(data.get(key, "")) or ""
+        if geo and _is_name_junk(geo):
+            geo = ""
+        hint = latin_hints.get(hint_key, "")
+        if geo or hint:
+            data[key] = _fix_person_geo_name(geo, hint, kind=kind)
+        else:
+            data[key] = ""
 
     back_place = _birth_place_from_back(back_lines)
     if back_place:
@@ -2240,7 +2331,8 @@ def extract_id_info(front_bytes: bytes, back_bytes: bytes) -> dict:
     try:
         from portrait_extract import extract_portrait_data_url
         portrait = extract_portrait_data_url(front_bytes, kind="id") or ""
-    except Exception:
+    except Exception as exc:
+        print(f"Portrait extract (ID) failed: {exc}")
         portrait = ""
 
     return {

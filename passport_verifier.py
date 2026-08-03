@@ -891,11 +891,13 @@ def extract_passport_info(image_bytes: bytes) -> dict:
         first_geo = ""
     if _is_passport_name_junk(last_geo):
         last_geo = ""
-    # Final letter repair against MRZ Latin
-    if first_geo:
-        first_geo = _fix_passport_geo_name(first_geo, mrz.get("_mrz_first_name", ""), kind="first")
-    if last_geo:
-        last_geo = _fix_passport_geo_name(last_geo, mrz.get("_mrz_last_name", ""), kind="last")
+    # Repair / synthesize Georgian from MRZ Latin when OCR missed the name
+    first_geo = _fix_passport_geo_name(
+        first_geo, mrz.get("_mrz_first_name", ""), kind="first"
+    )
+    last_geo = _fix_passport_geo_name(
+        last_geo, mrz.get("_mrz_last_name", ""), kind="last"
+    )
     # MRZ Latin names always fill the Latin fields even when Georgian OCR is empty
     first_lat = (first_lat or mrz.get("_mrz_first_name", "") or "").strip()
     last_lat = (last_lat or mrz.get("_mrz_last_name", "") or "").strip()
@@ -951,6 +953,14 @@ def extract_passport_info(image_bytes: bytes) -> dict:
 
     verification = verify_against_passport_mrz(verify_data, mrz)
 
+    portrait = ""
+    try:
+        from portrait_extract import extract_portrait_data_url
+        portrait = extract_portrait_data_url(image_bytes, kind="passport") or ""
+    except Exception as exc:
+        print(f"Portrait extract (passport) failed: {exc}")
+        portrait = ""
+
     return {
         "extracted_data": {
             "first_name": data.get("first_name", ""),
@@ -968,6 +978,7 @@ def extract_passport_info(image_bytes: bytes) -> dict:
             "issue_date": data.get("issue_date", ""),
             "mrz_strip": mrz_strip,
             "document_type": "passport",
+            "portrait": portrait,
         },
         "mrz_fields": {
             "personal_id": "",  # not in passport MRZ
