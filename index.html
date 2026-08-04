@@ -1125,7 +1125,9 @@
             // Results photo: biodata only (REMARKS cut). Original stays in top slot.
             final = await processPassportImage(bitmap);
           } else {
-            stages = await processDocumentForGenerate(bitmap);
+            stages = await processDocumentForGenerate(bitmap, 85.6 / 54, {
+              protectMrz: activeSlot === "back",
+            });
             final = stages.final;
           }
         } finally {
@@ -1413,11 +1415,15 @@
      * Tilts are corrected toward a flat ID-aspect rectangle (like a straight scan).
      *
      * options.passport — slightly easier warp acceptance + deskew for biodata pages.
+     * options.idCard — tighter full-bleed crop (match flat ID front/back scans).
+     * options.protectMrz — keep extra bottom margin; skip aggressive border trim (ID back).
      */
     async function cropDocumentBitmap(bitmap, aspectRatio, options = {}) {
       // ID aspect stays 85.6/54 unless caller (passport) passes another ratio
       const ID_ASPECT = aspectRatio || 85.6 / 54;
       const passport = !!options.passport;
+      const idCard = !!options.idCard || (!passport && !aspectRatio);
+      const protectMrz = !!options.protectMrz;
       let analysisTemps = [];
 
       const closeTemp = (bmp) => {
@@ -1498,9 +1504,13 @@
           })) {
             try {
               warpedExtra = await warpQuadToIdBitmap(workingOrig, quadOrig, ID_ASPECT);
-              const result = await canvasToJpeg(
+              let result = await canvasToJpeg(
                 warpedExtra, 0, 0, warpedExtra.width, warpedExtra.height
               );
+              // Never run aggressive border trim on ID back — MRZ lives on the bottom edge
+              if (idCard && !protectMrz) {
+                result = await trimIdScanBorders(result, ID_ASPECT);
+              }
               cleanupTemps();
               // Warp already straightens + crops to ID aspect
               return { ...result, straighten: result };
@@ -1535,17 +1545,23 @@
       }
 
       let { minX, minY, maxX, maxY } = tightenCardBox(
-        det.blur, det.gray, det.w, det.h, det.best, det.meanG
+        det.blur, det.gray, det.w, det.h, det.best, det.meanG, { idCard, protectMrz }
       );
 
-      // White desks give a weak card edge — keep a slightly wider safety margin
-      const padRatio = det.whiteBg ? 0.03 : 0.015;
-      const padX = Math.max(2, Math.round((maxX - minX) * padRatio));
-      const padY = Math.max(2, Math.round((maxY - minY) * padRatio));
+      // Prefer full-bleed card (reference scans have almost no desk margin).
+      // ID back keeps a larger bottom pad so the MRZ strip is never shaved.
+      const padRatio = idCard
+        ? (det.whiteBg ? 0.008 : 0.004)
+        : (det.whiteBg ? 0.03 : 0.015);
+      const padX = Math.max(1, Math.round((maxX - minX) * padRatio));
+      const padY = Math.max(1, Math.round((maxY - minY) * padRatio));
+      const padBottom = protectMrz
+        ? Math.max(padY, Math.round((maxY - minY) * 0.035))
+        : padY;
       minX = Math.max(0, minX - padX);
       minY = Math.max(0, minY - padY);
       maxX = Math.min(det.w - 1, maxX + padX);
-      maxY = Math.min(det.h - 1, maxY + padY);
+      maxY = Math.min(det.h - 1, maxY + padBottom);
 
       const { sx, sy, sw, sh } = mapToOriginal(
         minX, minY, maxX, maxY, det.scale, det.pad, outW, outH
@@ -1558,7 +1574,10 @@
       }
 
       // Crop from ORIGINAL pixels only — analysis black paint never reaches output
-      const result = await rectifyToIdAspect(workingOrig, sx, sy, sw, sh, ID_ASPECT);
+      let result = await rectifyToIdAspect(workingOrig, sx, sy, sw, sh, ID_ASPECT);
+      if (idCard && !protectMrz) {
+        result = await trimIdScanBorders(result, ID_ASPECT);
+      }
       cleanupTemps();
       return { ...result, straighten: straightenShot || result };
     }
@@ -1764,32 +1783,26 @@
     }
 
     /**
-     * Camera capture: the dashed guide frame IS the final photo.
-     * No second contour crop — front and back keep exactly what was in the frame.
+     * Camera capture for ID front/back: same pipeline as upload —
+     * detect card, straighten to ID-1 (85.6×54), full-bleed crop like a flat scan.
+     * Back side uses protectMrz so the TD1 strip is not trimmed away.
      */
-    async function processFrameCaptureForGenerate(bitmap) {
-      const frame = await canvasToJpeg(bitmap, 0, 0, bitmap.width, bitmap.height);
-      let bright = frame;
-      try {
-        bright = await applyBrightnessToResult(frame);
-      } catch (_) {
-        bright = frame;
-      }
-      return {
-        crop: { blob: frame.blob, dataUrl: frame.dataUrl },
-        straighten: { blob: frame.blob, dataUrl: frame.dataUrl },
-        brightness: { blob: bright.blob, dataUrl: bright.dataUrl },
-        // Final = exact frame contents (what the user saw inside the guide)
-        final: { blob: frame.blob, dataUrl: frame.dataUrl },
-      };
+    async function processFrameCaptureForGenerate(bitmap, options = {}) {
+      return processDocumentForGenerate(bitmap, 85.6 / 54, options);
     }
 
     /**
-     * Full generate pipeline for uploaded ID photos (no live camera frame):
-     * 1) Crop  2) Straighten  3) Brightness  → final = all three.
+     * Full generate pipeline for ID photos (camera or upload):
+     * 1) Crop to card  2) Straighten to ID-1  3) Brightness  → final.
+     * Output matches a clean scan: card fills the frame, no desk background.
+     * options.protectMrz — gentler bottom crop for ID back (MRZ).
      */
-    async function processDocumentForGenerate(bitmap, aspectRatio) {
-      const cropped = await cropDocumentBitmap(bitmap, aspectRatio);
+    async function processDocumentForGenerate(bitmap, aspectRatio, options = {}) {
+      const idAspect = aspectRatio || 85.6 / 54;
+      const cropped = await cropDocumentBitmap(bitmap, idAspect, {
+        idCard: true,
+        protectMrz: !!options.protectMrz,
+      });
       const bright = await applyBrightnessToResult(cropped);
       const straighten = cropped.straighten || cropped;
       return {
@@ -2631,24 +2644,32 @@
       return best;
     }
 
-    function tightenCardBox(blur, gray, w, h, box, meanG) {
+    function tightenCardBox(blur, gray, w, h, box, meanG, options = {}) {
       let { minX, minY, maxX, maxY } = box;
       const thr = Math.max(85, (box.inside + meanG) / 2);
+      const idCard = !!options.idCard;
+      const protectMrz = !!options.protectMrz;
 
       // Shrink from each side only while the border strip is clearly darker than
-      // the card — a small margin is preferable to shaving off card content.
-      const maxShrinkX = Math.floor((maxX - minX) * 0.1);
-      const maxShrinkY = Math.floor((maxY - minY) * 0.1);
-      const darkMargin = 22;
+      // the card — for ID scans we trim more so the result is full-bleed like a flat scan.
+      // On the back, shrink the bottom much less so dark MRZ text is not treated as "desk".
+      const maxShrinkX = Math.floor((maxX - minX) * (idCard ? 0.18 : 0.1));
+      const maxShrinkYTop = Math.floor((maxY - minY) * (idCard ? 0.18 : 0.1));
+      const maxShrinkYBot = protectMrz
+        ? Math.floor((maxY - minY) * 0.04)
+        : maxShrinkYTop;
+      const darkMargin = idCard ? 16 : 22;
 
-      for (let i = 0; i < maxShrinkY; i++) {
+      for (let i = 0; i < maxShrinkYTop; i++) {
         const top = regionMean(blur, w, h, minX, minY, maxX, minY + 2);
         if (top < thr - darkMargin) minY++;
         else break;
       }
-      for (let i = 0; i < maxShrinkY; i++) {
+      for (let i = 0; i < maxShrinkYBot; i++) {
         const bot = regionMean(blur, w, h, minX, maxY - 2, maxX, maxY);
-        if (bot < thr - darkMargin) maxY--;
+        // MRZ is dark printed text — require a clearly darker strip before shrinking
+        const botMargin = protectMrz ? darkMargin + 18 : darkMargin;
+        if (bot < thr - botMargin) maxY--;
         else break;
       }
       for (let i = 0; i < maxShrinkX; i++) {
@@ -2662,10 +2683,106 @@
         else break;
       }
 
-      // Expand slightly if we over-shrunk into card (bright border)
-      // keep as is
       if (maxX - minX < 10 || maxY - minY < 10) return box;
       return { minX, minY, maxX, maxY };
+    }
+
+    /**
+     * After ID-1 rectify/warp, shave leftover desk / black letterbox so the card
+     * fills the frame like the reference front/back scans.
+     */
+    async function trimIdScanBorders(result, aspect) {
+      try {
+        const bmp = await toDrawableBitmap(result.blob || result.dataUrl);
+        const w = bmp.width;
+        const h = bmp.height;
+        const canvas = document.createElement("canvas");
+        canvas.width = w;
+        canvas.height = h;
+        const ctx = canvas.getContext("2d", { willReadFrequently: true });
+        ctx.drawImage(bmp, 0, 0);
+        if (typeof bmp.close === "function") {
+          try { bmp.close(); } catch (_) {}
+        }
+        const { data } = ctx.getImageData(0, 0, w, h);
+
+        const lumAt = (x, y) => {
+          const i = (y * w + x) * 4;
+          return 0.299 * data[i] + 0.587 * data[i + 1] + 0.114 * data[i + 2];
+        };
+        const rowMean = (y, x0, x1) => {
+          let s = 0;
+          let n = 0;
+          for (let x = x0; x <= x1; x += 2) {
+            s += lumAt(x, y);
+            n++;
+          }
+          return n ? s / n : 0;
+        };
+        const colMean = (x, y0, y1) => {
+          let s = 0;
+          let n = 0;
+          for (let y = y0; y <= y1; y += 2) {
+            s += lumAt(x, y);
+            n++;
+          }
+          return n ? s / n : 0;
+        };
+
+        // Interior reference (card body is usually brighter than desk/letterbox)
+        const ix0 = Math.floor(w * 0.2);
+        const ix1 = Math.floor(w * 0.8);
+        const iy0 = Math.floor(h * 0.2);
+        const iy1 = Math.floor(h * 0.8);
+        let interior = 0;
+        let nInt = 0;
+        for (let y = iy0; y <= iy1; y += 4) {
+          for (let x = ix0; x <= ix1; x += 4) {
+            interior += lumAt(x, y);
+            nInt++;
+          }
+        }
+        interior = nInt ? interior / nInt : 140;
+        const thr = Math.min(interior - 28, 70);
+
+        let minX = 0;
+        let minY = 0;
+        let maxX = w - 1;
+        let maxY = h - 1;
+        const maxTrimX = Math.floor(w * 0.08);
+        const maxTrimY = Math.floor(h * 0.08);
+
+        for (let i = 0; i < maxTrimY; i++) {
+          if (rowMean(minY, minX, maxX) < thr) minY++;
+          else break;
+        }
+        for (let i = 0; i < maxTrimY; i++) {
+          if (rowMean(maxY, minX, maxX) < thr) maxY--;
+          else break;
+        }
+        for (let i = 0; i < maxTrimX; i++) {
+          if (colMean(minX, minY, maxY) < thr) minX++;
+          else break;
+        }
+        for (let i = 0; i < maxTrimX; i++) {
+          if (colMean(maxX, minY, maxY) < thr) maxX--;
+          else break;
+        }
+
+        const tw = maxX - minX + 1;
+        const th = maxY - minY + 1;
+        if (tw < w * 0.85 || th < h * 0.85) {
+          // Trim was too aggressive — keep original
+          return result;
+        }
+        if (minX <= 1 && minY <= 1 && maxX >= w - 2 && maxY >= h - 2) {
+          return result;
+        }
+        return await rectifyToIdAspect(canvas, minX, minY, tw, th, aspect);
+      } catch (err) {
+        console.warn("trimIdScanBorders failed:", err);
+        return result;
+      }
     }
 
     function canvasToJpeg(source, sx, sy, sw, sh) {
@@ -3242,8 +3359,10 @@
             // Results photo: biodata only (REMARKS cut). Original stays in top slot.
             final = await processPassportImage(bitmap);
           } else {
-            // Front / back: keep exactly what was inside the camera guide frame
-            stages = await processFrameCaptureForGenerate(bitmap);
+            // Front: full-bleed ID-1. Back: same, but protect MRZ bottom strip.
+            stages = await processFrameCaptureForGenerate(bitmap, {
+              protectMrz: slot === "back",
+            });
             final = stages.final;
           }
         } catch (procErr) {
@@ -4226,7 +4345,13 @@
       } catch (err) {
         clearInterval(tickTimer);
         console.error(err);
-        status.textContent = "Error: " + (err.message || err);
+        const msg = String(err && err.message ? err.message : err);
+        if (/failed to fetch|networkerror|load failed/i.test(msg)) {
+          status.textContent =
+            "Error: Cannot reach API. Open http://127.0.0.1:8000 (server must be running: python -m uvicorn main:app --reload --port 8000)";
+        } else {
+          status.textContent = "Error: " + msg;
+        }
         results.classList.add("visible");
         actionBar.classList.add("visible");
         newBtn.classList.add("visible");
