@@ -3310,7 +3310,6 @@
         // Strong signals only — never block ID back (TD1) as a passport
         const looksPassport =
           (docType === "passport" && !hasMrz) || (hasTd3 && !hasMrz);
-        const looksId = docType === "id" || hasMrz;
 
         // Wrong document for the selected method — hard reject
         if ((slot === "front" || slot === "back") && (mrzStartsWithP || looksPassport)) {
@@ -3320,7 +3319,7 @@
           showIdUploadError(ID_PASSPORT_ERROR);
           return false;
         }
-        if (slot === "passport" && (idMrzStartsWithId || (looksId && !hasTd3))) {
+        if (slot === "passport" && (idMrzStartsWithId || docType === "id")) {
           readinessStatus.textContent = PASSPORT_ID_ERROR;
           readinessStatus.className = "status-badge";
           idFrame.classList.remove("ready");

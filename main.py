@@ -209,7 +209,9 @@ async def verify_passport(image: UploadFile = File(...)):
                 "extracted_data": {},
                 "is_valid": False,
             }
-        if hint["doc_type"] == "id" and not hint["has_td3"]:
+        # doc_type "id" means a TD1 / ID label won classification — reject even
+        # if a stray TD3-like cue set has_td3 (ID MRZ is definitive).
+        if hint["doc_type"] == "id":
             return {
                 "error": "Please upload a passport, not an ID card",
                 "error_code": "id_mrz_in_passport",
