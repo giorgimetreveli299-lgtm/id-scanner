@@ -585,7 +585,10 @@ def _face_portrait_box(
         y0 = by0 - fh * 0.32
         y1 = by1 + fh * 0.28
 
-    cx = face.get("cx", (x0 + x1) / 2.0)
+    # Center on the expanded head content, not the bare face rectangle: the
+    # vertical padding is intentionally crown-heavy, so the raw face center
+    # would push the crop down and shave hair off the top.
+    cx = (x0 + x1) / 2.0
     cy = (y0 + y1) / 2.0
     content_w = max(8.0, x1 - x0)
     content_h = max(8.0, y1 - y0)

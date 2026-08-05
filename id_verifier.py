@@ -753,7 +753,7 @@ def _title_latin(value: str) -> str:
 _KA_TO_LAT = {
     "ა": "a", "ბ": "b", "გ": "g", "დ": "d", "ე": "e", "ვ": "v", "ზ": "z",
     "თ": "t", "ი": "i", "კ": "k", "ლ": "l", "მ": "m", "ნ": "n", "ო": "o",
-    "პ": "p", "ჟ": "zh", "რ": "r", "ს": "s", "ტ": "t", "უ": "u", "ფ": "p",
+    "პ": "p", "ჟ": "zh", "რ": "r", "ს": "s", "ტ": "t", "უ": "u", "ფ": "ph",
     "ქ": "k", "ღ": "gh", "ყ": "q", "შ": "sh", "ჩ": "ch", "ც": "ts", "ძ": "dz",
     "წ": "ts", "ჭ": "ch", "ხ": "kh", "ჯ": "j", "ჰ": "h",
 }
@@ -879,12 +879,14 @@ def _latin_place_candidate(text: str) -> str:
 
 def _clean_place_latin(place_geo: str, place_lat: str) -> str:
     """Replace a leaked label word («The», «Pace», «Type») with the official Latin."""
+    if place_geo and place_geo in _OFFICIAL_LATIN_BY_GEO:
+        return _OFFICIAL_LATIN_BY_GEO[place_geo]
     lat = (place_lat or "").strip()
     if not lat:
-        return _title_latin(transliterate_ka(place_geo)) if place_geo else ""
+        return _place_latin_for_geo(place_geo)
     compact = re.sub(r"[\s\-']+", "", lat)
     if _LATIN_LABEL_WORD.match(compact):
-        return _title_latin(transliterate_ka(place_geo)) if place_geo else ""
+        return _place_latin_for_geo(place_geo)
     return lat
 
 
@@ -893,8 +895,8 @@ def _birth_place_latin_from_back(back_lines: list[str], geo_place: str) -> str:
     # Official Latin spelling wins when the Georgian value is a known city
     if geo_place:
         expected = _latin_norm(transliterate_ka(geo_place))
-        if expected in _KNOWN_PLACE_BY_LATIN:
-            return _title_latin(transliterate_ka(geo_place))
+        if expected in _KNOWN_PLACE_BY_LATIN or geo_place in _OFFICIAL_LATIN_BY_GEO:
+            return _place_latin_for_geo(geo_place)
 
     for i, line in enumerate(back_lines):
         if _PLACE_LABEL_RE.search(line):
@@ -942,9 +944,9 @@ for _place in (
     _KNOWN_PLACE_BY_LATIN[_latin_norm(transliterate_ka(_place))] = _place
 
 # English / alternate Latin spellings on the card (not national transliteration)
+_OFFICIAL_LATIN_BY_GEO: dict[str, str] = {}
 for _lat, _geo in (
     ("ZESTAPHONI", "ზესტაფონი"),
-    ("ZESTAFONI", "ზესტაფონი"),
     ("BELARUS", "ბელარუსი"),
     ("BELARUSSIA", "ბელარუსი"),
     ("UKRAINE", "უკრაინა"),
@@ -961,6 +963,16 @@ for _lat, _geo in (
     ("UNITEDSTATESOFAMERICA", "ამერიკის შეერთებული შტატები"),
 ):
     _KNOWN_PLACE_BY_LATIN[_latin_norm(_lat)] = _geo
+    # Prefer the first listed Latin form as the official display spelling
+    _OFFICIAL_LATIN_BY_GEO.setdefault(_geo, _title_latin(_lat))
+
+
+def _place_latin_for_geo(place_geo: str) -> str:
+    """Official Latin for a known city; otherwise national transliteration."""
+    geo = (place_geo or "").strip()
+    if not geo:
+        return ""
+    return _OFFICIAL_LATIN_BY_GEO.get(geo) or _title_latin(transliterate_ka(geo))
 
 # Longest first, so «ახალქალაქი» is not shadowed by a shorter name
 _KNOWN_PLACES_GEO = tuple(
@@ -1003,7 +1015,7 @@ def _edit_distance(a: str, b: str) -> int:
 def _is_unambiguous_letter(ch: str) -> bool:
     """
     True when the Latin spelling of this letter can come from one Georgian letter
-    only. Twins like თ/ტ, ქ/კ, ფ/პ, ჩ/ჭ, ც/წ share a Latin form, so MRZ Latin
+    only. Twins like თ/ტ, ქ/კ, ჩ/ჭ, ც/წ share a Latin form, so MRZ Latin
     cannot tell them apart — those are never guessed for *places*.
     """
     return len(_GEO_LETTERS_BY_LATIN.get(_KA_TO_LAT.get(ch, ""), ())) == 1
@@ -1158,6 +1170,7 @@ def _latin_to_geo_approx(latin: str) -> str:
         ("TS", "ც"),
         ("DZ", "ძ"),
         ("KH", "ხ"),
+        ("PH", "ფ"),
         ("A", "ა"),
         ("B", "ბ"),
         ("G", "გ"),
