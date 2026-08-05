@@ -756,9 +756,9 @@ def parse_passport_mrz(text: str, lines: list[str] | None = None) -> dict:
         if birth:
             mrz["birth_date"] = birth
         if sex == "M":
-            mrz["gender"] = "M"
+            mrz["gender"] = "მმ / M"
         elif sex == "F":
-            mrz["gender"] = "F"
+            mrz["gender"] = "მდ / F"
         expiry = _mrz_yymmdd(e_raw, False)
         if expiry:
             mrz["expiry_date"] = expiry
@@ -791,9 +791,9 @@ def parse_passport_mrz(text: str, lines: list[str] | None = None) -> dict:
             if not mrz.get("gender"):
                 sex = m.group("sex")
                 if sex == "M":
-                    mrz["gender"] = "M"
+                    mrz["gender"] = "მმ / M"
                 elif sex == "F":
-                    mrz["gender"] = "F"
+                    mrz["gender"] = "მდ / F"
             if not mrz.get("expiry_date"):
                 expiry = _mrz_yymmdd(m.group("exp"), False)
                 if expiry:
@@ -985,7 +985,9 @@ def extract_passport_info(image_bytes: bytes) -> dict:
     portrait = ""
     try:
         from portrait_extract import extract_portrait_data_url
-        portrait = extract_portrait_data_url(image_bytes, kind="passport") or ""
+        portrait = extract_portrait_data_url(
+            image_bytes, kind="passport", rotation=rotation
+        ) or ""
     except Exception as exc:
         print(f"Portrait extract (passport) failed: {exc}")
         portrait = ""

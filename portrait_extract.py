@@ -14,12 +14,35 @@ import io
 import re
 
 from google.cloud import vision
-from PIL import Image
+from PIL import Image, ImageOps
 
 import id_verifier as idv
 
 # Printed ID / passport photo is taller than wide
 _PHOTO_ASPECT = 3 / 4  # width / height
+
+
+def _jpeg_bytes(img: Image.Image, quality: int = 94) -> bytes:
+    """Encode a normalized RGB image for Vision with no EXIF orientation ambiguity."""
+    buf = io.BytesIO()
+    img.convert("RGB").save(buf, format="JPEG", quality=quality)
+    return buf.getvalue()
+
+
+def _normalized_image(
+    image_bytes: bytes, rotation: int = 0
+) -> tuple[Image.Image, bytes] | None:
+    """Return pixels and Vision bytes in the same, upright orientation."""
+    try:
+        raw = Image.open(io.BytesIO(image_bytes))
+        img = ImageOps.exif_transpose(raw).convert("RGB")
+        rot = int(rotation or 0) % 360
+        if rot in (90, 180, 270):
+            # OCR rotation is the CCW amount needed to upright the photo.
+            img = img.rotate(rot, expand=True)
+        return img, _jpeg_bytes(img)
+    except Exception:
+        return None
 
 
 def _faces_from_vision(image_bytes: bytes) -> list[dict]:
@@ -98,6 +121,80 @@ def _faces_from_vision(image_bytes: bytes) -> list[dict]:
     return out
 
 
+def _map_face_from_crop(
+    face: dict, crop_x: int, crop_y: int, scale: float
+) -> dict:
+    """Map a face detected in an enlarged crop back to document coordinates."""
+    inv = 1.0 / max(scale, 1e-6)
+
+    def mapped_box(box):
+        if not box:
+            return None
+        return (
+            crop_x + box[0] * inv,
+            crop_y + box[1] * inv,
+            crop_x + box[2] * inv,
+            crop_y + box[3] * inv,
+        )
+
+    box = mapped_box(face["box"])
+    ear_box = mapped_box(face.get("ear_box"))
+    return {
+        "box": box,
+        "ear_box": ear_box,
+        "cx": crop_x + face["cx"] * inv,
+        "cy": crop_y + face["cy"] * inv,
+    }
+
+
+def _faces_from_portrait_region(
+    img: Image.Image,
+    kind: str,
+    top_limit: int | None,
+    bottom_limit: int | None,
+    right_limit: int | None,
+) -> list[dict]:
+    """
+    Retry face detection on the expected printed-photo region.
+
+    A portrait that is only a few percent of the full document is commonly
+    missed by Vision. Cropping the left photo column makes that same face large
+    enough to detect without assuming an exact card generation/layout.
+    """
+    w, h = img.size
+    # A portrait-shaped input may already be the extracted plate. Retrying only
+    # its left document column would cut the face before detection.
+    if w / max(h, 1) <= 0.95:
+        x0, y0, x1, y1 = 0, 0, w, h
+    else:
+        x0 = 0
+        x1 = right_limit if right_limit and right_limit > w * 0.18 else int(w * 0.55)
+        x1 = min(w, max(int(w * 0.30), x1 + int(w * 0.04)))
+        y0 = max(0, (top_limit or int(h * 0.08)) - int(h * 0.05))
+        y1 = min(
+            h,
+            (bottom_limit or int(h * (0.76 if kind == "id" else 0.72)))
+            + int(h * 0.05),
+        )
+    if x1 - x0 < 40 or y1 - y0 < 40:
+        return []
+
+    region = img.crop((x0, y0, x1, y1))
+    rw, rh = region.size
+    # Keep enough pixels for landmark detection on low-resolution uploads.
+    scale = max(1.0, min(4.0, 720.0 / max(rw, rh)))
+    if scale > 1.05:
+        region = region.resize(
+            (int(round(rw * scale)), int(round(rh * scale))),
+            Image.Resampling.LANCZOS,
+        )
+    try:
+        faces = _faces_from_vision(_jpeg_bytes(region))
+    except Exception:
+        return []
+    return [_map_face_from_crop(face, x0, y0, scale) for face in faces]
+
+
 def _ocr_full_text(image_bytes: bytes):
     """Document OCR annotation, or None."""
     try:
@@ -137,20 +234,23 @@ def _id_header_bottom_y_from_anno(anno, w: int, h: int) -> int | None:
     if not anno:
         return None
 
-    header_re = re.compile(
-        r"პირადობ|მოწმობ|identity|identit|id\s*card|საქართველ",
-        re.I,
-    )
-    bottoms: list[int] = []
+    strong_re = re.compile(r"პირადობ|მოწმობ|identity|identit|id\s*card", re.I)
+    weak_re = re.compile(r"საქართველ", re.I)
+    strong: list[int] = []
+    weak: list[int] = []
     for word, _pw, _ph in idv._iter_words(anno):
         text = "".join(s.text for s in word.symbols if getattr(s, "text", None)).strip()
-        if not text or not header_re.search(text):
+        if not text:
             continue
         x0, y0, x1, y1 = idv._word_bbox(word)
         if y0 > h * 0.28:
             continue
-        bottoms.append(int(y1))
+        if strong_re.search(text):
+            strong.append(int(y1))
+        elif weak_re.search(text) and y0 < h * 0.18:
+            weak.append(int(y1))
 
+    bottoms = strong or weak
     if not bottoms:
         return None
     # Extra pad so orange icons / title never leak into the crop
@@ -200,22 +300,25 @@ def _name_column_left_x_from_anno(anno, w: int, h: int, kind: str) -> int | None
 
 
 def _passport_header_bottom_y(anno, w: int, h: int) -> int | None:
-    """Below passport title / GEO / type line."""
+    """Below passport title / type line (avoid mid-page GEO nationality)."""
     if not anno:
         return None
-    header_re = re.compile(
-        r"პასპორტ|passport|georgia|საქართველ|type\s*/?\s*p|geo\b",
-        re.I,
-    )
-    bottoms: list[int] = []
+    strong_re = re.compile(r"პასპორტ|passport|type\s*/?\s*p", re.I)
+    weak_re = re.compile(r"საქართველ|georgia", re.I)
+    strong: list[int] = []
+    weak: list[int] = []
     for word, _pw, _ph in idv._iter_words(anno):
         text = "".join(s.text for s in word.symbols if getattr(s, "text", None)).strip()
-        if not text or not header_re.search(text):
+        if not text:
             continue
         x0, y0, x1, y1 = idv._word_bbox(word)
-        if y0 > h * 0.35:
+        if y0 > h * 0.28:
             continue
-        bottoms.append(int(y1))
+        if strong_re.search(text):
+            strong.append(int(y1))
+        elif weak_re.search(text) and y0 < h * 0.18:
+            weak.append(int(y1))
+    bottoms = strong or weak
     if not bottoms:
         return None
     return min(h - 1, max(bottoms) + int(h * 0.01))
@@ -250,7 +353,12 @@ def _box_area(b: tuple[int, int, int, int]) -> int:
 
 
 def _pick_face(
-    faces: list[dict], w: int, h: int, kind: str
+    faces: list[dict],
+    w: int,
+    h: int,
+    kind: str,
+    top_limit: int | None = None,
+    bottom_limit: int | None = None,
 ) -> dict | None:
     if not faces:
         return None
@@ -258,6 +366,12 @@ def _pick_face(
     thresh = w * (0.52 if kind == "id" else 0.48)
     left = [f for f in faces if f["cx"] < thresh]
     pool = left or faces
+    if top_limit is not None or bottom_limit is not None:
+        y0 = top_limit if top_limit is not None else 0
+        y1 = bottom_limit if bottom_limit is not None else h
+        in_plate = [f for f in pool if y0 <= f["cy"] <= y1]
+        if in_plate:
+            pool = in_plate
     return max(pool, key=lambda f: _box_area(f["box"]))
 
 
@@ -400,16 +514,63 @@ def _box_centered_on(
     return _clamp_box(x0, y0, x1, y1, w, h)
 
 
+def _slide_box_into_limits(
+    box: tuple[int, int, int, int],
+    w: int,
+    h: int,
+    top_limit: int | None = None,
+    bottom_limit: int | None = None,
+    left_limit: int | None = None,
+    right_limit: int | None = None,
+) -> tuple[int, int, int, int]:
+    """Move a fixed-size box wholly inside OCR plate bounds (never shrink through face)."""
+    bx0, by0, bx1, by1 = box
+    bw = bx1 - bx0
+    bh = by1 - by0
+
+    if (
+        left_limit is not None
+        and right_limit is not None
+        and right_limit - left_limit >= bw
+    ):
+        if bx0 < left_limit:
+            bx0, bx1 = left_limit, left_limit + bw
+        if bx1 > right_limit:
+            bx1, bx0 = right_limit, right_limit - bw
+    elif left_limit is not None and bx0 < left_limit and left_limit + bw <= w:
+        bx0, bx1 = left_limit, left_limit + bw
+    elif right_limit is not None and bx1 > right_limit and right_limit - bw >= 0:
+        bx1, bx0 = right_limit, right_limit - bw
+
+    if (
+        top_limit is not None
+        and bottom_limit is not None
+        and bottom_limit - top_limit >= bh
+    ):
+        if by0 < top_limit:
+            by0, by1 = top_limit, top_limit + bh
+        if by1 > bottom_limit:
+            by1, by0 = bottom_limit, bottom_limit - bh
+    elif top_limit is not None and by0 < top_limit and top_limit + bh <= h:
+        by0, by1 = top_limit, top_limit + bh
+    elif bottom_limit is not None and by1 > bottom_limit and bottom_limit - bh >= 0:
+        by1, by0 = bottom_limit, bottom_limit - bh
+
+    return _clamp_box(bx0, by0, bx1, by1, w, h)
+
+
 def _face_portrait_box(
     face: dict,
     w: int,
     h: int,
     top_limit: int | None = None,
     bottom_limit: int | None = None,
+    left_limit: int | None = None,
+    right_limit: int | None = None,
 ) -> tuple[int, int, int, int]:
     """
     Centered portrait: full head contour visible (ear→ear, crown→neck).
-    Uses landmark ear box when present. No horizontal OCR shove.
+    Uses landmark ear box when present. OCR plate bounds only slide the crop.
     """
     if face.get("ear_box"):
         x0, y0, x1, y1 = face["ear_box"]
@@ -425,17 +586,36 @@ def _face_portrait_box(
         y1 = by1 + fh * 0.28
 
     cx = face.get("cx", (x0 + x1) / 2.0)
-    cy = face.get("cy", (y0 + y1) / 2.0)
-    plate_w = max(8.0, x1 - x0)
-    plate_h = max(8.0, y1 - y0)
+    cy = (y0 + y1) / 2.0
+    content_w = max(8.0, x1 - x0)
+    content_h = max(8.0, y1 - y0)
 
-    # Soft vertical OCR caps only (header / MRZ / CARD No) — shrink symmetrically
-    if top_limit is not None and cy - plate_h / 2.0 < top_limit:
-        plate_h = max(plate_h * 0.85, 2.0 * max(8.0, cy - top_limit))
-    if bottom_limit is not None and cy + plate_h / 2.0 > bottom_limit:
-        plate_h = max(plate_h * 0.85, 2.0 * max(8.0, bottom_limit - cy))
+    # Produce a real 3:4 crop, not a narrow crop later padded with blank bars.
+    plate_h = max(content_h * 1.05, (content_w * 1.08) / _PHOTO_ASPECT)
+    plate_w = plate_h * _PHOTO_ASPECT
 
-    return _box_centered_on(cx, cy, plate_w, plate_h, w, h)
+    # Cap expansion so labels / MRZ / header outside the printed plate stay out.
+    if left_limit is not None and right_limit is not None:
+        max_w = max(24.0, float(right_limit - left_limit))
+        if plate_w > max_w:
+            plate_w = max_w
+            plate_h = plate_w / _PHOTO_ASPECT
+    if top_limit is not None and bottom_limit is not None:
+        max_h = max(24.0, float(bottom_limit - top_limit))
+        if plate_h > max_h:
+            plate_h = max_h
+            plate_w = plate_h * _PHOTO_ASPECT
+
+    box = _box_centered_on(cx, cy, plate_w, plate_h, w, h)
+    return _slide_box_into_limits(
+        box,
+        w,
+        h,
+        top_limit=top_limit,
+        bottom_limit=bottom_limit,
+        left_limit=left_limit,
+        right_limit=right_limit,
+    )
 
 
 def _subject_content_box(img: Image.Image) -> tuple[int, int, int, int] | None:
@@ -543,13 +723,15 @@ def _expand_face_to_photo_plate(
     right_limit: int | None = None,
     left_limit: int | None = None,
 ) -> tuple[int, int, int, int]:
-    # Horizontal OCR limits intentionally unused — they shoved faces off-center
+    # Keep the face centered; OCR plate bounds only slide the finished 3:4 crop.
     return _face_portrait_box(
         face,
         w,
         h,
         top_limit=top_limit,
         bottom_limit=bottom_limit,
+        left_limit=left_limit,
+        right_limit=right_limit,
     )
 
 
@@ -641,48 +823,28 @@ def _fallback_region(
         box = _clamp_box(int(w * 0.04), y0, int(w * 0.04 + pw), y1, w, h)
         return _inset_box(box, w, h, 0.02)
 
-    bh = by1 - by0
-    if bh > 40:
-        by1 = by0 + int(bh * 0.82)
-        box = _apply_plate_limits(
-            (bx0, by0, bx1, by1),
-            cx,
-            w,
-            h,
-            top_limit,
-            bottom_limit,
-            right_limit,
-            int(w * 0.02),
-        )
-        bx0, by0, bx1, by1 = box
-        if bx1 - bx0 < 24 or by1 - by0 < 24:
-            y0 = int(h * 0.15)
-            y1 = int(h * 0.68)
-            pw = min(w * 0.28, (y1 - y0) * _PHOTO_ASPECT)
-            box = _clamp_box(int(w * 0.04), y0, int(w * 0.04 + pw), y1, w, h)
     return _inset_box(box, w, h, 0.02)
 
 
 def _jpeg_data_url(img: Image.Image, out_h: int = 280) -> str:
-    """Resize portrait and pad to ~3:4 so the UI cell shows a centered face."""
+    """Resize portrait and crop to ~3:4 so the UI cell shows a centered face."""
     out = img.convert("RGB")
     ow, oh = out.size
     if ow < 1 or oh < 1:
         return ""
 
-    # Pad to portrait aspect with neutral fill (keeps face centered in the cell)
+    # Crop to portrait aspect (no gray letterbox bars around a valid face).
     target_aspect = _PHOTO_ASPECT  # width / height
     cur_aspect = ow / oh
     if abs(cur_aspect - target_aspect) > 0.02:
-        if cur_aspect < target_aspect:
-            new_w = max(ow, int(round(oh * target_aspect)))
-            new_h = oh
+        if cur_aspect > target_aspect:
+            new_w = max(1, int(round(oh * target_aspect)))
+            x0 = max(0, (ow - new_w) // 2)
+            out = out.crop((x0, 0, x0 + new_w, oh))
         else:
-            new_w = ow
-            new_h = max(oh, int(round(ow / target_aspect)))
-        canvas = Image.new("RGB", (new_w, new_h), (241, 245, 249))
-        canvas.paste(out, ((new_w - ow) // 2, (new_h - oh) // 2))
-        out = canvas
+            new_h = max(1, int(round(ow / target_aspect)))
+            y0 = max(0, (oh - new_h) // 2)
+            out = out.crop((0, y0, ow, y0 + new_h))
         ow, oh = out.size
 
     out_w = max(1, int(round(out_h * (ow / oh))))
@@ -693,18 +855,20 @@ def _jpeg_data_url(img: Image.Image, out_h: int = 280) -> str:
     return f"data:image/jpeg;base64,{b64}"
 
 
-def extract_portrait_data_url(image_bytes: bytes, kind: str = "id") -> str:
+def extract_portrait_data_url(
+    image_bytes: bytes, kind: str = "id", rotation: int = 0
+) -> str:
     """
     Crop the printed portrait plate → JPEG data URL (vertical ~3:4).
     kind: "id" (front) or "passport".
+    rotation: OCR-derived CCW degrees (0/90/180/270) to upright the photo.
     """
     if not image_bytes:
         return ""
-    try:
-        img = Image.open(io.BytesIO(image_bytes))
-        img = img.convert("RGB")
-    except Exception:
+    normalized = _normalized_image(image_bytes, rotation=rotation)
+    if not normalized:
         return ""
+    img, vision_bytes = normalized
 
     w, h = img.size
     if w < 40 or h < 40:
@@ -717,7 +881,7 @@ def extract_portrait_data_url(image_bytes: bytes, kind: str = "id") -> str:
     left_limit = int(w * 0.015)
 
     try:
-        anno = _ocr_full_text(image_bytes)
+        anno = _ocr_full_text(vision_bytes)
     except Exception:
         anno = None
 
@@ -755,10 +919,30 @@ def extract_portrait_data_url(image_bytes: bytes, kind: str = "id") -> str:
     )
 
     box = None
+    face_found = False
     try:
-        faces = _faces_from_vision(image_bytes)
-        face = _pick_face(faces, w, h, kind)
+        faces = _faces_from_vision(vision_bytes)
+        face = _pick_face(
+            faces, w, h, kind, top_limit=top_limit, bottom_limit=bottom_limit
+        )
+        if not face:
+            regional_faces = _faces_from_portrait_region(
+                img,
+                kind,
+                top_limit,
+                bottom_limit,
+                right_limit,
+            )
+            face = _pick_face(
+                regional_faces,
+                w,
+                h,
+                kind,
+                top_limit=top_limit,
+                bottom_limit=bottom_limit,
+            )
         if face:
+            face_found = True
             box = _expand_face_to_photo_plate(
                 face,
                 w,
@@ -766,9 +950,17 @@ def extract_portrait_data_url(image_bytes: bytes, kind: str = "id") -> str:
                 kind=kind,
                 bottom_limit=bottom_limit,
                 top_limit=top_limit,
+                right_limit=right_limit,
+                left_limit=left_limit,
             )
     except Exception:
         box = None
+
+    # Preserve an already-extracted, low-resolution portrait instead of
+    # treating it as a full document and taking only its left photo column.
+    if not box and w / max(h, 1) <= 0.95 and max(w, h) <= 800:
+        box = (0, 0, w, h)
+        face_found = True
 
     if not box:
         box = _fallback_region(
@@ -789,8 +981,11 @@ def extract_portrait_data_url(image_bytes: bytes, kind: str = "id") -> str:
         return ""
 
     try:
-        # Re-center on the actual head if empty margin remains on one side
-        box = _recenter_box_on_subject(img, (x0, y0, x1, y1))
+        # Face landmarks are authoritative. The silhouette heuristic is only a
+        # fallback; document text/security patterns can otherwise pull a valid
+        # face crop off-center.
+        if not face_found:
+            box = _recenter_box_on_subject(img, (x0, y0, x1, y1))
         x0, y0, x1, y1 = box
         if x1 - x0 < 20 or y1 - y0 < 20:
             return ""

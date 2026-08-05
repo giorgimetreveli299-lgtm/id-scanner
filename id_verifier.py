@@ -705,9 +705,9 @@ def parse_mrz(lines: list[str]) -> dict:
             ey = "20" + e_raw[:2]
             mrz["expiry_date"] = f"{e_raw[4:6]}.{e_raw[2:4]}.{ey}"
             if sex == "M":
-                mrz["gender"] = "M"
+                mrz["gender"] = "მმ / M"
             elif sex == "F":
-                mrz["gender"] = "F"
+                mrz["gender"] = "მდ / F"
             if nat:
                 code = nat.replace("0", "O")
                 if code == "GFO":
@@ -943,6 +943,8 @@ for _place in (
 
 # English / alternate Latin spellings on the card (not national transliteration)
 for _lat, _geo in (
+    ("ZESTAPHONI", "ზესტაფონი"),
+    ("ZESTAFONI", "ზესტაფონი"),
     ("BELARUS", "ბელარუსი"),
     ("BELARUSSIA", "ბელარუსი"),
     ("UKRAINE", "უკრაინა"),
@@ -1509,24 +1511,24 @@ def _format_citizenship(value: str = "") -> str:
 
 
 def _format_gender_display(value: str = "") -> str:
-    """Normalize to M or F for the UI."""
+    """Normalize to მმ / M or მდ / F."""
     gl = _gender_letter(value)
     if gl == "M":
-        return "M"
+        return "მმ / M"
     if gl == "F":
-        return "F"
+        return "მდ / F"
     return (value or "").strip()
 
 
 def _parse_gender(text: str) -> str:
     if re.search(r"(მდედრ|\bმდ\b|მდ\s*/\s*F|\bFEMALE\b|\bF\b)", text, re.IGNORECASE):
-        return "F"
+        return "მდ / F"
     if re.search(r"(მამრ|\bმმ\b|მ\s*/\s*M|\bMALE\b|\bM\b)", text, re.IGNORECASE):
-        return "M"
+        return "მმ / M"
     if re.fullmatch(r"\s*[Ff]\s*", text):
-        return "F"
+        return "მდ / F"
     if re.fullmatch(r"\s*[Mm]\s*", text):
-        return "M"
+        return "მმ / M"
     return ""
 
 
@@ -2002,7 +2004,7 @@ def _best_geo_for_latin(candidates: list[str], latin_hint: str, used: set[str] |
 def _collect_geo_name_candidates(front_lines: list[str]) -> list[str]:
     skip_places = {
         "თბილისი", "ბათუმი", "ქუთაისი", "რუსთავი", "ზუგდიდი", "გორი",
-        "თელავი", "ამბროლაური", "საქართველო", "სტუდენტი",
+        "თელავი", "ამბროლაური", "ზესტაფონი", "საქართველო", "სტუდენტი",
     }
     geo_words: list[str] = []
     i = 0
@@ -2330,7 +2332,9 @@ def extract_id_info(front_bytes: bytes, back_bytes: bytes) -> dict:
     portrait = ""
     try:
         from portrait_extract import extract_portrait_data_url
-        portrait = extract_portrait_data_url(front_bytes, kind="id") or ""
+        portrait = extract_portrait_data_url(
+            front_bytes, kind="id", rotation=front_rot
+        ) or ""
     except Exception as exc:
         print(f"Portrait extract (ID) failed: {exc}")
         portrait = ""

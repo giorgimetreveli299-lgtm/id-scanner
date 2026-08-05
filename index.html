@@ -3536,8 +3536,8 @@
     function formatGender(value) {
       const raw = String(value || "");
       const upper = raw.toUpperCase();
-      if (/მდ|FEMALE|მდედრ/i.test(raw) || /\bF\b/.test(upper)) return "F";
-      if (/მმ|MALE|მამრ/i.test(raw) || /\bM\b/.test(upper)) return "M";
+      if (/მდ|FEMALE|მდედრ/i.test(raw) || /\bF\b/.test(upper)) return "მდ / F";
+      if (/მმ|MALE|მამრ/i.test(raw) || /\bM\b/.test(upper)) return "მმ / M";
       return raw.trim();
     }
 
