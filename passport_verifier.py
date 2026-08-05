@@ -581,13 +581,35 @@ def _fix_passport_number(raw: str) -> str:
 
 # MRZ digits often OCR as letters (O/D/Q→0, I/L→1, Z→2, S→5, B→8, G→6)
 _MRZ_D = r"[0-9ODQILZSBG]"
+# Nationality is three ICAO characters. Real Georgian passports normally use GEO,
+# while specimens/new layouts may contain another code (for example UTO).
+_MRZ_NAT = r"[A-Z0-9]{3}"
 _TD3_LINE2_RE = re.compile(
     rf"(?P<doc>[A-Z0-9]{{9}}){_MRZ_D}"
-    rf"(?P<nat>GE[O0])"
+    rf"(?P<nat>{_MRZ_NAT})"
     rf"(?P<birth>{_MRZ_D}{{6}}){_MRZ_D}"
     rf"(?P<sex>[MF<])"
     rf"(?P<exp>{_MRZ_D}{{6}})"
 )
+
+
+def _normalize_passport_line1(line: str) -> str:
+    """Normalize legacy P<GEO and new PP GEO document-code rows to TD3 P<GEO."""
+    c = _normalize_mrz_line(line)
+    c = (
+        c.replace("P0GEO", "P<GEO")
+        .replace("POGEO", "P<GEO")
+        .replace("P<GE0", "P<GEO")
+        .replace("P<GFO", "P<GEO")
+        # New Georgian passport document code is PP; canonicalize only the
+        # issuing-state prefix, leaving all existing P<GEO handling untouched.
+        .replace("PPGE0", "P<GEO")
+        .replace("PPGFO", "P<GEO")
+        .replace("PPGEO", "P<GEO")
+    )
+    if c.startswith("PGEO"):
+        c = "P<" + c[1:]
+    return c
 
 
 def extract_passport_mrz_strip(text: str) -> str:
@@ -601,26 +623,13 @@ def extract_passport_mrz_strip(text: str) -> str:
         return ""
 
     lines = [_normalize_mrz_line(l) for l in text.splitlines() if l.strip()]
-    blob = _normalize_mrz_line(text.replace("\n", " "))
-    blob = (
-        blob.replace("P0GEO", "P<GEO")
-        .replace("POGEO", "P<GEO")
-        .replace("P<GE0", "P<GEO")
-        .replace("P<GFO", "P<GEO")
-    )
+    blob = _normalize_passport_line1(text.replace("\n", " "))
 
     line1 = ""
     line2 = ""
 
     for l in lines:
-        c = (
-            l.replace("P0GEO", "P<GEO")
-            .replace("POGEO", "P<GEO")
-            .replace("P<GE0", "P<GEO")
-            .replace("P<GFO", "P<GEO")
-        )
-        if c.startswith("PGEO"):
-            c = "P<" + c[1:]
+        c = _normalize_passport_line1(l)
         if c.startswith("P<") or re.match(r"^P[O0]<", c):
             if not c.startswith("P<"):
                 c = "P<" + c[2:]
@@ -734,7 +743,11 @@ def parse_passport_mrz(text: str, lines: list[str] | None = None) -> dict:
     if len(line2) >= 28:
         mrz["card_number"] = _fix_passport_number(line2[0:9])
         nat = line2[10:13].replace("0", "O")
-        if nat in ("GEO", "GFO"):
+        if nat == "GFO":
+            nat = "GEO"
+        if re.fullmatch(r"[A-Z]{3}", nat):
+            mrz["nationality_code"] = nat
+        if nat == "GEO":
             mrz["citizenship_code"] = "GEO"
         b_raw = line2[13:19]
         sex = line2[20:21]
@@ -743,13 +756,20 @@ def parse_passport_mrz(text: str, lines: list[str] | None = None) -> dict:
         if birth:
             mrz["birth_date"] = birth
         if sex == "M":
-            mrz["gender"] = "მმ / M"
+            mrz["gender"] = "M"
         elif sex == "F":
-            mrz["gender"] = "მდ / F"
+            mrz["gender"] = "F"
         expiry = _mrz_yymmdd(e_raw, False)
         if expiry:
             mrz["expiry_date"] = expiry
-        # Personal number is NOT in Georgian passport MRZ — do not read optional field
+        # Legacy Georgian passports may leave optional data empty. The new PP
+        # layout can carry the 11-digit personal number at positions 28–38.
+        optional = re.sub(r"[^A-Z0-9<]", "", line2[28:42])
+        personal_match = re.match(r"([0-9ODQILZSBG]{11})(?:<|$)", optional)
+        if personal_match:
+            personal = _mrz_personal_from_raw(personal_match.group(1))
+            if len(personal) == 11:
+                mrz["personal_id"] = personal
 
     if not mrz.get("card_number") or not mrz.get("birth_date") or not mrz.get("expiry_date"):
         blob = _normalize_mrz_line((text or "").replace("\n", " "))
@@ -757,7 +777,13 @@ def parse_passport_mrz(text: str, lines: list[str] | None = None) -> dict:
         if m:
             if not mrz.get("card_number"):
                 mrz["card_number"] = _fix_passport_number(m.group("doc"))
-            mrz["citizenship_code"] = "GEO"
+            nat = m.group("nat").replace("0", "O")
+            if nat == "GFO":
+                nat = "GEO"
+            if re.fullmatch(r"[A-Z]{3}", nat):
+                mrz["nationality_code"] = nat
+            if nat == "GEO":
+                mrz["citizenship_code"] = "GEO"
             if not mrz.get("birth_date"):
                 birth = _mrz_yymmdd(m.group("birth"), True)
                 if birth:
@@ -765,9 +791,9 @@ def parse_passport_mrz(text: str, lines: list[str] | None = None) -> dict:
             if not mrz.get("gender"):
                 sex = m.group("sex")
                 if sex == "M":
-                    mrz["gender"] = "მმ / M"
+                    mrz["gender"] = "M"
                 elif sex == "F":
-                    mrz["gender"] = "მდ / F"
+                    mrz["gender"] = "F"
             if not mrz.get("expiry_date"):
                 expiry = _mrz_yymmdd(m.group("exp"), False)
                 if expiry:
@@ -795,7 +821,9 @@ def extract_passport_info(image_bytes: bytes) -> dict:
         for k, v in mrz.items()
         if k in ("birth_date", "expiry_date", "gender", "citizenship")
     }
-    mrz_pid = ""  # not present in passport MRZ
+    # Legacy passports leave this empty; new PP passports may carry it in
+    # TD3 optional data. Visual OCR remains the first choice below.
+    mrz_pid = mrz.get("personal_id", "")
     mrz_doc = mrz.get("card_number", "")
 
     data = _parse_visual_fields(full_text, lines, data)
@@ -815,13 +843,14 @@ def extract_passport_info(image_bytes: bytes) -> dict:
             passport_doc or ids.get("card_number") or data.get("card_number") or ""
         )
 
-    # Personal number: visual OCR only (MRZ does not contain it)
+    # Personal number: visual OCR first; new PP MRZ optional data is fallback.
     ids = _ids_near_labels(lines, full_text)
     layout_pid = _personal_id_from_layout(words)
     data["personal_id"] = (
         layout_pid
         or ids.get("personal_id")
         or _pick_personal_id(_find_personal_ids(full_text))
+        or mrz_pid
         or ""
     )
 
@@ -981,7 +1010,7 @@ def extract_passport_info(image_bytes: bytes) -> dict:
             "portrait": portrait,
         },
         "mrz_fields": {
-            "personal_id": "",  # not in passport MRZ
+            "personal_id": mrz.get("personal_id", ""),
             "card_number": mrz.get("card_number", ""),
             "birth_date": mrz.get("birth_date", ""),
             "expiry_date": mrz.get("expiry_date", ""),
@@ -1016,7 +1045,7 @@ def verify_against_passport_mrz(data: dict, mrz: dict) -> dict:
             "status": "Error",
             "mismatches": ["mrz"],
             "checks": {},
-            "message": "პასპორტის MRZ ვერ ამოიკითხა",
+            "message": "Could not read the passport MRZ",
         }
 
     # personal_id: Uncheckable — not in passport MRZ

@@ -705,9 +705,9 @@ def parse_mrz(lines: list[str]) -> dict:
             ey = "20" + e_raw[:2]
             mrz["expiry_date"] = f"{e_raw[4:6]}.{e_raw[2:4]}.{ey}"
             if sex == "M":
-                mrz["gender"] = "მმ / M"
+                mrz["gender"] = "M"
             elif sex == "F":
-                mrz["gender"] = "მდ / F"
+                mrz["gender"] = "F"
             if nat:
                 code = nat.replace("0", "O")
                 if code == "GFO":
@@ -1335,7 +1335,7 @@ def verify_against_mrz(data: dict, mrz: dict) -> dict:
             "status": "Error",
             "mismatches": ["mrz"],
             "checks": {},
-            "message": "MRZ ვერ ამოიკითხა",
+            "message": "Could not read the MRZ",
         }
 
     if mrz.get("personal_id"):
@@ -1509,24 +1509,24 @@ def _format_citizenship(value: str = "") -> str:
 
 
 def _format_gender_display(value: str = "") -> str:
-    """Normalize to მმ / M or მდ / F."""
+    """Normalize to M or F for the UI."""
     gl = _gender_letter(value)
     if gl == "M":
-        return "მმ / M"
+        return "M"
     if gl == "F":
-        return "მდ / F"
+        return "F"
     return (value or "").strip()
 
 
 def _parse_gender(text: str) -> str:
     if re.search(r"(მდედრ|\bმდ\b|მდ\s*/\s*F|\bFEMALE\b|\bF\b)", text, re.IGNORECASE):
-        return "მდ / F"
+        return "F"
     if re.search(r"(მამრ|\bმმ\b|მ\s*/\s*M|\bMALE\b|\bM\b)", text, re.IGNORECASE):
-        return "მმ / M"
+        return "M"
     if re.fullmatch(r"\s*[Ff]\s*", text):
-        return "მდ / F"
+        return "F"
     if re.fullmatch(r"\s*[Mm]\s*", text):
-        return "მმ / M"
+        return "M"
     return ""
 
 

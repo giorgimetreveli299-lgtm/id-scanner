@@ -204,6 +204,21 @@
       font-size: 14px;
     }
     #ocr-status.visible { display: block; }
+    .passport-upload-error,
+    .id-upload-error {
+      display: none;
+      margin: 12px 0 16px;
+      padding: 12px 14px;
+      border: 1px solid #dc2626;
+      border-radius: 8px;
+      background: #fef2f2;
+      color: #b91c1c;
+      font-size: 15px;
+      font-weight: 700;
+      text-align: center;
+    }
+    .passport-upload-error.visible,
+    .id-upload-error.visible { display: block; }
 
     /* Camera overlay */
     #camera-modal {
@@ -674,6 +689,12 @@
         <p class="step-hint" id="step-hint">
           First capture the front side — place the document in the frame.
         </p>
+        <div
+          class="id-upload-error"
+          id="id-upload-error"
+          role="alert"
+          aria-live="assertive"
+        ></div>
 
         <div class="photo-slots">
           <div class="slot-box" id="slot-front">
@@ -704,6 +725,12 @@
         <p class="step-hint" id="passport-step-hint">
           Capture the passport data page (photo + MRZ strip).
         </p>
+        <div
+          class="passport-upload-error"
+          id="passport-upload-error"
+          role="alert"
+          aria-live="assertive"
+        ></div>
         <div class="photo-slots single">
           <div class="slot-box" id="slot-passport">
             <h4>Passport page</h4>
@@ -923,6 +950,8 @@
       closeCamera();
       selectedMethod = null;
       setPortrait("");
+      clearPassportUploadError();
+      clearIdUploadError();
       document.getElementById("method-choice").classList.remove("hidden");
       document.getElementById("scanner-view").classList.remove("visible");
       document.getElementById("passport-view").classList.remove("visible");
@@ -931,6 +960,8 @@
 
     function selectMethod(method) {
       selectedMethod = method;
+      clearPassportUploadError();
+      clearIdUploadError();
       document.getElementById("method-choice").classList.add("hidden");
       document.getElementById("scanner-view").classList.remove("visible");
       document.getElementById("passport-view").classList.remove("visible");
@@ -1091,6 +1122,8 @@
 
     function triggerUpload(slot) {
       if (!slot) return;
+      if (slot === "passport") clearPassportUploadError();
+      if (slot === "front" || slot === "back") clearIdUploadError();
       if (slot === "back" && !frontDataUrl) {
         const status = document.getElementById("ocr-status");
         if (status) {
@@ -1140,7 +1173,7 @@
             : final.blob;
         const ok = await validateCapturedSide(activeSlot, validateBlob);
         if (!ok) {
-          if (!cameraModal.classList.contains("open")) {
+          if (!inlineDocErrorShown && !cameraModal.classList.contains("open")) {
             alert(readinessStatus.textContent || "Photo rejected. Please capture it correctly.");
           }
           return;
@@ -3256,47 +3289,62 @@
           /P<[A-Z0-9]{3}/.test(stripHint.replace(/\s+/g, ""))
         );
         const docType = String((data && data.doc_type) || "unknown");
+        const idMrzStartsWithId = /^ID/.test(
+          String((data && data.mrz_strip) || "")
+            .split(/\r?\n/, 1)[0]
+            .replace(/\s+/g, "")
+            .toUpperCase()
+        );
+        const passportMrzFirst = String(
+          (data && (data.passport_mrz_strip || data.mrz_strip)) || ""
+        )
+          .split(/\r?\n/, 1)[0]
+          .replace(/\s+/g, "")
+          .toUpperCase();
+        // Passport TD3 rows start with P (P<GEO / PPGEO / PGEO…). A confirmed
+        // TD1 strip always wins, so an ID back is never read as a passport.
+        const mrzStartsWithP =
+          !hasMrz &&
+          (/^P/.test(passportMrzFirst) ||
+            /^P(?:<|P)?GE[O0]/.test(stripHint.replace(/\s+/g, "").toUpperCase()));
         // Strong signals only — never block ID back (TD1) as a passport
-        const looksPassport = docType === "passport" && !hasMrz && hasTd3;
+        const looksPassport =
+          (docType === "passport" && !hasMrz) || (hasTd3 && !hasMrz);
         const looksId = docType === "id" || hasMrz;
 
         // Wrong document for the selected method — hard reject
-        if ((slot === "front" || slot === "back") && looksPassport) {
-          readinessStatus.textContent =
-            "This looks like a passport. Switch to Passport mode, or retake an ID card.";
+        if ((slot === "front" || slot === "back") && (mrzStartsWithP || looksPassport)) {
+          readinessStatus.textContent = ID_PASSPORT_ERROR;
           readinessStatus.className = "status-badge";
           idFrame.classList.remove("ready");
-          if (!cameraModal.classList.contains("open")) {
-            alert("Passport detected in ID mode. Please use Passport, or capture an ID card.");
-          }
+          showIdUploadError(ID_PASSPORT_ERROR);
           return false;
         }
-        if (slot === "passport" && looksId && !hasTd3) {
-          readinessStatus.textContent =
-            "This looks like an ID card. Switch to ID mode, or retake a passport data page.";
+        if (slot === "passport" && (idMrzStartsWithId || (looksId && !hasTd3))) {
+          readinessStatus.textContent = PASSPORT_ID_ERROR;
           readinessStatus.className = "status-badge";
           idFrame.classList.remove("ready");
-          if (!cameraModal.classList.contains("open")) {
-            alert("ID card detected in Passport mode. Please use ID, or capture a passport page.");
-          }
+          showPassportUploadError(PASSPORT_ID_ERROR);
           return false;
         }
 
+        if (slot === "passport") clearPassportUploadError();
+        if (slot === "front" || slot === "back") clearIdUploadError();
+
         if (slot === "front" && hasMrz) {
-          readinessStatus.textContent =
-            "MRZ detected on the front side. Please retake only the front side.";
+          readinessStatus.textContent = ID_FRONT_SIDE_ERROR;
           readinessStatus.className = "status-badge";
           idFrame.classList.remove("ready");
+          showIdUploadError(ID_FRONT_SIDE_ERROR);
           return false;
         }
 
         if (slot === "back" && !hasMrz) {
-          // Soft warn only — hard-reject made Android back capture painful
-          // (frame photo is often still usable; full verify will re-OCR).
-          readinessStatus.textContent =
-            "Note: MRZ looks weak — continuing. Retake if fields stay empty.";
+          readinessStatus.textContent = ID_BACK_SIDE_ERROR;
           readinessStatus.className = "status-badge";
-          return true;
+          idFrame.classList.remove("ready");
+          showIdUploadError(ID_BACK_SIDE_ERROR);
+          return false;
         }
 
         // Passport: soft-warn if TD3 MRZ missing (after wrong-doc check above)
@@ -3489,8 +3537,8 @@
     function formatGender(value) {
       const raw = String(value || "");
       const upper = raw.toUpperCase();
-      if (/მდ|FEMALE|მდედრ/i.test(raw) || /\bF\b/.test(upper)) return "მდ / F";
-      if (/მმ|MALE|მამრ/i.test(raw) || /\bM\b/.test(upper)) return "მმ / M";
+      if (/მდ|FEMALE|მდედრ/i.test(raw) || /\bF\b/.test(upper)) return "F";
+      if (/მმ|MALE|მამრ/i.test(raw) || /\bM\b/.test(upper)) return "M";
       return raw.trim();
     }
 
@@ -4192,6 +4240,52 @@
       }
     }
 
+    const PASSPORT_ID_ERROR =
+      "Please upload a passport, not an ID card";
+    const ID_PASSPORT_ERROR =
+      "Please upload an ID card, not a passport";
+    const ID_FRONT_SIDE_ERROR =
+      "Please upload an ID card's front side";
+    const ID_BACK_SIDE_ERROR =
+      "Please upload an ID card's back side";
+
+    // The inline red banner replaces the generic rejection alert
+    let inlineDocErrorShown = false;
+
+    function showPassportUploadError(message = PASSPORT_ID_ERROR) {
+      const el = document.getElementById("passport-upload-error");
+      if (!el) return;
+      el.textContent = message;
+      el.classList.add("visible");
+      inlineDocErrorShown = true;
+      el.scrollIntoView({ behavior: "smooth", block: "center" });
+    }
+
+    function clearPassportUploadError() {
+      const el = document.getElementById("passport-upload-error");
+      if (!el) return;
+      el.textContent = "";
+      el.classList.remove("visible");
+      inlineDocErrorShown = false;
+    }
+
+    function showIdUploadError(message = ID_PASSPORT_ERROR) {
+      const el = document.getElementById("id-upload-error");
+      if (!el) return;
+      el.textContent = message;
+      el.classList.add("visible");
+      inlineDocErrorShown = true;
+      el.scrollIntoView({ behavior: "smooth", block: "center" });
+    }
+
+    function clearIdUploadError() {
+      const el = document.getElementById("id-upload-error");
+      if (!el) return;
+      el.textContent = "";
+      el.classList.remove("visible");
+      inlineDocErrorShown = false;
+    }
+
     function applyExtractedData(data, options = {}) {
       const ext = data.extracted_data || {};
       const mrz = data.mrz_fields || {};
@@ -4269,6 +4363,7 @@
     async function runPassportVerification() {
       if (selectedMethod !== "passport" || !passportBlob) return;
 
+      clearPassportUploadError();
       const status = document.getElementById("ocr-status");
       const results = document.getElementById("results-card");
       const pdfBtn = document.getElementById("btn-pdf");
@@ -4311,6 +4406,12 @@
         const data = await response.json();
         if (data.error) {
           status.textContent = "Error: " + data.error;
+          if (
+            data.error_code === "id_mrz_in_passport" ||
+            String(data.error).includes("not an ID card")
+          ) {
+            showPassportUploadError(PASSPORT_ID_ERROR);
+          }
           results.classList.add("visible");
           pdfBtn.classList.add("visible");
           actionBar.classList.add("visible");
@@ -4362,6 +4463,7 @@
       // ID only — never run ID pipeline in passport mode
       if (selectedMethod !== "id" || !frontBlob || !backBlob) return;
 
+      clearIdUploadError();
       const status = document.getElementById("ocr-status");
       const results = document.getElementById("results-card");
       const pdfBtn = document.getElementById("btn-pdf");
@@ -4412,6 +4514,12 @@
 
         if (data.error) {
           status.textContent = "Error: " + data.error;
+          if (
+            data.error_code === "passport_mrz_in_id" ||
+            String(data.error).includes("not a passport")
+          ) {
+            showIdUploadError(ID_PASSPORT_ERROR);
+          }
           results.classList.add("visible");
           pdfBtn.classList.add("visible");
           actionBar.classList.add("visible");

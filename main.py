@@ -54,6 +54,11 @@ async def serve_index():
 def _detect_doc_type(full_text: str) -> dict:
     """Classify Georgian ID vs passport from OCR text."""
     blob = (full_text or "").upper().replace(" ", "")
+    # Legacy Georgian passports use P<GEO; the new document code is PP and its
+    # MRZ starts PPGEO. Keep both as explicit, strong passport signals.
+    raw_passport_prefix = bool(
+        re.search(r"(?:P<|PP)GE[O0]", blob)
+    )
     mrz_strip = extract_mrz_strip(full_text)
     mrz_ids = extract_mrz_ids(full_text)
     has_mrz = bool(mrz_strip) or bool(
@@ -65,10 +70,22 @@ def _detect_doc_type(full_text: str) -> dict:
 
     passport_strip = extract_passport_mrz_strip(full_text) or ""
     # Strong passport only: real TD3 P< row (not a loose line-2 false positive)
-    has_td3 = bool(
+    td3_candidate = bool(
         passport_strip.startswith("P<")
         or re.search(r"P<[A-Z0-9]{3}", blob)
+        or re.search(r"PPGE[O0]", blob)
     )
+    # The passport parser can reconstruct a P<GEO name row from an ID's TD1
+    # third line. Keep line-2-only passport recovery, but never report TD3 over
+    # an already-confirmed TD1 unless the raw P<GEO/PPGEO prefix is present.
+    has_td3 = bool(td3_candidate and (raw_passport_prefix or not has_mrz))
+    strong_passport = bool(has_td3 and raw_passport_prefix)
+
+    # PPGEO can resemble a TD1 ID prefix to the generic ID extractor. An
+    # explicit passport row is authoritative and must not be exposed as ID MRZ.
+    if strong_passport:
+        has_mrz = False
+        mrz_strip = ""
 
     id_label = bool(
         re.search(
@@ -88,9 +105,11 @@ def _detect_doc_type(full_text: str) -> dict:
         )
     )
 
-    # TD1 always wins over weak passport cues (ID back must never be blocked)
+    # Explicit P<GEO / PPGEO wins; TD1 still wins over weak passport cues.
     doc_type = "unknown"
-    if has_mrz:
+    if strong_passport:
+        doc_type = "passport"
+    elif has_mrz:
         doc_type = "id"
     elif has_td3:
         doc_type = "passport"
@@ -117,13 +136,31 @@ async def verify_id(
     try:
         front_bytes = await front.read()
         back_bytes = await back.read()
-        # Reject only when passport is clear AND this is not an ID (TD1)
+        # Reject passport MRZ (starts with P / P</PPGEO) uploaded in ID mode
         for label, raw in (("front", front_bytes), ("back", back_bytes)):
             text, _lines, _words = ocr_image(raw)
             hint = _detect_doc_type(text)
-            if hint["doc_type"] == "passport" and not hint["has_mrz"]:
+            # Only the guarded strip may be trusted: the raw passport parser can
+            # rebuild a P<GEO row from an ID's TD1 name line and reject a valid ID.
+            passport_first = (
+                (hint.get("passport_mrz_strip") or "")
+                .splitlines()[0]
+                .replace(" ", "")
+                .upper()
+                if hint.get("passport_mrz_strip")
+                else ""
+            )
+            blob = (text or "").upper().replace(" ", "")
+            mrz_starts_with_p = bool(
+                passport_first.startswith("P")
+                or re.search(r"(?:^|[^A-Z0-9])P(?:<|P)?GE[O0]", blob)
+            )
+            if not hint["has_mrz"] and (
+                mrz_starts_with_p or hint["doc_type"] == "passport"
+            ):
                 return {
-                    "error": f"Passport detected on the {label} photo. Use Passport mode.",
+                    "error": "Please upload an ID card, not a passport",
+                    "error_code": "passport_mrz_in_id",
                     "extracted_data": {},
                     "is_valid": False,
                 }
@@ -161,9 +198,21 @@ async def verify_passport(image: UploadFile = File(...)):
         image_bytes = await image.read()
         text, _lines, _words = ocr_image(image_bytes)
         hint = _detect_doc_type(text)
+        # Explicit rule requested for passport verification: an MRZ whose first
+        # two characters are ID belongs to an identity card, not a passport.
+        id_mrz = (hint.get("mrz_strip") or extract_mrz_strip(text) or "")
+        id_mrz_first_line = id_mrz.splitlines()[0].replace(" ", "").upper() if id_mrz else ""
+        if id_mrz_first_line.startswith("ID"):
+            return {
+                "error": "Please upload a passport, not an ID card",
+                "error_code": "id_mrz_in_passport",
+                "extracted_data": {},
+                "is_valid": False,
+            }
         if hint["doc_type"] == "id" and not hint["has_td3"]:
             return {
-                "error": "ID card detected. Use ID mode instead of Passport.",
+                "error": "Please upload a passport, not an ID card",
+                "error_code": "id_mrz_in_passport",
                 "extracted_data": {},
                 "is_valid": False,
             }
