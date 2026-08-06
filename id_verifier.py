@@ -755,7 +755,7 @@ _KA_TO_LAT = {
     "თ": "t", "ი": "i", "კ": "k", "ლ": "l", "მ": "m", "ნ": "n", "ო": "o",
     "პ": "p", "ჟ": "zh", "რ": "r", "ს": "s", "ტ": "t", "უ": "u", "ფ": "ph",
     "ქ": "k", "ღ": "gh", "ყ": "q", "შ": "sh", "ჩ": "ch", "ც": "ts", "ძ": "dz",
-    "წ": "ts", "ჭ": "ch", "ხ": "kh", "ჯ": "j", "ჰ": "h",
+    "წ": "ts", "ჭ": "tch", "ხ": "kh", "ჯ": "j", "ჰ": "h",
 }
 
 
@@ -1015,7 +1015,7 @@ def _edit_distance(a: str, b: str) -> int:
 def _is_unambiguous_letter(ch: str) -> bool:
     """
     True when the Latin spelling of this letter can come from one Georgian letter
-    only. Twins like თ/ტ, ქ/კ, ჩ/ჭ, ც/წ share a Latin form, so MRZ Latin
+    only. Twins like თ/ტ, ქ/კ, ც/წ share a Latin form, so MRZ Latin
     cannot tell them apart — those are never guessed for *places*.
     """
     return len(_GEO_LETTERS_BY_LATIN.get(_KA_TO_LAT.get(ch, ""), ())) == 1
@@ -1171,6 +1171,7 @@ def _latin_to_geo_approx(latin: str) -> str:
         ("DZ", "ძ"),
         ("KH", "ხ"),
         ("PH", "ფ"),
+        ("TCH", "ჭ"),
         ("A", "ა"),
         ("B", "ბ"),
         ("G", "გ"),
