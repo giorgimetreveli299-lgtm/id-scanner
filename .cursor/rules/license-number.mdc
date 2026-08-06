@@ -1,0 +1,45 @@
+---
+description: Georgian driver license field 1–5 and 7 extraction rules
+globs: lib/parseLicense.ts,lib/vision.ts,app/**/*.tsx
+alwaysApply: false
+---
+
+# Surname (field 1)
+
+- Field **`1.`** on the front is always the **surname** (გვარი), often as `ქართული / Latin` (example: `ქვათაძე / Kvatadze`).
+- Always fill the Surname field from whatever text follows `1.` on the licence.
+
+# Given names (field 2)
+
+- Field **`2.`** on the front is always the **given names** (სახელი), often as `ქართული / Latin` (example: `ქეთევანი / Ketevani`).
+- Always fill the Given names field from whatever text follows `2.` on the licence.
+
+# Date and place of birth (field 3)
+
+- Field **`3.`** contains the **date of birth** and, beside it, the **place of birth** (example: `3. 24/10/1985 თბილისი / TBILISI`).
+- Always fill Place of birth from the text next to the date on the `3.` line (after removing the date).
+
+# Issue and expiry dates (fields 4a / 4b)
+
+- On **every** licence, absolutely:
+  - **`4a.`** = date of issue (გაცემის თარიღი)
+  - **`4b.`** = date of expiry / cancellation (გაუქმების თარიღი)
+- Always map `4a` → issue date and `4b` → expiry date. Do not swap them.
+
+# License number (field 5)
+
+- Georgian driver license number format is always **LLDDDDDDD**: 2 Latin letters + 7 digits (example: `AH7457231`).
+- It appears on the **front** under the photo, right after the label **`5.`**.
+- OCR and the License number field must only accept this pattern; do not treat personal numbers, categories, or other codes as the license number.
+
+# Holder signature (field 7)
+
+- The holder signature is **only** the handwritten stroke directly **below the license number** (field `5.`), labeled **`7.`** on Georgian licences.
+- Extract/crop that band precisely — do not use the face photo area or unrelated regions as the signature.
+
+# Category (field 9 / table cols 9–11)
+
+- On the **back**, the category table has columns **9** (codes), **10** and **11** (dates).
+- Fill the Category box with **only** the codes in column 9 that have a date in column 10 and/or 11 (example: B and C with `01.11.06` → `B C`).
+- Ignore empty category rows (A, D, BE, … with no dates).
+- Do not dump every label from the grid.
