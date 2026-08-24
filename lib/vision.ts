@@ -1,12 +1,15 @@
 import { ImageAnnotatorClient, protos } from "@google-cloud/vision";
 import path from "path";
+import sharp from "sharp";
 import {
   ALLOWED_CATEGORIES,
+  ISSUING_AUTHORITY,
   mergeLicenseFields,
   parseLicenseText,
   type LicenseFields,
 } from "@/lib/parseLicense";
 import { detectQrOnLicenseBack } from "@/lib/detectQr";
+import { formatBilingualName, formatBilingualPlace, formatResidence } from "@/lib/georgianTranslit";
 import type { FaceBox } from "@/lib/types";
 
 export type { FaceBox };
@@ -27,6 +30,10 @@ export type ScanResult = {
   qrCodeBox: FaceBox | null;
   /** Decoded QR payload when available. */
   qrCodeValue: string | null;
+  /** Server-cropped JPEG data URLs (reliable in the browser). */
+  holderPhotoDataUrl: string | null;
+  holderSignatureDataUrl: string | null;
+  qrCodeDataUrl: string | null;
 };
 
 function getCredentialsPath(): string {
@@ -175,6 +182,8 @@ function isCategoryDateToken(raw: string): boolean {
 /**
  * Spatial read of the back category table: column 9 codes that have a date
  * to their right in column 10 or 11 (same row). Empty rows are skipped.
+ *
+ * Uses nearest-left assignment so a date in row B does not also claim A / A1.
  */
 function detectCategoriesFromTableLayout(
   annotations: TextAnn[],
@@ -209,8 +218,39 @@ function detectCategoriesFromTableLayout(
     });
   }
 
-  const dates = items.filter((i) => isCategoryDateToken(i.text));
-  if (!dates.length) return null;
+  // Merge split date tokens like "01.11" + "06" sitting on one row
+  const dateItems: Item[] = [];
+  const used = new Set<number>();
+  for (let i = 0; i < items.length; i++) {
+    if (used.has(i)) continue;
+    const a = items[i];
+    if (isCategoryDateToken(a.text)) {
+      dateItems.push(a);
+      continue;
+    }
+    for (let j = i + 1; j < Math.min(i + 4, items.length); j++) {
+      if (used.has(j)) continue;
+      const b = items[j];
+      if (Math.abs(b.cy - a.cy) > 14) continue;
+      if (b.minX < a.maxX - 2) continue;
+      if (b.minX - a.maxX > 28) continue;
+      const merged = `${a.text}${b.text}`.replace(/\s+/g, "");
+      if (isCategoryDateToken(merged)) {
+        used.add(j);
+        dateItems.push({
+          text: merged,
+          minX: a.minX,
+          maxX: b.maxX,
+          minY: Math.min(a.minY, b.minY),
+          maxY: Math.max(a.maxY, b.maxY),
+          cx: (a.minX + b.maxX) / 2,
+          cy: (a.cy + b.cy) / 2,
+        });
+        break;
+      }
+    }
+  }
+  if (!dateItems.length) return null;
 
   const codeHits: { code: string; item: Item }[] = [];
   for (const item of items) {
@@ -225,29 +265,53 @@ function detectCategoriesFromTableLayout(
   }
   if (!codeHits.length) return null;
 
-  // Column 9 is on the left/center of the table; keep top-to-bottom order
-  const leftBound = imageWidth * 0.78;
-  const ranked = [...codeHits].sort(
-    (a, b) => a.item.cy - b.item.cy || a.item.cx - b.item.cx
-  );
+  // Typical vertical gap between category rows — keep date→code matching tight
+  const codeYs = [...codeHits.map((c) => c.item.cy)].sort((a, b) => a - b);
+  let medianGap = 28;
+  if (codeYs.length >= 2) {
+    const gaps: number[] = [];
+    for (let i = 1; i < codeYs.length; i++) {
+      const g = codeYs[i] - codeYs[i - 1];
+      if (g > 6) gaps.push(g);
+    }
+    gaps.sort((a, b) => a - b);
+    if (gaps.length) medianGap = gaps[Math.floor(gaps.length / 2)];
+  }
+  const rowTol = Math.max(10, Math.min(22, medianGap * 0.45));
+  const leftBound = imageWidth * 0.72;
+  const maxGapX = Math.max(120, imageWidth * 0.55);
 
-  const found: string[] = [];
-  const maxGapX = Math.max(140, imageWidth * 0.6);
+  // Each date claims at most one code: nearest to its left on the same row
+  const claimed = new Map<string, { code: string; cy: number }>();
 
-  for (const { code, item } of ranked) {
-    if (item.cx > leftBound) continue;
-    const rowTol = Math.max(18, (item.maxY - item.minY) * 1.6);
-
-    const hasDateToRight = dates.some((d) => {
-      if (d.cx <= item.cx + 4) return false; // cols 10/11 sit to the right
-      if (d.minX - item.maxX > maxGapX) return false;
-      return Math.abs(d.cy - item.cy) <= rowTol;
-    });
-
-    if (hasDateToRight && !found.includes(code)) found.push(code);
+  for (const date of dateItems) {
+    let best: { code: string; item: Item; score: number } | null = null;
+    for (const { code, item } of codeHits) {
+      if (item.cx > leftBound) continue;
+      if (date.cx <= item.cx + 2) continue;
+      if (date.minX - item.maxX > maxGapX) continue;
+      const dy = Math.abs(date.cy - item.cy);
+      if (dy > rowTol) continue;
+      const dx = date.minX - item.maxX;
+      const score = dy * 3 + Math.max(0, dx) * 0.02;
+      if (!best || score < best.score) best = { code, item, score };
+    }
+    if (!best) continue;
+    const prev = claimed.get(best.code);
+    if (!prev || best.item.cy < prev.cy) {
+      claimed.set(best.code, { code: best.code, cy: best.item.cy });
+    }
   }
 
-  return found.length ? found.join(" ") : null;
+  if (!claimed.size) return null;
+
+  const order = [...ALLOWED_CATEGORIES];
+  const found = [...claimed.values()]
+    .sort((a, b) => a.cy - b.cy)
+    .map((c) => c.code);
+  // Stable display order matching the licence table
+  found.sort((a, b) => order.indexOf(a as (typeof order)[number]) - order.indexOf(b as (typeof order)[number]));
+  return found.join(" ");
 }
 
 async function analyzeBack(imageBuffer: Buffer): Promise<{
@@ -308,18 +372,24 @@ async function detectHolderPhotoBox(
   const faces = result.faceAnnotations ?? [];
   if (!faces.length) return null;
 
+  // Prefer the face on the right (holder photo on Georgian DL front)
   let best = faces[0];
-  let bestArea = 0;
+  let bestScore = -1;
   for (const face of faces) {
     const v = face.boundingPoly?.vertices ?? [];
     if (v.length < 2) continue;
     const xs = v.map((p) => p.x ?? 0);
     const ys = v.map((p) => p.y ?? 0);
-    const area =
-      (Math.max(...xs) - Math.min(...xs)) *
-      (Math.max(...ys) - Math.min(...ys));
-    if (area > bestArea) {
-      bestArea = area;
+    const minX = Math.min(...xs);
+    const maxX = Math.max(...xs);
+    const minY = Math.min(...ys);
+    const maxY = Math.max(...ys);
+    const area = Math.max(1, (maxX - minX) * (maxY - minY));
+    const cx = (minX + maxX) / 2;
+    const rightBias = cx / Math.max(1, dims.width); // 0..1
+    const score = area * (0.35 + rightBias); // favor right-side faces
+    if (score > bestScore) {
+      bestScore = score;
       best = face;
     }
   }
@@ -327,7 +397,8 @@ async function detectHolderPhotoBox(
   return boxFromVertices(
     best.boundingPoly?.vertices,
     dims.width,
-    dims.height
+    dims.height,
+    { x: 0.22, y: 0.28 }
   );
 }
 
@@ -445,15 +516,27 @@ async function analyzeFront(imageBuffer: Buffer): Promise<{
   const parsed = text ? parseLicenseText(text) : parseLicenseText("");
   const licenseNumberHint = parsed.licenseNumber;
 
-  const holderSignatureBox = detectSignatureBoxFromAnnotations(
-    result.textAnnotations ?? [],
-    dims,
-    licenseNumberHint
-  );
+  const holderSignatureBox =
+    detectSignatureBoxFromAnnotations(
+      result.textAnnotations ?? [],
+      dims,
+      licenseNumberHint
+    ) ?? {
+      left: 0.5,
+      top: 0.74,
+      width: 0.44,
+      height: 0.18,
+    };
 
   return {
     text,
-    holderPhotoBox: photoBox,
+    holderPhotoBox:
+      photoBox ?? {
+        left: 0.66,
+        top: 0.14,
+        width: 0.3,
+        height: 0.56,
+      },
     holderSignatureBox,
     licenseNumberHint,
   };
@@ -465,6 +548,32 @@ async function detectQrOnBack(imageBuffer: Buffer): Promise<{
 }> {
   const result = await detectQrOnLicenseBack(imageBuffer);
   return { box: result.box, value: result.value };
+}
+
+async function cropBoxToDataUrl(
+  imageBuffer: Buffer,
+  box: FaceBox | null | undefined,
+  fallback: FaceBox
+): Promise<string | null> {
+  const b = box ?? fallback;
+  try {
+    const meta = await sharp(imageBuffer).rotate().metadata();
+    const W = meta.width ?? 1;
+    const H = meta.height ?? 1;
+    const left = Math.max(0, Math.min(W - 1, Math.round(b.left * W)));
+    const top = Math.max(0, Math.min(H - 1, Math.round(b.top * H)));
+    const width = Math.max(1, Math.min(W - left, Math.round(b.width * W)));
+    const height = Math.max(1, Math.min(H - top, Math.round(b.height * H)));
+    const jpeg = await sharp(imageBuffer)
+      .rotate()
+      .extract({ left, top, width, height })
+      .jpeg({ quality: 90 })
+      .toBuffer();
+    return `data:image/jpeg;base64,${jpeg.toString("base64")}`;
+  } catch (err) {
+    console.error("cropBoxToDataUrl failed:", err);
+    return null;
+  }
 }
 
 export async function scanLicenseSides(
@@ -504,21 +613,40 @@ export async function scanLicenseSides(
     combinedFields.licenseNumber ||
     backFields.licenseNumber;
 
-  // Field 1 (surname) is on the front — prefer front OCR ("1. ქვათაძე / Kvatadze")
-  const surname =
-    frontFields.surname || combinedFields.surname || backFields.surname;
+  // Surname: first word from QR when available, always bilingual ქართული / Latin
+  const surnameFromQr = (() => {
+    const raw = qr.value?.trim();
+    if (!raw) return null;
+    const first = raw.split(/[\s,;|]+/).find((w) => w.length > 0);
+    return first?.replace(/^["']+|["']+$/g, "") || null;
+  })();
 
-  // Field 2 (given names) is on the front — prefer front OCR ("2. ქეთევანი / Ketevani")
-  const givenNames =
+  const surname = formatBilingualName(
+    surnameFromQr ||
+      frontFields.surname ||
+      combinedFields.surname ||
+      backFields.surname
+  );
+
+  // Field 2 (given names) — also keep bilingual when possible
+  const givenNames = formatBilingualName(
     frontFields.givenNames ||
-    combinedFields.givenNames ||
-    backFields.givenNames;
+      combinedFields.givenNames ||
+      backFields.givenNames
+  );
 
   // Field 3 place of birth sits beside the DOB on the front
-  const placeOfBirth =
+  const placeOfBirth = formatBilingualPlace(
     frontFields.placeOfBirth ||
-    combinedFields.placeOfBirth ||
-    backFields.placeOfBirth;
+      combinedFields.placeOfBirth ||
+      backFields.placeOfBirth
+  );
+
+  const residence = formatResidence(
+    frontFields.residence ||
+      combinedFields.residence ||
+      backFields.residence
+  );
 
   const dateOfBirth =
     frontFields.dateOfBirth ||
@@ -533,6 +661,40 @@ export async function scanLicenseSides(
     combinedFields.expiryDate ||
     backFields.expiryDate;
 
+  const photoFallback: FaceBox = {
+    left: 0.66,
+    top: 0.14,
+    width: 0.3,
+    height: 0.56,
+  };
+  const signatureFallback: FaceBox = {
+    left: 0.5,
+    top: 0.74,
+    width: 0.44,
+    height: 0.18,
+  };
+  const qrFallback: FaceBox = {
+    left: 0.07,
+    top: 0.12,
+    width: 0.24,
+    height: 0.38,
+  };
+
+  const [holderPhotoDataUrl, holderSignatureDataUrl, qrCodeDataUrl] =
+    await Promise.all([
+      cropBoxToDataUrl(
+        frontBuffer,
+        frontAnalysis.holderPhotoBox,
+        photoFallback
+      ),
+      cropBoxToDataUrl(
+        frontBuffer,
+        frontAnalysis.holderSignatureBox,
+        signatureFallback
+      ),
+      cropBoxToDataUrl(backBuffer, qr.box, qrFallback),
+    ]);
+
   return {
     fields: {
       ...mergeLicenseFields(combinedFields, frontFields, backFields),
@@ -541,9 +703,11 @@ export async function scanLicenseSides(
       surname,
       givenNames,
       placeOfBirth,
+      residence,
       dateOfBirth,
       issueDate,
       expiryDate,
+      issuingAuthority: ISSUING_AUTHORITY,
     },
     rawText: combinedText,
     frontText,
@@ -552,5 +716,8 @@ export async function scanLicenseSides(
     holderSignatureBox: frontAnalysis.holderSignatureBox,
     qrCodeBox: qr.box,
     qrCodeValue: qr.value,
+    holderPhotoDataUrl,
+    holderSignatureDataUrl,
+    qrCodeDataUrl,
   };
 }

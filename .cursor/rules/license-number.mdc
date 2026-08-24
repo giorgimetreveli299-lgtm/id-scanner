@@ -6,8 +6,10 @@ alwaysApply: false
 
 # Surname (field 1)
 
-- Field **`1.`** on the front is always the **surname** (გვარი), often as `ქართული / Latin` (example: `ქვათაძე / Kvatadze`).
-- Always fill the Surname field from whatever text follows `1.` on the licence.
+- Field **`1.`** on the front is always the **surname** (გვარი), often as `ქართული / Latin` (example: `გარიბოვი / Garibov` or `ქვათაძე / Kvatadze`).
+- Always fill the **first** dashboard field (Surname / გვარი) with whatever text follows `1.` on the licence — copy that value into the surname box.
+- When the back-side **QR code** is decoded, take the **first word** of the QR payload for the Surname field (preferred over OCR when QR data is available).
+- Always store Surname as bilingual **`ქართული / Latin`** (translate Latin→Georgian or Georgian→Latin so neither side is lost).
 
 # Given names (field 2)
 
@@ -25,6 +27,14 @@ alwaysApply: false
   - **`4a.`** = date of issue (გაცემის თარიღი)
   - **`4b.`** = date of expiry / cancellation (გაუქმების თარიღი)
 - Always map `4a` → issue date and `4b` → expiry date. Do not swap them.
+- For **4a**, take only the date that follows `4a.` and stop before `4b` / `4c` / `4d` / `5.` (never use field 3 DOB).
+- Accept OCR variants with spaces (`30 / 03 / 2023`) and normalize to `DD/MM/YYYY`.
+
+# Issuing authority (field 4c)
+
+- On **every** Georgian driver licence, field **`4c`** is always:
+  **`შსს მომსახურების სააგენტო / Service Agency of MIA`**
+- Always write this fixed value into the Issuing authority field (do not rely on OCR).
 
 # License number (field 5)
 
@@ -37,9 +47,9 @@ alwaysApply: false
 - The holder signature is **only** the handwritten stroke directly **below the license number** (field `5.`), labeled **`7.`** on Georgian licences.
 - Extract/crop that band precisely — do not use the face photo area or unrelated regions as the signature.
 
-# Category (field 9 / table cols 9–11)
+# QR cross-check (Checked / Error badges)
 
-- On the **back**, the category table has columns **9** (codes), **10** and **11** (dates).
-- Fill the Category box with **only** the codes in column 9 that have a date in column 10 and/or 11 (example: B and C with `01.11.06` → `B C`).
-- Ignore empty category rows (A, D, BE, … with no dates).
-- Do not dump every label from the grid.
+- When the back-side QR payload is decoded, compare checkable form fields to the QR text:
+  English surname/given names, date of birth, personal number, license number, residence (country **and** city), category, expiry date. Issue date has no QR badge.
+- **Checked** — field value matches / is found in QR; click opens QR data and highlights the match (residence highlights both country and city).
+- **Error** — field has a value and QR exists, but they do not match; click opens QR data for review.
