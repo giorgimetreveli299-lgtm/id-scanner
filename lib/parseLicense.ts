@@ -12,6 +12,10 @@ export type LicenseFields = {
   category: string | null;
 };
 
+/** Fixed on every Georgian driver license (field 4c). */
+export const ISSUING_AUTHORITY =
+  "შსს მომსახურების სააგენტო / Service Agency of MIA";
+
 const EMPTY: LicenseFields = {
   surname: null,
   givenNames: null,
@@ -90,8 +94,60 @@ const DATE_RE =
 const CAT_DATE_RE =
   /(\d{2}[./-]\d{2}[./-](?:\d{4}|\d{2})|\d{4}[./-]\d{2}[./-]\d{2})/;
 
+/**
+ * Flexible date for fields 4a/4b — OCR often inserts spaces: `30 / 03 / 2023`.
+ * Also accepts 2-digit years.
+ */
+const FLEX_DATE_RE =
+  /(\d{1,2})\s*[./\-]\s*(\d{1,2})\s*[./\-]\s*(\d{4}|\d{2})|(\d{4})\s*[./\-]\s*(\d{1,2})\s*[./\-]\s*(\d{1,2})/;
+
 function normalize(text: string): string {
   return text.replace(/\r/g, "\n").replace(/[ \t]+/g, " ").trim();
+}
+
+/** Turn a flexible OCR date into `DD/MM/YYYY` (or null if invalid). */
+function normalizeFlexDate(raw: string | null | undefined): string | null {
+  if (!raw) return null;
+  const s = raw.trim();
+  if (!s) return null;
+  const m = s.match(FLEX_DATE_RE);
+  if (!m) return null;
+
+  let day: number;
+  let month: number;
+  let year: number;
+
+  if (m[1] != null) {
+    day = parseInt(m[1], 10);
+    month = parseInt(m[2], 10);
+    year = parseInt(m[3], 10);
+    if (m[3].length === 2) {
+      year += year >= 70 ? 1900 : 2000;
+    }
+  } else {
+    year = parseInt(m[4], 10);
+    month = parseInt(m[5], 10);
+    day = parseInt(m[6], 10);
+  }
+
+  if (month < 1 || month > 12 || day < 1 || day > 31) return null;
+  if (year < 1970 || year > 2100) return null;
+
+  const dd = String(day).padStart(2, "0");
+  const mm = String(month).padStart(2, "0");
+  return `${dd}/${mm}/${year}`;
+}
+
+function firstFlexDate(fragment: string): string | null {
+  if (!fragment) return null;
+  // Prefer the first plausible date token in the fragment
+  const re = new RegExp(FLEX_DATE_RE.source, "g");
+  let m: RegExpExecArray | null;
+  while ((m = re.exec(fragment)) !== null) {
+    const hit = normalizeFlexDate(m[0]);
+    if (hit) return hit;
+  }
+  return null;
 }
 
 function lineValue(lines: string[], patterns: RegExp[]): string | null {
@@ -116,10 +172,11 @@ function findDateNear(lines: string[], patterns: RegExp[]): string | null {
     const line = lines[i];
     for (const pattern of patterns) {
       if (pattern.test(line)) {
-        const inLine = line.match(DATE_RE);
-        if (inLine) return inLine[1];
-        const next = lines[i + 1]?.match(DATE_RE);
-        if (next) return next[1];
+        const inLine = firstFlexDate(line) || line.match(DATE_RE)?.[1];
+        if (inLine) return normalizeFlexDate(inLine) || inLine;
+        const nextRaw = lines[i + 1] ?? "";
+        const next = firstFlexDate(nextRaw) || nextRaw.match(DATE_RE)?.[1];
+        if (next) return normalizeFlexDate(next) || next;
       }
     }
   }
@@ -241,51 +298,46 @@ function findDatedCategoriesFromGrid(
 
   for (let i = 0; i < scopeLines.length; i++) {
     const line = scopeLines[i];
-    const prev = scopeLines[i - 1] ?? "";
     const next = scopeLines[i + 1] ?? "";
     const next2 = scopeLines[i + 2] ?? "";
     const codesHere = collectCategoryCodes(line);
 
-    // Row OCR: "B 01.11.06 06.08.33"
+    // Strong signal: code(s) + date on the same OCR line — "B 01.11.06 06.08.33"
     if (codesHere.length && lineHasCategoryDate(line)) {
-      add(codesHere);
-      continue;
-    }
-
-    // Code row, then col 10 / 11 dates on the next line(s)
-    if (codesHere.length === 1 && !lineHasCategoryDate(line)) {
-      if (isDateOnlyLine(next) || (isDateOnlyLine(next2) && isDateOnlyLine(next))) {
-        add(codesHere);
+      // Prefer a single code on a dated row (multi-code same line is rare noise)
+      if (codesHere.length === 1) add(codesHere);
+      else {
+        // "B 01.11.06 C 01.11.06" style — take each code that sits near a date token
+        const parts = line.split(/\s+/);
+        for (let p = 0; p < parts.length; p++) {
+          const codes = collectCategoryCodes(parts[p]);
+          if (codes.length !== 1) continue;
+          const window = parts.slice(p, p + 4).join(" ");
+          if (lineHasCategoryDate(window)) add(codes);
+        }
       }
       continue;
     }
 
-    // Date-only cell: belongs to the category code on the line above
-    if (isDateOnlyLine(line)) {
-      const prevCodes = collectCategoryCodes(prev);
-      if (prevCodes.length === 1) add(prevCodes);
+    // Code alone, then one or two date-only lines (cols 10 / 11)
+    if (codesHere.length === 1 && !lineHasCategoryDate(line)) {
+      if (isDateOnlyLine(next)) {
+        add(codesHere);
+      } else if (isDateOnlyLine(next2) && isDateOnlyLine(next)) {
+        add(codesHere);
+      }
     }
   }
 
-  // Whole-text pairs when OCR mixes columns on one stream
-  if (!datedCodes.length) {
-    const codesAlt = ALLOWED_CATEGORIES.join("|");
-    const datePart =
-      "\\d{2}[./-]\\d{2}[./-](?:\\d{4}|\\d{2})|\\d{4}[./-]\\d{2}[./-]\\d{2}";
-    const pairRe = new RegExp(
-      `(?:(?:^|[^A-Z0-9])(${codesAlt})(?=[^A-Z0-9]|$)[^\\n]{0,32}?(?:${datePart}))` +
-        `|(?:(?:${datePart})[^\\n]{0,32}?(?:^|[^A-Z0-9])(${codesAlt})(?=[^A-Z0-9]|$))`,
-      "gi"
-    );
-    let m: RegExpExecArray | null;
-    const upper = text.toUpperCase();
-    while ((m = pairRe.exec(upper)) !== null) {
-      const code = (m[1] || m[2] || "").toUpperCase();
-      if (code) add([code]);
-    }
-  }
+  if (!datedCodes.length) return null;
 
-  return datedCodes.length ? datedCodes.join(" ") : null;
+  const order = [...ALLOWED_CATEGORIES];
+  datedCodes.sort(
+    (a, b) =>
+      order.indexOf(a as (typeof order)[number]) -
+      order.indexOf(b as (typeof order)[number])
+  );
+  return datedCodes.join(" ");
 }
 
 /** Optional fallback: short list like "9. B C" when the date grid is unreadable. */
@@ -294,16 +346,23 @@ function findExplicitField9List(text: string, lines: string[]): string | null {
     const cleaned = chunk
       .replace(/^(?:კატეგორი(?:ა|ები)?|Categor(?:y|ies)?)\s*[:：]?\s*/i, "")
       .trim();
+    // Must not look like the full empty grid dump
+    if (CAT_DATE_RE.test(cleaned)) return null;
     const codes = collectCategoryCodes(cleaned);
-    if (codes.length >= 1 && codes.length <= 6) return codes.join(" ");
-    return null;
+    if (codes.length < 1 || codes.length > 4) return null;
+    // Reject obvious table-label sweeps (AM A1 A B1 …)
+    const tableLike =
+      codes.includes("AM") &&
+      codes.includes("A1") &&
+      (codes.includes("A") || codes.includes("B1"));
+    if (tableLike) return null;
+    return codes.join(" ");
   };
 
   const sameLine = text.match(
     /(?:^|\n)\s*9[\.\)]?\s+([A-Za-z0-9][^\n]*?)(?=\n\s*(?:\d+[a-d]?[\.\)]|[^\n]|$)|$)/i
   );
   if (sameLine?.[1] && !CAT_DATE_RE.test(sameLine[1])) {
-    // Only treat as short list when the line is codes, not a table header dump
     const hit = fromChunk(sameLine[1]);
     if (hit) return hit;
   }
@@ -313,17 +372,6 @@ function findExplicitField9List(text: string, lines: string[]): string | null {
     if (/^9[\.\)]?\s+[A-Za-z]/.test(line) && !lineHasCategoryDate(line)) {
       const hit = fromChunk(line.replace(/^9[\.\)]?\s*/, ""));
       if (hit) return hit;
-    }
-    if (/^9[\.\)]?\s*$/.test(line)) {
-      const next = lines[i + 1]?.trim() ?? "";
-      if (
-        next &&
-        !lineHasCategoryDate(next) &&
-        !/^(?:1[0-9]|[1-8])[\.\)]\s/i.test(next)
-      ) {
-        const hit = fromChunk(next);
-        if (hit) return hit;
-      }
     }
   }
 
@@ -420,41 +468,89 @@ export function sanitizePlaceOfBirth(value: string | null): string | null {
   return v;
 }
 
+/**
+ * Field **1.** = surname (გვარი). Take only the text after `1.` and before `2.`
+ * (example: `1. გარიბოვი / Garibov` → `გარიბოვი / Garibov`).
+ */
 function findSurnameFromField1(text: string, lines: string[]): string | null {
   const clean = (raw: string) =>
     raw
+      .replace(/^[Il1|!][\.\),:]?\s*/i, "")
       .replace(/^1[\.\),:]?\s*/i, "")
       .replace(/^(გვარი|surname|family\s*name)\s*[:：]?\s*/i, "")
+      // Hard stop if a later field leaked into the same chunk
+      .replace(/\s+[2-9][a-d]?[\.\)][\s\S]*$/i, "")
+      .replace(/\s*\/\s*/g, " / ")
       .replace(/\s+/g, " ")
       .trim();
 
-  // Primary: full value on the same line as "1." (space optional)
+  const accept = (raw: string | null | undefined): string | null => {
+    if (!raw) return null;
+    const v = clean(raw);
+    if (!v || v.length < 2) return null;
+    if (/^[2-9][a-d]?[\.\)]?\s*$/i.test(v)) return null;
+    if (/^(გვარი|surname)$/i.test(v)) return null;
+    if (!/[\u10A0-\u10FFA-Za-z]/.test(v)) return null;
+    // Still contains another field marker → too greedy
+    if (/\b[2-9][a-d]?[\.\)]/i.test(v)) return null;
+    return v;
+  };
+
+  // Same line or run-on OCR: stop at "2." even without a newline
   const sameLine = text.match(
-    /(?:^|\n)\s*1[\.\),:]?\s*([^\n]+?)(?=\n\s*2[\.\)]|\n\s*$|$)/
+    /(?:^|\n)\s*1[\.\),:]\s*(.+?)(?=\s+2[\.\),:]|$)/
   );
   if (sameLine?.[1]) {
-    const v = clean(sameLine[1]);
-    if (v && isNameLike(v)) return v;
+    const hit = accept(sameLine[1]);
+    if (hit) return hit;
+  }
+
+  // Bilingual right after 1.
+  const bilingual = text.match(
+    /(?:^|\n)\s*1[\.\),:]?\s*([\u10A0-\u10FF][\u10A0-\u10FF\s\-']{1,40}?)\s*\/\s*([A-Za-z][A-Za-z\s\-']{1,40}?)(?=\s*2[\.\),:]|\s*\n|$)/u
+  );
+  if (bilingual) {
+    const hit = accept(`${bilingual[1]} / ${bilingual[2]}`);
+    if (hit) return hit;
   }
 
   for (let i = 0; i < lines.length; i++) {
     const line = lines[i];
-    if (/^1[\.\),:]?\s*\S/.test(line)) {
-      const v = clean(line);
-      if (v && isNameLike(v)) return v;
+    if (/^1[\.\),:]?\s*\S/.test(line) || /^[Il|][\.\)]\s*\S/.test(line)) {
+      // Cut at inline "2." if OCR glued fields on one line
+      const cut = line.split(/\s+(?=2[\.\),:])/)[0] ?? line;
+      const hit = accept(cut);
+      if (hit) {
+        const next = lines[i + 1]?.trim() ?? "";
+        if (
+          !hit.includes("/") &&
+          next &&
+          !/^2[\.\)]/.test(next) &&
+          /^\/?\s*[A-Za-z]/.test(next)
+        ) {
+          const latin = accept(next.replace(/^\//, ""));
+          if (latin) return `${hit} / ${latin}`;
+        }
+        return hit;
+      }
     }
-    if (/^1[\.\),:]?\s*$/.test(line)) {
-      const next = lines[i + 1]?.trim() ?? "";
-      if (next && !/^2[\.\)]/.test(next) && isNameLike(clean(next))) {
-        return clean(next);
+    if (/^1[\.\),:]?\s*$/.test(line) || /^[Il|][\.\)]\s*$/.test(line)) {
+      const parts: string[] = [];
+      for (let j = 1; j <= 3 && i + j < lines.length; j++) {
+        const next = lines[i + j]?.trim() ?? "";
+        if (/^2[\.\)]/.test(next) || /^[3-9][a-d]?[\.\)]/i.test(next)) break;
+        if (/^[\/|]+$/.test(next)) continue;
+        const piece = accept(next);
+        if (piece) parts.push(piece);
+      }
+      if (parts.length) {
+        return parts.join(" / ").replace(/\s*\/\s*\/\s*/g, " / ");
       }
     }
   }
 
   const labeled = lineValue(lines, [/გვარი/i, /surname/i, /family\s*name/i]);
-  if (!labeled) return null;
-  const v = clean(labeled);
-  return v && isNameLike(v) ? v : null;
+  return labeled ? accept(labeled) : null;
 }
 
 function isNameLike(value: string): boolean {
@@ -471,16 +567,26 @@ function findGivenNamesFromField2(text: string, lines: string[]): string | null 
     raw
       .replace(/^2[\.\),:]?\s*/i, "")
       .replace(/^(სახელი|given\s*names?|first\s*name|forename)\s*[:：]?\s*/i, "")
+      .replace(/\s+[3-9][a-d]?[\.\)][\s\S]*$/i, "")
+      .replace(/\s*\/\s*/g, " / ")
       .replace(/\s+/g, " ")
       .trim();
 
-  // Primary: value on the same line as "2." (space optional — OCR often glues it)
+  const accept = (raw: string | null | undefined): string | null => {
+    if (!raw) return null;
+    const v = clean(raw);
+    if (!v || !isNameLike(v)) return null;
+    if (/\b[3-9][a-d]?[\.\)]/i.test(v)) return null;
+    return v;
+  };
+
+  // Stop at "3." even when OCR glues fields on one line (2. may sit mid-string)
   const sameLine = text.match(
-    /(?:^|\n)\s*2[\.\),:]?\s*([^\n]+?)(?=\n\s*3[\.\)]|\n\s*$|$)/
+    /(?:^|\n|\s)2[\.\),:]\s*(.+?)(?=\s+3[\.\),:]|\s+4[a-d]?[\.\),:]|$)/i
   );
   if (sameLine?.[1]) {
-    const v = clean(sameLine[1]);
-    if (v && isNameLike(v)) return v;
+    const hit = accept(sameLine[1]);
+    if (hit) return hit;
   }
 
   // "2. ქართული" then "/ Latin" or Latin on the next line
@@ -501,8 +607,9 @@ function findGivenNamesFromField2(text: string, lines: string[]): string | null 
       continue;
     }
 
-    const v = clean(line);
-    if (!v || !isNameLike(v)) continue;
+    const cut = line.split(/\s+(?=3[\.\),:])/)[0] ?? line;
+    const v = accept(cut);
+    if (!v) continue;
 
     const next = lines[i + 1]?.trim() ?? "";
     if (
@@ -526,8 +633,8 @@ function findGivenNamesFromField2(text: string, lines: string[]): string | null 
     /forename/i,
   ]);
   if (labeled) {
-    const v = clean(labeled);
-    if (v && isNameLike(v)) return v;
+    const v = accept(labeled);
+    if (v) return v;
   }
 
   // After field 1, take the next name-like line before field 3
@@ -539,15 +646,14 @@ function findGivenNamesFromField2(text: string, lines: string[]): string | null 
       const cand = lines[i + j];
       if (/^3[\.\)]/.test(cand)) break;
       if (/^2[\.\),:]?/.test(cand)) {
-        const v = clean(cand);
-        if (v && isNameLike(v)) return v;
+        const cut = cand.split(/\s+(?=3[\.\),:])/)[0] ?? cand;
+        const v = accept(cut);
+        if (v) return v;
         const next = lines[i + j + 1]?.trim() ?? "";
         if (next && isNameLike(clean(next))) return clean(next);
       }
       if (/^2[\.\),:]?/.test(cand)) continue;
-      // Unnumbered name line between 1 and 3
       if (isNameLike(cand) && !/^1[\.\)]/.test(cand)) {
-        // Avoid re-using surname line content if identical
         const surname = findSurnameFromField1(text, lines);
         const v = clean(cand);
         if (v && surname && v === surname) continue;
@@ -606,6 +712,70 @@ function findField3DateAndPlace(
   return { date: null, place: null };
 }
 
+/**
+ * Field **4a.** = date of issue (გაცემის თარიღი).
+ * Take only the date after `4a` and before `4b` / `4c` / `4d` / `5.`.
+ */
+function findIssueDateFromField4a(text: string, lines: string[]): string | null {
+  const stripLabels = (raw: string) =>
+    raw
+      .replace(/^4\s*[aA\u0430\u0410][\.\),:]?\s*/i, "")
+      .replace(/გაცემის\s*თარიღი/gi, " ")
+      .replace(/date\s*of\s*issue/gi, " ")
+      .replace(/issued\b/gi, " ")
+      .replace(/\s+/g, " ")
+      .trim();
+
+  // 1) Same line / run-on OCR: stop hard at 4b/4c/4d/5 so expiry never leaks in
+  // NOTE: require whitespace before `5.` so dates like `15.11.2020` are not cut at `5.`
+  const sameChunk = text.match(
+    /(?:^|\n)\s*4\s*[aA\u0430\u0410][\.\),:]?\s*([^\n]*?)(?=\s+4\s*[bB\u0432\u0412cC\u0441\u0421dD]|\s+5[\.\)]|$)/im
+  );
+  if (sameChunk?.[1]) {
+    const hit = firstFlexDate(stripLabels(sameChunk[1]));
+    if (hit) return hit;
+  }
+
+  // 2) Dedicated line containing 4a (date may be glued or on following lines)
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i];
+    if (!/4\s*[aA\u0430\u0410][\.\),:]?/i.test(line)) continue;
+    // Ignore pure 4b/4c/4d lines
+    if (/^4\s*[bB\u0432\u0412cC\u0441\u0421dD]/i.test(line.trim())) continue;
+
+    const cut =
+      line.split(/\s*(?=4\s*[bB\u0432\u0412cC\u0441\u0421dD]|5[\.\)])/i)[0] ?? line;
+    const fromLine = firstFlexDate(stripLabels(cut));
+    if (fromLine) return fromLine;
+
+    for (let j = 1; j <= 3 && i + j < lines.length; j++) {
+      const next = lines[i + j]?.trim() ?? "";
+      if (!next) continue;
+      if (/^4\s*[bB\u0432\u0412cC\u0441\u0421dD]/i.test(next)) break;
+      if (/^5[\.\)]/.test(next)) break;
+      if (/^[1-9][\.\)]\s/.test(next) && !/4\s*[aA\u0430\u0410]/i.test(next)) break;
+      const fromNext = firstFlexDate(stripLabels(next));
+      if (fromNext) return fromNext;
+    }
+  }
+
+  // 3) Georgian / English labels
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i];
+    if (!/გაცემის\s*თარიღი|date\s*of\s*issue/i.test(line)) continue;
+    const fromLine = firstFlexDate(stripLabels(line));
+    if (fromLine) return fromLine;
+    for (let j = 1; j <= 2 && i + j < lines.length; j++) {
+      const next = lines[i + j]?.trim() ?? "";
+      if (/^4\s*[bB\u0432\u0412]/i.test(next) || /გაუქმების|expiry/i.test(next)) break;
+      const fromNext = firstFlexDate(next);
+      if (fromNext) return fromNext;
+    }
+  }
+
+  return null;
+}
+
 function findDateFromFieldLabel(
   text: string,
   lines: string[],
@@ -617,21 +787,125 @@ function findDateFromFieldLabel(
       "im"
     )
   );
-  if (fromText?.[2]) return fromText[2];
+  if (fromText?.[2]) return normalizeFlexDate(fromText[2]) || fromText[2];
 
   for (let i = 0; i < lines.length; i++) {
     const line = lines[i];
     if (label.test(line)) {
-      const inLine = line.match(DATE_RE);
-      if (inLine) return inLine[1];
-      const next = lines[i + 1]?.match(DATE_RE);
-      if (next) return next[1];
+      // Prefer date that follows the label on this line (avoid DOB when glued)
+      const labelMatch = line.match(label);
+      if (labelMatch && labelMatch.index != null) {
+        const after = line.slice(labelMatch.index + labelMatch[0].length);
+        const fromAfter = firstFlexDate(after);
+        if (fromAfter) return fromAfter;
+      }
+      const inLine = firstFlexDate(line) || line.match(DATE_RE)?.[1];
+      if (inLine) return normalizeFlexDate(inLine) || inLine;
+      const nextRaw = lines[i + 1] ?? "";
+      const next = firstFlexDate(nextRaw) || nextRaw.match(DATE_RE)?.[1];
+      if (next) return normalizeFlexDate(next) || next;
     }
   }
   return null;
 }
 
 /** Parse OCR text from a Georgian / EU-style driving licence into structured fields. */
+/**
+ * Field **8.** = place of residence. Prefer value after `8.` before `9.`
+ * (example: `8. თბილისი / TBILISI`).
+ */
+function findResidenceFromField8(text: string, lines: string[]): string | null {
+  const clean = (raw: string) =>
+    raw
+      .replace(/^8[\.\),:]?\s*/i, "")
+      .replace(
+        /^(საცხოვრებელი\s*ადგილი|მისამართი|place\s*of\s*residence|permanent\s*address|address)\s*[:：]?\s*/i,
+        ""
+      )
+      .replace(/\s+9[\.\)][\s\S]*$/i, "")
+      .replace(/\s*\/\s*/g, " / ")
+      .replace(/\s+/g, " ")
+      .trim();
+
+  const accept = (raw: string | null | undefined): string | null => {
+    if (!raw) return null;
+    const v = clean(raw);
+    if (!v || v.length < 2) return null;
+    if (/^9[\.\)]?\s*$/i.test(v)) return null;
+    if (
+      /^(საცხოვრებელი\s*ადგილი|place\s*of\s*residence|address)$/i.test(v)
+    ) {
+      return null;
+    }
+    if (!/[\u10A0-\u10FFA-Za-z]/.test(v)) return null;
+    return v;
+  };
+
+  const sameLine = text.match(
+    /(?:^|\n)\s*8[\.\),:]\s*(.+?)(?=\s+9[\.\),:]|$)/i
+  );
+  if (sameLine?.[1]) {
+    const hit = accept(sameLine[1]);
+    if (hit) return hit;
+  }
+
+  const bilingual = text.match(
+    /(?:^|\n)\s*8[\.\),:]?\s*([\u10A0-\u10FF][\u10A0-\u10FF\s\-']{1,40}?)\s*\/\s*([A-Za-z][A-Za-z\s\-']{1,40}?)(?=\s*9[\.\),:]|\s*\n|$)/iu
+  );
+  if (bilingual) {
+    const hit = accept(`${bilingual[1]} / ${bilingual[2]}`);
+    if (hit) return hit;
+  }
+
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i];
+    if (/^8[\.\),:]?\s*\S/.test(line)) {
+      const cut = line.split(/\s+(?=9[\.\),:])/)[0] ?? line;
+      const hit = accept(cut);
+      if (hit) {
+        const next = lines[i + 1]?.trim() ?? "";
+        if (
+          !hit.includes("/") &&
+          next &&
+          !/^9[\.\)]/.test(next) &&
+          /^\/?\s*[A-Za-z]/.test(next)
+        ) {
+          const latin = accept(next.replace(/^\//, ""));
+          if (latin) return `${hit} / ${latin}`;
+        }
+        return hit;
+      }
+    }
+    if (/^8[\.\),:]?\s*$/.test(line)) {
+      const parts: string[] = [];
+      for (let j = 1; j <= 3 && i + j < lines.length; j++) {
+        const next = lines[i + j]?.trim() ?? "";
+        if (/^9[\.\)]/.test(next)) break;
+        if (/^[\/|]+$/.test(next)) continue;
+        if (
+          /^(საცხოვრებელი|place\s*of\s*residence|address)/i.test(next)
+        ) {
+          continue;
+        }
+        const piece = accept(next);
+        if (piece) parts.push(piece);
+      }
+      if (parts.length) {
+        return parts.join(" / ").replace(/\s*\/\s*\/\s*/g, " / ");
+      }
+    }
+  }
+
+  return (
+    lineValue(lines, [
+      /საცხოვრებელი\s*ადგილი/i,
+      /მისამართი/i,
+      /place\s*of\s*residence/i,
+      /permanent\s*address/i,
+    ]) || null
+  );
+}
+
 export function parseLicenseText(raw: string): LicenseFields {
   const text = normalize(raw);
   const lines = text
@@ -663,12 +937,16 @@ export function parseLicenseText(raw: string): LicenseFields {
 
   // On every licence: 4a = issue date, 4b = expiry date
   fields.issueDate =
+    findIssueDateFromField4a(text, lines) ||
     findDateFromFieldLabel(text, lines, /4a[\.\)]?/i) ||
     findDateNear(lines, [
       /გაცემის\s*თარიღი/i,
       /date\s*of\s*issue/i,
     ]) ||
     null;
+  if (fields.issueDate) {
+    fields.issueDate = normalizeFlexDate(fields.issueDate) || fields.issueDate;
+  }
 
   fields.expiryDate =
     findDateFromFieldLabel(text, lines, /4b[\.\)]?/i) ||
@@ -679,26 +957,12 @@ export function parseLicenseText(raw: string): LicenseFields {
     ]) ||
     null;
 
-  fields.issuingAuthority =
-    lineValue(lines, [
-      /^4c[\.\)]?\s/i,
-      /გამცემი\s*ორგანო/i,
-      /issuing\s*authority/i,
-      /issued\s*by/i,
-    ]) || null;
+  fields.issuingAuthority = ISSUING_AUTHORITY;
 
   fields.personalNumber = findPersonalNumber(text);
   fields.licenseNumber = findLicenseNumber(text, lines);
 
-  fields.residence =
-    lineValue(lines, [
-      /^8[\.\)]?\s/,
-      /საცხოვრებელი\s*ადგილი/i,
-      /მისამართი/i,
-      /place\s*of\s*residence/i,
-      /permanent\s*address/i,
-      /address/i,
-    ]) || null;
+  fields.residence = findResidenceFromField8(text, lines);
 
   fields.category = findCategoryAtField9(text, lines);
 

@@ -10,6 +10,7 @@
   "dependencies": {
     "@google-cloud/vision": "^4.3.2",
     "@zxing/library": "^0.23.0",
+    "jspdf": "^4.2.1",
     "jsqr": "^1.4.0",
     "next": "^15.1.0",
     "react": "^19.0.0",

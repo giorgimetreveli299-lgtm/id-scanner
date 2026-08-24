@@ -10,6 +10,14 @@ import {
 } from "@/lib/parseLicense";
 import type { FaceBox } from "@/lib/types";
 import CropStraightenModal from "@/components/CropStraightenModal";
+import { downloadLicensePdf } from "@/lib/buildLicensePdf";
+import {
+  formatBilingualName,
+  formatBilingualPlace,
+  formatResidence,
+  joinBilingualName,
+  splitBilingualName,
+} from "@/lib/georgianTranslit";
 
 type Side = "front" | "back";
 
@@ -24,6 +32,9 @@ type ScanResponse = {
   holderSignatureBox?: FaceBox | null;
   qrCodeBox?: FaceBox | null;
   qrCodeValue?: string | null;
+  holderPhotoDataUrl?: string | null;
+  holderSignatureDataUrl?: string | null;
+  qrCodeDataUrl?: string | null;
   error?: string;
 };
 
@@ -53,29 +64,51 @@ function cropFromImage(
   return new Promise((resolve) => {
     const img = new Image();
     img.onload = () => {
-      const sx = Math.round(box.left * img.naturalWidth);
-      const sy = Math.round(box.top * img.naturalHeight);
-      const sw = Math.max(1, Math.round(box.width * img.naturalWidth));
-      const sh = Math.max(1, Math.round(box.height * img.naturalHeight));
-      const canvas = document.createElement("canvas");
-      canvas.width = sw;
-      canvas.height = sh;
-      const ctx = canvas.getContext("2d");
-      if (!ctx) {
+      try {
+        const sx = Math.round(box.left * img.naturalWidth);
+        const sy = Math.round(box.top * img.naturalHeight);
+        const sw = Math.max(1, Math.round(box.width * img.naturalWidth));
+        const sh = Math.max(1, Math.round(box.height * img.naturalHeight));
+        const canvas = document.createElement("canvas");
+        canvas.width = sw;
+        canvas.height = sh;
+        const ctx = canvas.getContext("2d");
+        if (!ctx) {
+          resolve(null);
+          return;
+        }
+        ctx.drawImage(img, sx, sy, sw, sh, 0, 0, sw, sh);
+        resolve(canvas.toDataURL("image/jpeg", 0.9));
+      } catch {
         resolve(null);
-        return;
       }
-      ctx.drawImage(img, sx, sy, sw, sh, 0, 0, sw, sh);
-      resolve(canvas.toDataURL("image/jpeg", 0.9));
     };
     img.onerror = () => resolve(null);
     img.src = src;
   });
 }
 
+/** Crop from File so revoked preview blob URLs cannot break photo/signature. */
+async function cropFromFile(
+  file: File,
+  box: FaceBox
+): Promise<string | null> {
+  const url = URL.createObjectURL(file);
+  try {
+    return await cropFromImage(url, box);
+  } finally {
+    URL.revokeObjectURL(url);
+  }
+}
+
 /** Fallback only: zone under field 5 on the lower-right of a typical ID-1 front. */
 function signatureBoxFallback(): FaceBox {
-  return { left: 0.52, top: 0.78, width: 0.4, height: 0.14 };
+  return { left: 0.5, top: 0.74, width: 0.44, height: 0.18 };
+}
+
+/** Fallback: holder photo on the right of a Georgian DL front. */
+function photoBoxFallback(): FaceBox {
+  return { left: 0.66, top: 0.14, width: 0.3, height: 0.56 };
 }
 
 /** Fallback: white QR plate on left column of Georgian DL back. */
@@ -129,6 +162,7 @@ export default function HomePage() {
   const [lightbox, setLightbox] = useState<{ src: string; title: string } | null>(
     null
   );
+  const [pdfBusy, setPdfBusy] = useState(false);
 
   const frontInputRef = useRef<HTMLInputElement>(null);
   const backInputRef = useRef<HTMLInputElement>(null);
@@ -232,10 +266,16 @@ export default function HomePage() {
 
       void (async () => {
         setAutoCropping(side);
+        const controller = new AbortController();
+        const timer = window.setTimeout(() => controller.abort(), 14000);
         try {
           const body = new FormData();
           body.append("image", next);
-          const res = await fetch("/api/autocrop", { method: "POST", body });
+          const res = await fetch("/api/autocrop", {
+            method: "POST",
+            body,
+            signal: controller.signal,
+          });
           if (!res.ok) return;
           const blob = await res.blob();
           if (!blob.type.startsWith("image/")) return;
@@ -257,8 +297,9 @@ export default function HomePage() {
           if (side === "front") setFront(apply);
           else setBack(apply);
         } catch {
-          // Keep original if auto-crop fails
+          // Keep original if auto-crop fails / times out
         } finally {
+          window.clearTimeout(timer);
           setAutoCropping((current) => (current === side ? null : current));
         }
       })();
@@ -288,6 +329,56 @@ export default function HomePage() {
       setBack(clearer); // back cannot remain without front
     } else {
       setBack(clearer);
+    }
+  };
+
+  const newDriver = () => {
+    stopCamera();
+    setError(null);
+    setForm(EMPTY_FIELDS);
+    setScanned(false);
+    setHolderPhoto(null);
+    setHolderSignature(null);
+    setQrCodeImage(null);
+    setQrCodeValue(null);
+    scannedPairRef.current = null;
+    scanningRef.current = false;
+    setCropSide(null);
+    setLightbox(null);
+    setAutoCropping(null);
+    setPdfBusy(false);
+    setFront((prev) => {
+      revokePreview(prev.preview);
+      return EMPTY_SIDE;
+    });
+    setBack((prev) => {
+      revokePreview(prev.preview);
+      return EMPTY_SIDE;
+    });
+    if (frontInputRef.current) frontInputRef.current.value = "";
+    if (backInputRef.current) backInputRef.current.value = "";
+  };
+
+  const handleDownloadPdf = async () => {
+    if (!front.file || !back.file || pdfBusy) return;
+    setPdfBusy(true);
+    setError(null);
+    try {
+      const surnameSlug = (form.surname || "driver")
+        .split("/")[0]
+        .trim()
+        .replace(/[^\p{L}\p{N}]+/gu, "-")
+        .replace(/^-|-$/g, "")
+        .slice(0, 40);
+      await downloadLicensePdf({
+        front: front.file,
+        back: back.file,
+        fileName: `driver-license-${surnameSlug || "driver"}.pdf`,
+      });
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "PDF download failed.");
+    } finally {
+      setPdfBusy(false);
     }
   };
 
@@ -408,31 +499,35 @@ export default function HomePage() {
       if (data.fields) setForm(fieldsToForm(data.fields));
       setQrCodeValue(data.qrCodeValue ?? null);
 
-      if (front.preview) {
-        const photoBox = data.holderPhotoBox ?? null;
-        if (photoBox) {
-          setHolderPhoto(await cropFromImage(front.preview, photoBox));
-        } else {
-          setHolderPhoto(
-            await cropFromImage(front.preview, {
-              left: 0.68,
-              top: 0.18,
-              width: 0.26,
-              height: 0.52,
-            })
-          );
-        }
-
-        const signatureBox =
-          data.holderSignatureBox ?? signatureBoxFallback();
-        setHolderSignature(
-          await cropFromImage(front.preview, signatureBox)
+      // Prefer server-cropped images (browser crop often fails on revoked/HEIC blobs)
+      if (data.holderPhotoDataUrl) {
+        setHolderPhoto(data.holderPhotoDataUrl);
+      } else if (front.file) {
+        setHolderPhoto(
+          await cropFromFile(
+            front.file,
+            data.holderPhotoBox ?? photoBoxFallback()
+          )
         );
       }
 
-      if (back.preview) {
-        const qrBox = data.qrCodeBox ?? qrCodeBoxFallback();
-        setQrCodeImage(await cropFromImage(back.preview, qrBox));
+      if (data.holderSignatureDataUrl) {
+        setHolderSignature(data.holderSignatureDataUrl);
+      } else if (front.file) {
+        setHolderSignature(
+          await cropFromFile(
+            front.file,
+            data.holderSignatureBox ?? signatureBoxFallback()
+          )
+        );
+      }
+
+      if (data.qrCodeDataUrl) {
+        setQrCodeImage(data.qrCodeDataUrl);
+      } else if (back.file) {
+        setQrCodeImage(
+          await cropFromFile(back.file, data.qrCodeBox ?? qrCodeBoxFallback())
+        );
       }
 
       setScanned(true);
@@ -444,7 +539,7 @@ export default function HomePage() {
       scanningRef.current = false;
       setLoading(false);
     }
-  }, [front.file, front.preview, back.file, back.preview, pairKey]);
+  }, [front.file, back.file, pairKey]);
 
   useEffect(() => {
     if (!canExtract || !pairKey) return;
@@ -575,6 +670,73 @@ export default function HomePage() {
   const renderTextField = (field: DashboardField) => {
     const textKey = field.key as keyof LicenseFields;
     const title = fieldTitle(field);
+    const bilingualKeys: (keyof LicenseFields)[] = [
+      "surname",
+      "givenNames",
+      "placeOfBirth",
+      "residence",
+    ];
+
+    if (bilingualKeys.includes(textKey)) {
+      const raw = form[textKey];
+      const normalized =
+        textKey === "residence"
+          ? formatResidence(raw) || raw
+          : textKey === "placeOfBirth"
+            ? formatBilingualPlace(raw) || raw
+            : formatBilingualName(raw) || raw;
+      const { geo, latin } = splitBilingualName(normalized);
+      return (
+        <div className="field" key={`${field.code}-${field.key}`}>
+          <label htmlFor={`${textKey}-ka`}>
+            {field.code ? (
+              <span className="field-code">{field.code}</span>
+            ) : null}
+            <span className="field-title">
+              <span className="field-title-ka">{field.labelKa}</span>
+              <span className="field-title-en">{field.labelEn}</span>
+            </span>
+          </label>
+          <div className="field-split">
+            <input
+              id={`${textKey}-ka`}
+              value={geo}
+              maxLength={field.maxLength}
+              aria-label={`${title} (ქართული)`}
+              placeholder="—"
+              onChange={(e) => {
+                const nextGeo = e.target.value;
+                setForm((prev) => {
+                  const parts = splitBilingualName(prev[textKey]);
+                  return {
+                    ...prev,
+                    [textKey]: joinBilingualName(nextGeo, parts.latin),
+                  };
+                });
+              }}
+            />
+            <input
+              id={`${textKey}-en`}
+              value={latin}
+              maxLength={field.maxLength}
+              aria-label={`${title} (English)`}
+              placeholder="—"
+              onChange={(e) => {
+                const nextLatin = e.target.value;
+                setForm((prev) => {
+                  const parts = splitBilingualName(prev[textKey]);
+                  return {
+                    ...prev,
+                    [textKey]: joinBilingualName(parts.geo, nextLatin),
+                  };
+                });
+              }}
+            />
+          </div>
+        </div>
+      );
+    }
+
     return (
       <div className="field" key={`${field.code}-${field.key}`}>
         <label htmlFor={textKey}>
@@ -646,6 +808,7 @@ export default function HomePage() {
           {loading && !hasResult ? (
             <p className="empty">Reading text from both sides…</p>
           ) : (
+            <>
             <div className="fields">
               {(() => {
                 const nodes: ReactNode[] = [];
@@ -737,6 +900,27 @@ export default function HomePage() {
                 return nodes;
               })()}
             </div>
+
+            {hasResult ? (
+              <section className="footer-actions" aria-label="Session actions">
+                <button
+                  type="button"
+                  className="btn btn-xl btn-ghost"
+                  onClick={newDriver}
+                >
+                  New Driver
+                </button>
+                <button
+                  type="button"
+                  className="btn btn-xl btn-primary"
+                  disabled={!bothReady || pdfBusy || Boolean(autoCropping)}
+                  onClick={() => void handleDownloadPdf()}
+                >
+                  {pdfBusy ? "Preparing PDF…" : "Download PDF"}
+                </button>
+              </section>
+            ) : null}
+            </>
           )}
         </section>
       )}
