@@ -18,6 +18,12 @@ import {
   joinBilingualName,
   splitBilingualName,
 } from "@/lib/georgianTranslit";
+import {
+  findFieldInQr,
+  getQrCompareStatus,
+  isQrCheckableField,
+  type QrHighlight,
+} from "@/lib/qrCheck";
 
 type Side = "front" | "back";
 
@@ -163,6 +169,8 @@ export default function HomePage() {
     null
   );
   const [pdfBusy, setPdfBusy] = useState(false);
+  const [qrHighlight, setQrHighlight] = useState<QrHighlight[] | null>(null);
+  const [qrDetailsOpen, setQrDetailsOpen] = useState(false);
 
   const frontInputRef = useRef<HTMLInputElement>(null);
   const backInputRef = useRef<HTMLInputElement>(null);
@@ -171,6 +179,8 @@ export default function HomePage() {
   const streamRef = useRef<MediaStream | null>(null);
   const scannedPairRef = useRef<string | null>(null);
   const scanningRef = useRef(false);
+  const qrDetailsRef = useRef<HTMLDetailsElement>(null);
+  const qrHitRef = useRef<HTMLElement | null>(null);
 
   const bothReady = Boolean(front.file && back.file);
   const pairKey =
@@ -341,6 +351,8 @@ export default function HomePage() {
     setHolderSignature(null);
     setQrCodeImage(null);
     setQrCodeValue(null);
+    setQrHighlight(null);
+    setQrDetailsOpen(false);
     scannedPairRef.current = null;
     scanningRef.current = false;
     setCropSide(null);
@@ -487,6 +499,8 @@ export default function HomePage() {
     setHolderSignature(null);
     setQrCodeImage(null);
     setQrCodeValue(null);
+    setQrHighlight(null);
+    setQrDetailsOpen(false);
     try {
       const body = new FormData();
       body.append("front", front.file);
@@ -665,6 +679,94 @@ export default function HomePage() {
     );
   };
 
+  useEffect(() => {
+    if (!qrHighlight?.length || !qrDetailsOpen) return;
+    const t = window.setTimeout(() => {
+      qrHitRef.current?.scrollIntoView({
+        behavior: "smooth",
+        block: "center",
+      });
+    }, 60);
+    return () => window.clearTimeout(t);
+  }, [qrHighlight, qrDetailsOpen]);
+
+  const revealQrMatch = (fieldKey: string, value: string) => {
+    if (!qrCodeValue || !isQrCheckableField(fieldKey)) return;
+    const hits = findFieldInQr(qrCodeValue, fieldKey, value);
+    if (hits?.length) {
+      setQrHighlight(hits);
+    } else {
+      setQrHighlight(null);
+    }
+    setQrDetailsOpen(true);
+    const el = qrDetailsRef.current;
+    if (el && !el.open) el.open = true;
+  };
+
+  const renderQrCompareBadge = (fieldKey: string, value: string) => {
+    const status = getQrCompareStatus(qrCodeValue, fieldKey, value);
+    if (!status) return null;
+    if (status === "checked") {
+      return (
+        <button
+          type="button"
+          className="checked-badge"
+          title="ემთხვევა QR-ს — დააჭირე ადგილის სანახავად"
+          onClick={() => revealQrMatch(fieldKey, value)}
+        >
+          Checked
+        </button>
+      );
+    }
+    return (
+      <button
+        type="button"
+        className="error-badge"
+        title="არ ემთხვევა QR-ს — დააჭირე QR ინფორმაციის სანახავად"
+        onClick={() => revealQrMatch(fieldKey, value)}
+      >
+        Error
+      </button>
+    );
+  };
+
+  const renderHighlightedQr = (text: string) => {
+    if (!qrHighlight?.length) return text;
+    const ranges = [...qrHighlight]
+      .filter((h) => h.start >= 0 && h.end <= text.length && h.start < h.end)
+      .sort((a, b) => a.start - b.start);
+    if (!ranges.length) return text;
+
+    // Merge overlapping ranges
+    const merged: QrHighlight[] = [];
+    for (const r of ranges) {
+      const last = merged[merged.length - 1];
+      if (last && r.start <= last.end) {
+        last.end = Math.max(last.end, r.end);
+      } else {
+        merged.push({ ...r });
+      }
+    }
+
+    const nodes: ReactNode[] = [];
+    let cursor = 0;
+    merged.forEach((h, i) => {
+      if (h.start > cursor) nodes.push(text.slice(cursor, h.start));
+      nodes.push(
+        <mark
+          key={`qr-hit-${h.start}-${h.end}`}
+          ref={i === 0 ? qrHitRef : undefined}
+          className="qr-hit"
+        >
+          {text.slice(h.start, h.end)}
+        </mark>
+      );
+      cursor = h.end;
+    });
+    if (cursor < text.length) nodes.push(text.slice(cursor));
+    return <>{nodes}</>;
+  };
+
   const cropState = cropSide === "front" ? front : cropSide === "back" ? back : null;
 
   const renderTextField = (field: DashboardField) => {
@@ -686,6 +788,14 @@ export default function HomePage() {
             ? formatBilingualPlace(raw) || raw
             : formatBilingualName(raw) || raw;
       const { geo, latin } = splitBilingualName(normalized);
+      // Badge checks English side for bilingual fields (surname / names / residence)
+      const checkValue =
+        textKey === "surname" ||
+        textKey === "givenNames" ||
+        textKey === "residence"
+          ? latin || joinBilingualName(geo, latin)
+          : raw;
+      const enBadge = renderQrCompareBadge(textKey, checkValue);
       return (
         <div className="field" key={`${field.code}-${field.key}`}>
           <label htmlFor={`${textKey}-ka`}>
@@ -715,28 +825,32 @@ export default function HomePage() {
                 });
               }}
             />
-            <input
-              id={`${textKey}-en`}
-              value={latin}
-              maxLength={field.maxLength}
-              aria-label={`${title} (English)`}
-              placeholder="—"
-              onChange={(e) => {
-                const nextLatin = e.target.value;
-                setForm((prev) => {
-                  const parts = splitBilingualName(prev[textKey]);
-                  return {
-                    ...prev,
-                    [textKey]: joinBilingualName(parts.geo, nextLatin),
-                  };
-                });
-              }}
-            />
+            <div className={`input-with-badge${enBadge ? " has-badge" : ""}`}>
+              <input
+                id={`${textKey}-en`}
+                value={latin}
+                maxLength={field.maxLength}
+                aria-label={`${title} (English)`}
+                placeholder="—"
+                onChange={(e) => {
+                  const nextLatin = e.target.value;
+                  setForm((prev) => {
+                    const parts = splitBilingualName(prev[textKey]);
+                    return {
+                      ...prev,
+                      [textKey]: joinBilingualName(parts.geo, nextLatin),
+                    };
+                  });
+                }}
+              />
+              {enBadge}
+            </div>
           </div>
         </div>
       );
     }
 
+    const singleBadge = renderQrCompareBadge(textKey, form[textKey]);
     return (
       <div className="field" key={`${field.code}-${field.key}`}>
         <label htmlFor={textKey}>
@@ -748,23 +862,26 @@ export default function HomePage() {
             <span className="field-title-en">{field.labelEn}</span>
           </span>
         </label>
-        <input
-          id={textKey}
-          value={form[textKey]}
-          maxLength={field.maxLength}
-          aria-label={title}
-          onChange={(e) => {
-            let value = e.target.value;
-            if (textKey === "category") {
-              value = value.toUpperCase().replace(/\s+/g, " ");
-            }
-            setForm((prev) => ({
-              ...prev,
-              [textKey]: value,
-            }));
-          }}
-          placeholder="—"
-        />
+        <div className={`input-with-badge${singleBadge ? " has-badge" : ""}`}>
+          <input
+            id={textKey}
+            value={form[textKey]}
+            maxLength={field.maxLength}
+            aria-label={title}
+            onChange={(e) => {
+              let value = e.target.value;
+              if (textKey === "category") {
+                value = value.toUpperCase().replace(/\s+/g, " ");
+              }
+              setForm((prev) => ({
+                ...prev,
+                [textKey]: value,
+              }));
+            }}
+            placeholder="—"
+          />
+          {singleBadge}
+        </div>
       </div>
     );
   };
@@ -878,14 +995,26 @@ export default function HomePage() {
                             )}
                           </div>
                           {isQr ? (
-                            <details className="qr-details">
+                            <details
+                              ref={qrDetailsRef}
+                              className="qr-details"
+                              open={qrDetailsOpen || undefined}
+                              onToggle={(e) => {
+                                const open = (e.currentTarget as HTMLDetailsElement)
+                                  .open;
+                                setQrDetailsOpen(open);
+                                if (!open) setQrHighlight(null);
+                              }}
+                            >
                               <summary>
                                 {qrCodeValue
                                   ? "QR ინფორმაცია / QR data"
                                   : "ინფორმაცია არ წაიკითხა / No data"}
                               </summary>
                               <pre className="qr-payload">
-                                {qrCodeValue || "—"}
+                                {qrCodeValue
+                                  ? renderHighlightedQr(qrCodeValue)
+                                  : "—"}
                               </pre>
                             </details>
                           ) : null}

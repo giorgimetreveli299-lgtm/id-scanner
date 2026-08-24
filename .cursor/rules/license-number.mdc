@@ -47,9 +47,9 @@ alwaysApply: false
 - The holder signature is **only** the handwritten stroke directly **below the license number** (field `5.`), labeled **`7.`** on Georgian licences.
 - Extract/crop that band precisely — do not use the face photo area or unrelated regions as the signature.
 
-# Category (field 9 / table cols 9–11)
+# QR cross-check (Checked / Error badges)
 
-- On the **back**, the category table has columns **9** (codes), **10** and **11** (dates).
-- Fill the Category box with **only** the codes in column 9 that have a date in column 10 and/or 11 (example: B and C with `01.11.06` → `B C`).
-- Ignore empty category rows (A, D, BE, … with no dates).
-- Do not dump every label from the grid.
+- When the back-side QR payload is decoded, compare checkable form fields to the QR text:
+  English surname/given names, date of birth, personal number, license number, residence (country **and** city), category, expiry date. Issue date has no QR badge.
+- **Checked** — field value matches / is found in QR; click opens QR data and highlights the match (residence highlights both country and city).
+- **Error** — field has a value and QR exists, but they do not match; click opens QR data for review.
