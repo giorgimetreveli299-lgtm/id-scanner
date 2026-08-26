@@ -195,6 +195,7 @@ export default function HomePage() {
   const streamRef = useRef<MediaStream | null>(null);
   const scannedPairRef = useRef<string | null>(null);
   const scanningRef = useRef(false);
+  const sideOpGenRef = useRef({ front: 0, back: 0 });
   const qrDetailsRef = useRef<HTMLDetailsElement>(null);
   const qrHitRef = useRef<HTMLElement | null>(null);
 
@@ -260,6 +261,7 @@ export default function HomePage() {
   };
 
   const checkLicenseSide = useCallback(async (side: Side, file: File) => {
+    const gen = sideOpGenRef.current[side];
     setCheckingSide(side);
     setSideIssue((prev) => ({ ...prev, [side]: null }));
     try {
@@ -268,6 +270,7 @@ export default function HomePage() {
       body.append("side", side);
       const res = await fetch("/api/validate-side", { method: "POST", body });
       const data = (await res.json()) as { error?: string };
+      if (sideOpGenRef.current[side] !== gen) return;
       if (!res.ok || data.error) {
         const msg =
           data.error ||
@@ -281,6 +284,7 @@ export default function HomePage() {
     } catch {
       // Full scan still validates both sides
     } finally {
+      if (sideOpGenRef.current[side] !== gen) return;
       setCheckingSide((current) => (current === side ? null : current));
     }
   }, []);
@@ -294,6 +298,8 @@ export default function HomePage() {
       if (side === "back" && (!front.file || Boolean(sideIssue.front))) {
         return;
       }
+      sideOpGenRef.current[side] += 1;
+      const gen = sideOpGenRef.current[side];
       stopCamera();
       setError(null);
       setForm(EMPTY_FIELDS);
@@ -330,6 +336,7 @@ export default function HomePage() {
         setAutoCropping(side);
         const controller = new AbortController();
         const timer = window.setTimeout(() => controller.abort(), 14000);
+        const stillCurrent = () => sideOpGenRef.current[side] === gen;
         try {
           const body = new FormData();
           body.append("image", next);
@@ -338,11 +345,13 @@ export default function HomePage() {
             body,
             signal: controller.signal,
           });
+          if (!stillCurrent()) return;
           if (!res.ok) {
             await checkLicenseSide(side, next);
             return;
           }
           const blob = await res.blob();
+          if (!stillCurrent()) return;
           if (!blob.type.startsWith("image/")) {
             await checkLicenseSide(side, next);
             return;
@@ -355,6 +364,10 @@ export default function HomePage() {
             revokePreview(prev.preview);
             return { file: processed, preview: processedUrl };
           };
+          if (!stillCurrent()) {
+            URL.revokeObjectURL(processedUrl);
+            return;
+          }
           setForm(EMPTY_FIELDS);
           setScanned(false);
           setHolderPhoto(null);
@@ -367,10 +380,13 @@ export default function HomePage() {
           else setBack(apply);
           await checkLicenseSide(side, processed);
         } catch {
+          if (!stillCurrent()) return;
           await checkLicenseSide(side, next);
         } finally {
           window.clearTimeout(timer);
-          setAutoCropping((current) => (current === side ? null : current));
+          if (stillCurrent()) {
+            setAutoCropping((current) => (current === side ? null : current));
+          }
         }
       })();
     },
@@ -378,6 +394,14 @@ export default function HomePage() {
   );
 
   const clearSide = (side: Side) => {
+    sideOpGenRef.current[side] += 1;
+    if (side === "front") sideOpGenRef.current.back += 1;
+    setCheckingSide((current) =>
+      current === side || (side === "front" && current === "back") ? null : current
+    );
+    setAutoCropping((current) =>
+      current === side || (side === "front" && current === "back") ? null : current
+    );
     stopCamera();
     setError(null);
     setForm(EMPTY_FIELDS);
@@ -407,6 +431,8 @@ export default function HomePage() {
   };
 
   const newDriver = () => {
+    sideOpGenRef.current.front += 1;
+    sideOpGenRef.current.back += 1;
     stopCamera();
     setError(null);
     setForm(EMPTY_FIELDS);
@@ -465,6 +491,7 @@ export default function HomePage() {
     if (side === "back" && (!front.file || Boolean(sideIssue.front))) {
       return;
     }
+    if (autoCropping === side || checkingSide === side) return;
     setError(null);
     try {
       if (streamRef.current) {
@@ -656,6 +683,7 @@ export default function HomePage() {
     const label = side === "front" ? "Front" : "Back";
     const inputRef = side === "front" ? frontInputRef : backInputRef;
     const locked = side === "back" && (!front.file || Boolean(sideIssue.front));
+    const sideBusy = autoCropping === side || checkingSide === side;
     const invalidMsg = side === "front" ? sideIssue.front : sideIssue.back;
     const sideInvalid = Boolean(state.file && invalidMsg);
 
@@ -684,14 +712,14 @@ export default function HomePage() {
           className={`dropzone compact ${dragging === side ? "active" : ""} ${state.preview ? "has-preview" : ""} ${locked ? "locked" : ""} ${sideInvalid ? "invalid" : ""}`}
           onDragOver={(e) => {
             e.preventDefault();
-            if (locked) return;
+            if (locked || sideBusy) return;
             setDragging(side);
           }}
           onDragLeave={() => setDragging(null)}
           onDrop={(e) => {
             e.preventDefault();
             setDragging(null);
-            if (locked) return;
+            if (locked || sideBusy) return;
             const dropped = e.dataTransfer.files?.[0];
             if (dropped) setSideFile(side, dropped);
           }}
@@ -724,10 +752,10 @@ export default function HomePage() {
             type="file"
             accept="image/*"
             capture="environment"
-            disabled={locked}
+            disabled={locked || sideBusy}
             onChange={(e) => {
               const f = e.target.files?.[0];
-              if (f && !locked) setSideFile(side, f);
+              if (f && !locked && !sideBusy) setSideFile(side, f);
               e.target.value = "";
             }}
           />
@@ -740,7 +768,7 @@ export default function HomePage() {
           <button
             type="button"
             className="btn btn-ghost"
-            disabled={locked || autoCropping === side}
+            disabled={locked || sideBusy}
             onClick={() => inputRef.current?.click()}
           >
             Upload
@@ -748,7 +776,7 @@ export default function HomePage() {
           <button
             type="button"
             className="btn btn-ghost"
-            disabled={locked || autoCropping === side}
+            disabled={locked || sideBusy}
             onClick={() => startCamera(side)}
           >
             Camera
@@ -758,7 +786,7 @@ export default function HomePage() {
               <button
                 type="button"
                 className="btn btn-ghost"
-                disabled={autoCropping === side}
+                disabled={sideBusy}
                 onClick={() => setCropSide(side)}
               >
                 Crop & Straighten
