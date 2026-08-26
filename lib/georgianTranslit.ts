@@ -137,11 +137,11 @@ export function latinToGeorgianApprox(latin: string): string {
 }
 
 function georgianOnly(value: string): string {
-  return (value.match(/[\u10A0-\u10FF\s\-']+/g) || []).join("").trim();
+  return (value.match(/[\u10A0-\u10FF\s\-',.]+/g) || []).join("").trim();
 }
 
 function latinOnly(value: string): string {
-  return (value.match(/[A-Za-z\s\-']+/g) || []).join("").trim();
+  return (value.match(/[A-Za-z\s\-',.]+/g) || []).join("").trim();
 }
 
 /**
@@ -189,68 +189,113 @@ export function formatBilingualName(value: string | null | undefined): string | 
   return geo || latin || null;
 }
 
-/** Common place names (Latin key → official Georgian). */
-const KNOWN_PLACE_BY_LATIN: Record<string, string> = (() => {
-  const places = [
-    "თბილისი",
-    "ბათუმი",
-    "ქუთაისი",
-    "რუსთავი",
-    "ზუგდიდი",
-    "გორი",
-    "ფოთი",
-    "თელავი",
-    "ახალციხე",
-    "ოზურგეთი",
-    "სენაკი",
-    "ზესტაფონი",
-    "მარნეული",
-    "გარდაბანი",
-    "მცხეთა",
-    "ქობულეთი",
-    "ხაშური",
-    "სამტრედია",
-    "ბორჯომი",
-    "გურჯაანი",
-    "საქართველო",
-  ];
-  const map: Record<string, string> = {
-    TBILISI: "თბილისი",
-    BATUMI: "ბათუმი",
-    KUTAISI: "ქუთაისი",
-    RUSTAVI: "რუსთავი",
-    ZUGDIDI: "ზუგდიდი",
-    GORI: "გორი",
-    POTI: "ფოთი",
-    TELAVI: "თელავი",
-    AKHALTSIKHE: "ახალციხე",
-    OZURGETI: "ოზურგეთი",
-    SENAKI: "სენაკი",
-    ZESTAPHONI: "ზესტაფონი",
-    ZESTAFONI: "ზესტაფონი",
-    MARNEULI: "მარნეული",
-    GARDABANI: "გარდაბანი",
-    MTSKHETA: "მცხეთა",
-    KOBULETI: "ქობულეთი",
-    KHASHURI: "ხაშური",
-    SAMTREDIA: "სამტრედია",
-    BORJOMI: "ბორჯომი",
-    GURJAANI: "გურჯაანი",
-    GEORGIA: "საქართველო",
-  };
-  for (const p of places) {
-    map[latinNorm(transliterateKa(p))] = p;
+/**
+ * Canonical Georgian cities / municipalities (not the country name).
+ * `latin` is the spelling printed on IDs; `aliases` cover OCR / older forms.
+ */
+const CANONICAL_PLACES: { geo: string; latin: string; aliases?: string[] }[] = [
+  { geo: "თბილისი", latin: "Tbilisi", aliases: ["Tiflis"] },
+  { geo: "ბათუმი", latin: "Batumi" },
+  { geo: "ქუთაისი", latin: "Kutaisi", aliases: ["Qutaisi"] },
+  { geo: "რუსთავი", latin: "Rustavi" },
+  { geo: "ზუგდიდი", latin: "Zugdidi" },
+  { geo: "გორი", latin: "Gori" },
+  { geo: "ფოთი", latin: "Poti" },
+  { geo: "თელავი", latin: "Telavi" },
+  { geo: "ახალციხე", latin: "Akhaltsikhe" },
+  { geo: "ოზურგეთი", latin: "Ozurgeti" },
+  { geo: "სენაკი", latin: "Senaki" },
+  { geo: "ზესტაფონი", latin: "Zestafoni", aliases: ["Zestaphoni"] },
+  { geo: "მარნეული", latin: "Marneuli" },
+  { geo: "გარდაბანი", latin: "Gardabani" },
+  { geo: "მცხეთა", latin: "Mtskheta" },
+  { geo: "ქობულეთი", latin: "Kobuleti" },
+  { geo: "ხაშური", latin: "Khashuri", aliases: ["Hasuri"] },
+  { geo: "სამტრედია", latin: "Samtredia" },
+  { geo: "ბორჯომი", latin: "Borjomi" },
+  { geo: "გურჯაანი", latin: "Gurjaani" },
+  { geo: "ხონი", latin: "Khoni" },
+  { geo: "საჩხერე", latin: "Sachkhere" },
+  { geo: "ჭიათურა", latin: "Chiatura", aliases: ["Tchiatura"] },
+  { geo: "ტყიბული", latin: "Tkibuli" },
+  { geo: "წყალტუბო", latin: "Tskaltubo", aliases: ["Tsqaltubo"] },
+  { geo: "ლანჩხუთი", latin: "Lanchkhuti" },
+  { geo: "ჩოხატაური", latin: "Chokhatauri" },
+  { geo: "აბაშა", latin: "Abasha" },
+  { geo: "მარტვილი", latin: "Martvili" },
+  { geo: "წალენჯიხა", latin: "Tsalenjikha" },
+  { geo: "ხობი", latin: "Khobi" },
+  { geo: "მესტია", latin: "Mestia" },
+  { geo: "ამბროლაური", latin: "Ambrolauri" },
+  { geo: "ონი", latin: "Oni" },
+  { geo: "ცაგერი", latin: "Tsageri" },
+  { geo: "ლენტეხი", latin: "Lentekhi" },
+  { geo: "ახალქალაქი", latin: "Akhalkalaki" },
+  { geo: "ასპინძა", latin: "Aspindza" },
+  { geo: "ნინოწმინდა", latin: "Ninotsminda" },
+  { geo: "წალკა", latin: "Tsalka" },
+  { geo: "თეთრიწყარო", latin: "Tetritskaro", aliases: ["Tetri Tskaro"] },
+  { geo: "ბოლნისი", latin: "Bolnisi" },
+  { geo: "დმანისი", latin: "Dmanisi" },
+  { geo: "კასპი", latin: "Kaspi" },
+  { geo: "ქარელი", latin: "Kareli" },
+  { geo: "ხარაგაული", latin: "Kharagauli" },
+  { geo: "საგარეჯო", latin: "Sagarejo" },
+  { geo: "სიღნაღი", latin: "Signagi", aliases: ["Sighnaghi"] },
+  { geo: "დედოფლისწყარო", latin: "Dedoplistskaro" },
+  { geo: "ლაგოდეხი", latin: "Lagodekhi" },
+  { geo: "ყვარელი", latin: "Kvareli" },
+  { geo: "ახმეტა", latin: "Akhmeta" },
+  { geo: "თიანეთი", latin: "Tianeti" },
+  { geo: "დუშეთი", latin: "Dusheti" },
+  { geo: "ყაზბეგი", latin: "Kazbegi", aliases: ["Stepantsminda"] },
+  { geo: "წნორი", latin: "Tsnori" },
+];
+
+const COUNTRY_LATIN = new Set(["GEORGIA", "SAKARTVELO", "SAQARTVELO"]);
+
+const KNOWN_PLACE_BY_LATIN: Record<string, string> = {};
+const KNOWN_LATIN_BY_GEO: Record<string, string> = {};
+
+for (const p of CANONICAL_PLACES) {
+  KNOWN_LATIN_BY_GEO[p.geo] = p.latin;
+  KNOWN_PLACE_BY_LATIN[latinNorm(p.latin)] = p.geo;
+  KNOWN_PLACE_BY_LATIN[latinNorm(transliterateKa(p.geo))] = p.geo;
+  for (const alias of p.aliases || []) {
+    KNOWN_PLACE_BY_LATIN[latinNorm(alias)] = p.geo;
   }
-  return map;
-})();
+}
+
+function knownLatinForGeo(geo: string): string {
+  if (KNOWN_LATIN_BY_GEO[geo]) return KNOWN_LATIN_BY_GEO[geo];
+  const compact = geo.replace(/\s+/g, "");
+  if (KNOWN_LATIN_BY_GEO[compact]) return KNOWN_LATIN_BY_GEO[compact];
+  return "";
+}
 
 function knownPlaceFromLatin(latin: string): string {
+  const tokens = latin
+    .split(/[\s.,;:|/]+/)
+    .map((t) => latinNorm(t))
+    .filter((t) => t.length >= 3 && !COUNTRY_LATIN.has(t));
+
+  const keys = Object.keys(KNOWN_PLACE_BY_LATIN).sort(
+    (a, b) => b.length - a.length
+  );
+
+  for (const t of tokens) {
+    if (KNOWN_PLACE_BY_LATIN[t]) return KNOWN_PLACE_BY_LATIN[t];
+  }
+
   const n = latinNorm(latin);
   if (!n) return "";
-  if (KNOWN_PLACE_BY_LATIN[n]) return KNOWN_PLACE_BY_LATIN[n];
-  // Match a known city inside a longer address string
-  for (const [key, geo] of Object.entries(KNOWN_PLACE_BY_LATIN)) {
-    if (key.length >= 4 && n.includes(key)) return geo;
+  if (KNOWN_PLACE_BY_LATIN[n] && !COUNTRY_LATIN.has(n)) {
+    return KNOWN_PLACE_BY_LATIN[n];
+  }
+  // Longer keys first so RUSTAVI wins over a short fragment inside GEORGIARUSTAVI
+  for (const key of keys) {
+    if (COUNTRY_LATIN.has(key) || key.length < 5) continue;
+    if (n.includes(key)) return KNOWN_PLACE_BY_LATIN[key];
   }
   return "";
 }
@@ -288,87 +333,156 @@ export function formatBilingualPlace(
   return joinBilingualName(geo, latin) || null;
 }
 
+const RESIDENCE_LABEL_RE =
+  /^(საცხოვრებელი\s*ადგილი|მისამართი|place\s*of\s*residence|permanent\s*address|address)\s*[:：]?\s*/i;
+
+const JUNK_CITY_GEO =
+  /^(მართვის|მოწმობა|ადგილი|საცხოვრებელი|კატეგორია|კატეგორიები|მისამართი|გაცემის|თარიღი)$/;
+
+const JUNK_CITY_LATIN =
+  /^(DRIVING|LICENCE|LICENSE|PLACE|RESIDENCE|CATEGORY|CATEGORIES|SERVICE|AGENCY|REPUBLIC|PERMANENT|ADDRESS|HOLDER|DATE|BIRTH|ISSUE|EXPIRY)$/i;
+
+function stripGeoCountry(s: string): string {
+  return s
+    .replace(/^საქართველო\s*[,.\u060C\uFF0C]?\s*/i, "")
+    .replace(/\s*საქართველო\s*[,.\u060C\uFF0C]?\s*/gi, " ")
+    .replace(/^[,.\u060C\uFF0C:\-\s]+/, "")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+function stripLatCountry(s: string): string {
+  return s
+    .replace(/^Georgia\s*[,.\u060C\uFF0C]?\s*/i, "")
+    .replace(/\b(?:Georgia|Sakartvelo|Saqartvelo)\b\s*[,.\u060C\uFF0C]?/gi, " ")
+    .replace(/^[,.\u060C\uFF0C:\-\s]+/, "")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+function isJunkCity(geo: string, latin: string): boolean {
+  const g = geo.replace(/\s+/g, "");
+  const l = latin.trim();
+  if (g && JUNK_CITY_GEO.test(g)) return true;
+  if (l && JUNK_CITY_LATIN.test(l.split(/\s+/)[0] ?? "")) return true;
+  if (COUNTRY_LATIN.has(latinNorm(l))) return true;
+  return false;
+}
+
 /**
- * Field 8 residence on Georgian DLs is always:
- * `საქართველო. ქალაქი / Georgia. City`
+ * Field 8 on every Georgian DL is two lines:
+ * `საქართველო, ქალაქი` then `Georgia, City`
  */
 export function formatResidence(
   value: string | null | undefined
 ): string | null {
   if (!value) return null;
-  const junk =
-    /^(საცხოვრებელი\s*ადგილი|place\s*of\s*residence|address|permanent\s*address)$/i;
   let raw = value.trim();
-  if (!raw || junk.test(raw)) return null;
-
-  raw = raw
-    .replace(
-      /^(საცხოვრებელი\s*ადგილი|მისამართი|place\s*of\s*residence|address)\s*[:：]?\s*/i,
-      ""
-    )
-    .trim();
   if (!raw) return null;
 
-  // Split bilingual or single-script first
-  let { geo, latin } = splitBilingualName(raw);
+  raw = raw
+    .replace(/^8[\.\),:]?\s*/i, "")
+    .replace(RESIDENCE_LABEL_RE, "")
+    .replace(/\s+9[\.\),:][\s\S]*$/i, "")
+    .replace(/\b(?:კატეგორი(?:ა|ები)?|Categor(?:y|ies)?)\b[\s\S]*$/i, "")
+    .replace(/\d{1,2}\s*[./\-]\s*\d{1,2}\s*[./\-]\s*\d{2,4}/g, " ")
+    .replace(/[|]+/g, "/")
+    .replace(/\s+/g, " ")
+    .trim();
 
-  // Strip country tokens so we keep the city only
-  const stripGeoCountry = (s: string) =>
-    s
-      .replace(/^საქართველო\.?\s*/i, "")
-      .replace(/\s*საქართველო\.?\s*/gi, " ")
-      .replace(/^[.\-\s]+/, "")
-      .replace(/\s+/g, " ")
-      .trim();
-  const stripLatCountry = (s: string) =>
-    s
-      .replace(/^Georgia\.?\s*/i, "")
-      .replace(/\bGeorgia\b\.?/gi, " ")
-      .replace(/^[.\-\s]+/, "")
-      .replace(/\s+/g, " ")
-      .trim();
+  if (!raw || /^(საცხოვრებელი\s*ადგილი|place\s*of\s*residence|address)$/i.test(raw)) {
+    return null;
+  }
+
+  let { geo, latin } = splitBilingualName(raw);
 
   geo = stripGeoCountry(geo);
   latin = stripLatCountry(latin);
 
-  // If everything was in one side (e.g. "Georgia Rustavi")
   if (!geo && latin) {
     const known = knownPlaceFromLatin(latin);
     geo = known || latinToGeorgianApprox(latin);
     if (known) {
-      // Prefer clean Latin city spelling from known map key match
-      const n = latinNorm(latin);
-      for (const [key, g] of Object.entries(KNOWN_PLACE_BY_LATIN)) {
-        if (g === known && (n === key || n.includes(key))) {
-          latin = titleLatin(key.toLowerCase());
-          break;
-        }
-      }
+      latin = knownLatinForGeo(known) || titleLatin(latin);
     }
   }
   if (!latin && geo) {
-    const knownLat = Object.entries(KNOWN_PLACE_BY_LATIN).find(
-      ([, g]) => g === geo
-    );
-    latin = knownLat
-      ? titleLatin(knownLat[0].toLowerCase())
-      : transliterateKa(geo);
+    latin = knownLatinForGeo(geo) || transliterateKa(geo);
   }
 
-  // Resolve known city spelling when both sides exist but geo is only city fragment
   if (latin) {
     const known = knownPlaceFromLatin(latin);
-    if (known) geo = known;
+    if (known) {
+      geo = known;
+      latin = knownLatinForGeo(known) || titleLatin(latin);
+    }
+  }
+  if (geo) {
+    const knownLat = knownLatinForGeo(geo);
+    if (knownLat) latin = knownLat;
   }
 
   geo = stripGeoCountry(geo);
   latin = stripLatCountry(titleLatin(latin));
 
-  if (!geo && !latin) return null;
+  if (!geo || !latin) return null;
+  if (isJunkCity(geo, latin)) return null;
 
-  const geoOut = geo ? `საქართველო. ${geo}` : "საქართველო";
-  const latOut = latin ? `Georgia. ${latin}` : "Georgia";
-  return `${geoOut} / ${latOut}`;
+  return `საქართველო, ${geo} / Georgia, ${latin}`;
+}
+
+const QR_RESIDENCE_STOP =
+  /^(C1E|D1E|D13|AM|A1|A2|B1|C1|D1|BE|CE|DE|[ABCDTS])$/i;
+
+/**
+ * Field 8 from the QR payload: country (`Georgia`) then the city after it.
+ */
+export function findResidenceFromQr(
+  payload: string | null | undefined
+): string | null {
+  const raw = (payload || "").trim();
+  if (!raw) return null;
+
+  const tokens = raw
+    .split(/[^A-Za-z\u10A0-\u10FF0-9]+/)
+    .map((t) => t.trim())
+    .filter((t) => t.length > 0);
+
+  const isCountry = (t: string) =>
+    /^(georgia|sakartvelo|saqartvelo|საქართველო)$/i.test(t);
+
+  const isStop = (t: string) => {
+    const u = t.toUpperCase().replace(/[^A-Z0-9]/g, "");
+    if (!u) return true;
+    if (/^\d{6,}$/.test(u)) return true;
+    if (/^[A-Z]{2}\d{7}$/.test(u)) return true;
+    if (QR_RESIDENCE_STOP.test(u)) return true;
+    if (JUNK_CITY_LATIN.test(t)) return true;
+    return false;
+  };
+
+  const isCityLike = (t: string) => {
+    if (t.length < 3) return false;
+    if (isCountry(t) || isStop(t)) return false;
+    if (/^\d+$/.test(t)) return false;
+    return /[A-Za-z\u10A0-\u10FF]/.test(t);
+  };
+
+  for (let i = 0; i < tokens.length; i++) {
+    if (!isCountry(tokens[i])) continue;
+    const parts: string[] = [];
+    for (let j = i + 1; j < tokens.length && parts.length < 2; j++) {
+      const t = tokens[j];
+      if (isStop(t) || isCountry(t)) break;
+      if (!isCityLike(t)) break;
+      parts.push(t);
+      if (knownPlaceFromLatin(parts.join(" "))) break;
+    }
+    if (!parts.length) continue;
+    const formatted = formatResidence(`Georgia, ${parts.join(" ")}`);
+    if (formatted) return formatted;
+  }
+  return null;
 }
 
 /** Split stored `ქართული / Latin` (or single-script) into two sides for UI. */

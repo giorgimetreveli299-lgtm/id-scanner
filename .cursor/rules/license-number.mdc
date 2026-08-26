@@ -1,5 +1,5 @@
 ---
-description: Georgian driver license field 1–5 and 7 extraction rules
+description: Georgian driver license field 1–5, 7, 8 and 9 extraction rules
 globs: lib/parseLicense.ts,lib/vision.ts,app/**/*.tsx
 alwaysApply: false
 ---
@@ -46,6 +46,23 @@ alwaysApply: false
 
 - The holder signature is **only** the handwritten stroke directly **below the license number** (field `5.`), labeled **`7.`** on Georgian licences.
 - Extract/crop that band precisely — do not use the face photo area or unrelated regions as the signature.
+
+# Place of residence (field 8)
+
+- Field **`8.`** is on the **back** of the licence. Prefer back-side OCR over the front.
+- Printed value on **every** licence is two lines after **`8.`**:
+  **`საქართველო, ქალაქი`** then **`Georgia, City`** (comma, not a slash or period). Example: `საქართველო, ქუთაისი` / `Georgia, Kutaisi`.
+- Take only the text after `8.` and **stop before `9.`** / the category table / dates. Do not swallow the rest of the back.
+- If `8.` is missing, still accept a `საქართველო, City` + `Georgia, City` pair — but not the front header `საქართველო / GEORGIA` without a city.
+- Always store residence as **`საქართველო, ქალაქი / Georgia, City`**.
+- When the back-side **QR** is decoded, fill residence from **`Georgia` + the next city token** (example: `Georgia Kutaisi` → `საქართველო, ქუთაისი / Georgia, Kutaisi`). OCR of field `8.` is the fallback.
+
+# Category (field 9)
+
+- When the back-side **QR** is decoded, fill Category from standalone **uppercase Latin** codes in the payload (`B`, `C`, `AM`, `B1`, …). Do not take letters out of names or `Georgia` / city words.
+- If QR has no category tokens, use the back table: column 9 lists every code, columns 10/11 have dates only for categories the holder actually has — take **only the codes that have dates**.
+- The front may also print a short held list (`9. B C`); use that only when QR and the back date-grid cannot be read.
+- Never copy the full empty table (AM A1 A2 A B1 …) into the field.
 
 # QR cross-check (Checked / Error badges)
 

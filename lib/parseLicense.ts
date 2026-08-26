@@ -276,6 +276,73 @@ function collectCategoryCodes(fragment: string): string[] {
   return ordered;
 }
 
+/** Canonical `AM B C` list, official table order, no duplicates. */
+export function formatCategory(
+  value: string | null | undefined
+): string | null {
+  if (!value) return null;
+  const codes = collectCategoryCodes(value);
+  if (!codes.length) return null;
+  const order = [...ALLOWED_CATEGORIES];
+  const unique: string[] = [];
+  for (const code of codes) {
+    if (!unique.includes(code)) unique.push(code);
+  }
+  unique.sort(
+    (a, b) =>
+      order.indexOf(a as (typeof order)[number]) -
+      order.indexOf(b as (typeof order)[number])
+  );
+  return unique.join(" ");
+}
+
+const SINGLE_LETTER_CATEGORIES = new Set(["A", "B", "C", "D", "T", "S"]);
+
+/**
+ * Field 9 from the back-side QR: standalone uppercase Latin category codes
+ * (e.g. `B`, `C`, `AM`, `B1`). Ignores letters inside names / Georgia / cities.
+ */
+export function findCategoriesFromQr(
+  payload: string | null | undefined
+): string | null {
+  const raw = (payload || "").trim();
+  if (!raw) return null;
+
+  const allowed = new Set<string>(ALLOWED_CATEGORIES);
+  const found: string[] = [];
+  const add = (code: string) => {
+    if (allowed.has(code) && !found.includes(code)) found.push(code);
+  };
+
+  const tokens = raw
+    .toUpperCase()
+    .replace(/\u0410/g, "A")
+    .replace(/\u0412/g, "B")
+    .replace(/\u0421/g, "C")
+    .replace(/\u0415/g, "E")
+    .replace(/\u0422/g, "T")
+    .replace(/\u041C/g, "M")
+    .split(/[^A-Z0-9]+/)
+    .filter(Boolean);
+
+  for (const token of tokens) {
+    if (allowed.has(token)) {
+      add(token);
+      continue;
+    }
+    // Glued single letters: "BC" → B C — only if every char is A/B/C/D/T/S
+    if (
+      token.length >= 2 &&
+      token.length <= 4 &&
+      [...token].every((ch) => SINGLE_LETTER_CATEGORIES.has(ch))
+    ) {
+      for (const ch of token) add(ch);
+    }
+  }
+
+  return formatCategory(found.join(" "));
+}
+
 /**
  * Back-side category table: column 9 = codes, 10/11 = dates.
  * Only codes that have a date in col 10 or 11 belong in the Category box.
@@ -319,11 +386,15 @@ function findDatedCategoriesFromGrid(
       continue;
     }
 
-    // Code alone, then one or two date-only lines (cols 10 / 11)
+    // Code alone, then date(s) on the next line(s) — "B" / "01.11.06 06.08.33"
     if (codesHere.length === 1 && !lineHasCategoryDate(line)) {
+      const nextCodes = collectCategoryCodes(next);
       if (isDateOnlyLine(next)) {
         add(codesHere);
-      } else if (isDateOnlyLine(next2) && isDateOnlyLine(next)) {
+      } else if (
+        nextCodes.length === 0 &&
+        isDateOnlyLine(next2)
+      ) {
         add(codesHere);
       }
     }
@@ -340,39 +411,67 @@ function findDatedCategoriesFromGrid(
   return datedCodes.join(" ");
 }
 
-/** Optional fallback: short list like "9. B C" when the date grid is unreadable. */
-function findExplicitField9List(text: string, lines: string[]): string | null {
-  const fromChunk = (chunk: string): string | null => {
-    const cleaned = chunk
-      .replace(/^(?:კატეგორი(?:ა|ები)?|Categor(?:y|ies)?)\s*[:：]?\s*/i, "")
-      .trim();
-    // Must not look like the full empty grid dump
-    if (CAT_DATE_RE.test(cleaned)) return null;
-    const codes = collectCategoryCodes(cleaned);
-    if (codes.length < 1 || codes.length > 4) return null;
-    // Reject obvious table-label sweeps (AM A1 A B1 …)
-    const tableLike =
-      codes.includes("AM") &&
-      codes.includes("A1") &&
-      (codes.includes("A") || codes.includes("B1"));
-    if (tableLike) return null;
-    return codes.join(" ");
-  };
+/** Compact front-style list like "9. B C" — not the back table dump. */
+function lineIsShortCategoryList(line: string): string | null {
+  const cleaned = line
+    .replace(/^9[\.\)]?\s*/i, "")
+    .replace(/^(?:კატეგორი(?:ა|ები)?|Categor(?:y|ies)?)\s*[:：]?\s*/i, "")
+    .trim();
+  if (!cleaned || CAT_DATE_RE.test(cleaned)) return null;
+  if (/^\d+[.\)]?$/.test(cleaned)) return null;
+  const codes = collectCategoryCodes(cleaned);
+  if (codes.length < 1 || codes.length > 4) return null;
+  const letters = cleaned.replace(/[^A-Za-z]/g, "").toUpperCase();
+  const joined = codes.join("");
+  if (letters.length > joined.length + 1) return null;
+  return codes.join(" ");
+}
 
-  const sameLine = text.match(
-    /(?:^|\n)\s*9[\.\)]?\s+([A-Za-z0-9][^\n]*?)(?=\n\s*(?:\d+[a-d]?[\.\)]|[^\n]|$)|$)/i
-  );
-  if (sameLine?.[1] && !CAT_DATE_RE.test(sameLine[1])) {
-    const hit = fromChunk(sameLine[1]);
-    if (hit) return hit;
-  }
+function windowLooksLikeCategoryGrid(lines: string[], i: number): boolean {
+  const blob = lines.slice(Math.max(0, i - 1), i + 18).join("\n");
+  return collectCategoryCodes(blob).length >= 6;
+}
 
+/**
+ * Front (and some backs) print only held codes as a short list: "9. B C".
+ * Never use this on the full back table — that prints every empty row too.
+ */
+function findFrontStyleCategoryList(text: string, lines: string[]): string | null {
+  // Back table prints every row (AM A1 A2 A B1 …). Never treat its tail as a short list.
+  if (collectCategoryCodes(lines.join("\n")).length >= 6) return null;
   for (let i = 0; i < lines.length; i++) {
     const line = lines[i];
-    if (/^9[\.\)]?\s+[A-Za-z]/.test(line) && !lineHasCategoryDate(line)) {
-      const hit = fromChunk(line.replace(/^9[\.\)]?\s*/, ""));
-      if (hit) return hit;
+    if (windowLooksLikeCategoryGrid(lines, i)) continue;
+    if (lineHasCategoryDate(line) && collectCategoryCodes(line).length) continue;
+
+    const hit = lineIsShortCategoryList(line);
+    if (!hit) continue;
+
+    const codes = collectCategoryCodes(hit);
+    for (let j = 1; j <= 3 && i + j < lines.length; j++) {
+      const next = lines[i + j];
+      if (windowLooksLikeCategoryGrid(lines, i + j)) break;
+      const extra = lineIsShortCategoryList(next);
+      if (!extra) break;
+      for (const code of collectCategoryCodes(extra)) {
+        if (!codes.includes(code)) codes.push(code);
+      }
     }
+    if (codes.length >= 1 && codes.length <= 4) {
+      return formatCategory(codes.join(" "));
+    }
+  }
+
+  const sameLine = text.match(
+    /(?:^|\n)\s*9[\.\)]\s+([A-Za-z][A-Za-z0-9\s]{0,20}?)(?=\n|$)/
+  );
+  if (
+    sameLine?.[1] &&
+    !CAT_DATE_RE.test(sameLine[1]) &&
+    collectCategoryCodes(text).length < 6
+  ) {
+    const hit = lineIsShortCategoryList(`9. ${sameLine[1]}`);
+    if (hit) return formatCategory(hit);
   }
 
   return null;
@@ -425,7 +524,17 @@ function getCategoryTableLines(text: string, lines: string[]): string[] {
   if (idxHeader >= 0) return lines.slice(idxHeader, idxHeader + 28);
 
   const idx8 = lines.findIndex((l) => /^8[\.\)]?\s/.test(l));
-  if (idx8 >= 0) return lines.slice(idx8 + 1, idx8 + 32);
+  if (idx8 >= 0) {
+    let start = idx8 + 1;
+    while (
+      start < lines.length &&
+      start < idx8 + 4 &&
+      /საქართველო|georgia/i.test(lines[start] || "")
+    ) {
+      start += 1;
+    }
+    return lines.slice(start, start + 32);
+  }
 
   // Prefer the densest category+date region on the back
   return lines;
@@ -443,8 +552,8 @@ function findCategoryAtField9(text: string, lines: string[]): string | null {
   const dated = findDatedCategoriesFromGrid(text, lines);
   if (dated) return dated;
 
-  // Only if the date grid could not be read
-  return findExplicitField9List(text, lines);
+  // Only if the date grid could not be read — and never the empty table rows
+  return findFrontStyleCategoryList(text, lines);
 }
 
 /** Strip leaked neighbouring field labels/dates from place of birth. */
@@ -811,99 +920,136 @@ function findDateFromFieldLabel(
 
 /** Parse OCR text from a Georgian / EU-style driving licence into structured fields. */
 /**
- * Field **8.** = place of residence. Prefer value after `8.` before `9.`
- * (example: `8. თბილისი / TBILISI`).
+ * Field **8.** = place of residence (back of the card).
+ * On every Georgian DL this is two lines:
+ * `საქართველო, ქალაქი` then `Georgia, City` (comma). Stops before **9.**
  */
 function findResidenceFromField8(text: string, lines: string[]): string | null {
-  const clean = (raw: string) =>
+  const LABEL_RE =
+    /^(საცხოვრებელი\s*ადგილი|მისამართი|place\s*of\s*residence|permanent\s*address|address)\s*[:：]?\s*/i;
+  const JUNK_CITY =
+    /^(DRIVING|LICENCE|LICENSE|PLACE|RESIDENCE|CATEGORY|CATEGORIES|SERVICE|AGENCY|REPUBLIC|PERMANENT|ADDRESS|HOLDER|მართვის|მოწმობა|ადგილი|საცხოვრებელი|კატეგორია)$/i;
+  const GEO_CITY =
+    /საქართველო\s*[,.\u060C\uFF0C:]?\s*([\u10A0-\u10FF][\u10A0-\u10FF\s\-']{1,40}?)(?=\s*(?:GEORGIA|\/|$|\n|9[\.\)]))/iu;
+  const LAT_CITY =
+    /\bGEORGIA\s*[,.\u060C\uFF0C:]?\s*([A-Za-z][A-Za-z\s\-']{1,40}?)(?=\s*(?:\/|$|\n|9[\.\)]))/i;
+  const GEO_CITY_SEP =
+    /საქართველო\s*[,.\u060C\uFF0C]\s*([\u10A0-\u10FF][\u10A0-\u10FF\s\-']{1,40}?)(?=\s*(?:GEORGIA|\/|$|\n|9[\.\)]))/iu;
+  const LAT_CITY_SEP =
+    /\bGEORGIA\s*[,.\u060C\uFF0C]\s*([A-Za-z][A-Za-z\s\-']{1,40}?)(?=\s*(?:\/|$|\n|9[\.\)]))/i;
+
+  const isStopLine = (line: string): boolean => {
+    const t = line.trim();
+    if (!t) return false;
+    if (/^9[\.\),:](?:\s|$)/i.test(t) || /^9[\.\),:]?\s*$/i.test(t)) return true;
+    if (/^9\s+10(\s+11)?/i.test(t)) return true;
+    if (/კატეგორი|categor(?:y|ies)/i.test(t)) return true;
+    if (lineHasCategoryDate(t) && collectCategoryCodes(t).length > 0) return true;
+    return false;
+  };
+
+  const isField8Marker = (line: string): boolean => {
+    const t = line.trim();
+    if (/^8[\.\),:]?\s*\d/.test(t)) return false;
+    if (/^8[\.\),:](?:\s|$)/.test(t)) return true;
+    if (/^8[\.\),:]?\s*$/.test(t)) return true;
+    if (/^8\s+[\u10A0-\u10FFA-Za-z]/.test(t)) return true;
+    return false;
+  };
+
+  const firstCity = (raw: string): string => {
+    const words = raw
+      .replace(/\s+/g, " ")
+      .trim()
+      .split(/\s+/)
+      .filter((w) => w.length >= 2);
+    if (!words.length) return "";
+    if (JUNK_CITY.test(words[0])) return "";
+    return words[0];
+  };
+
+  const pairFrom = (chunk: string, requireSep: boolean): string | null => {
+    const geoRe = new RegExp(
+      requireSep ? GEO_CITY_SEP.source : GEO_CITY.source,
+      "giu"
+    );
+    const latRe = new RegExp(
+      requireSep ? LAT_CITY_SEP.source : LAT_CITY.source,
+      "gi"
+    );
+    let geoCity = "";
+    let latCity = "";
+    for (const m of chunk.matchAll(geoRe)) {
+      const c = firstCity(m[1] || "");
+      if (c) {
+        geoCity = c;
+        break;
+      }
+    }
+    for (const m of chunk.matchAll(latRe)) {
+      const c = firstCity(m[1] || "");
+      if (c) {
+        latCity = c;
+        break;
+      }
+    }
+    if (geoCity && latCity) return `${geoCity} / ${latCity}`;
+    if (geoCity) return geoCity;
+    if (latCity) return latCity;
+    return null;
+  };
+
+  const stripTrail = (raw: string) =>
     raw
       .replace(/^8[\.\),:]?\s*/i, "")
+      .replace(LABEL_RE, "")
+      .replace(/\s+9[\.\)][\s\S]*$/i, "")
       .replace(
-        /^(საცხოვრებელი\s*ადგილი|მისამართი|place\s*of\s*residence|permanent\s*address|address)\s*[:：]?\s*/i,
+        /\s+\b(?:C1E|D1E|D13|AM|A1|A2|B1|C1|D1|BE|CE|DE|[ABCDTS])\b(?:\s+\b(?:C1E|D1E|D13|AM|A1|A2|B1|C1|D1|BE|CE|DE|[ABCDTS])\b)*\s*$/i,
         ""
       )
-      .replace(/\s+9[\.\)][\s\S]*$/i, "")
-      .replace(/\s*\/\s*/g, " / ")
       .replace(/\s+/g, " ")
       .trim();
 
-  const accept = (raw: string | null | undefined): string | null => {
-    if (!raw) return null;
-    const v = clean(raw);
-    if (!v || v.length < 2) return null;
-    if (/^9[\.\)]?\s*$/i.test(v)) return null;
-    if (
-      /^(საცხოვრებელი\s*ადგილი|place\s*of\s*residence|address)$/i.test(v)
-    ) {
-      return null;
-    }
-    if (!/[\u10A0-\u10FFA-Za-z]/.test(v)) return null;
-    return v;
-  };
-
-  const sameLine = text.match(
-    /(?:^|\n)\s*8[\.\),:]\s*(.+?)(?=\s+9[\.\),:]|$)/i
-  );
-  if (sameLine?.[1]) {
-    const hit = accept(sameLine[1]);
-    if (hit) return hit;
-  }
-
-  const bilingual = text.match(
-    /(?:^|\n)\s*8[\.\),:]?\s*([\u10A0-\u10FF][\u10A0-\u10FF\s\-']{1,40}?)\s*\/\s*([A-Za-z][A-Za-z\s\-']{1,40}?)(?=\s*9[\.\),:]|\s*\n|$)/iu
-  );
-  if (bilingual) {
-    const hit = accept(`${bilingual[1]} / ${bilingual[2]}`);
-    if (hit) return hit;
-  }
-
+  // 1) Lines from `8.` until `9.` / the category table
   for (let i = 0; i < lines.length; i++) {
-    const line = lines[i];
-    if (/^8[\.\),:]?\s*\S/.test(line)) {
-      const cut = line.split(/\s+(?=9[\.\),:])/)[0] ?? line;
-      const hit = accept(cut);
-      if (hit) {
-        const next = lines[i + 1]?.trim() ?? "";
-        if (
-          !hit.includes("/") &&
-          next &&
-          !/^9[\.\)]/.test(next) &&
-          /^\/?\s*[A-Za-z]/.test(next)
-        ) {
-          const latin = accept(next.replace(/^\//, ""));
-          if (latin) return `${hit} / ${latin}`;
-        }
-        return hit;
-      }
+    if (!isField8Marker(lines[i])) continue;
+    const block: string[] = [stripTrail(lines[i])];
+    for (let j = 1; j <= 5 && i + j < lines.length; j++) {
+      const next = lines[i + j]?.trim() ?? "";
+      if (!next || isStopLine(next)) break;
+      if (LABEL_RE.test(next) && !/საქართველო|georgia/i.test(next)) continue;
+      block.push(stripTrail(next));
+      const blob = block.filter(Boolean).join("\n");
+      if (/საქართველო/i.test(blob) && /\bgeorgia\b/i.test(blob)) break;
     }
-    if (/^8[\.\),:]?\s*$/.test(line)) {
-      const parts: string[] = [];
-      for (let j = 1; j <= 3 && i + j < lines.length; j++) {
-        const next = lines[i + j]?.trim() ?? "";
-        if (/^9[\.\)]/.test(next)) break;
-        if (/^[\/|]+$/.test(next)) continue;
-        if (
-          /^(საცხოვრებელი|place\s*of\s*residence|address)/i.test(next)
-        ) {
-          continue;
-        }
-        const piece = accept(next);
-        if (piece) parts.push(piece);
-      }
-      if (parts.length) {
-        return parts.join(" / ").replace(/\s*\/\s*\/\s*/g, " / ");
-      }
-    }
+    const blob = block.filter(Boolean).join("\n");
+    const hit = pairFrom(blob, false);
+    if (hit) return hit;
   }
 
-  return (
-    lineValue(lines, [
-      /საცხოვრებელი\s*ადგილი/i,
-      /მისამართი/i,
-      /place\s*of\s*residence/i,
-      /permanent\s*address/i,
-    ]) || null
-  );
+  // 2) Label then the two printed lines
+  for (let i = 0; i < lines.length; i++) {
+    if (
+      !/საცხოვრებელი\s*ადგილი|place\s*of\s*residence|permanent\s*address/i.test(
+        lines[i]
+      )
+    ) {
+      continue;
+    }
+    const block: string[] = [stripTrail(lines[i])];
+    for (let j = 1; j <= 4 && i + j < lines.length; j++) {
+      const next = lines[i + j]?.trim() ?? "";
+      if (!next || isStopLine(next)) break;
+      block.push(stripTrail(next));
+    }
+    const hit = pairFrom(block.filter(Boolean).join("\n"), false);
+    if (hit) return hit;
+  }
+
+  // 3) `საქართველო, City` / `Georgia, City` anywhere (skip the front header:
+  //    first matchAll hit with a junk city is ignored, later hits are used)
+  return pairFrom(text, true) || pairFrom(text, false);
 }
 
 export function parseLicenseText(raw: string): LicenseFields {
@@ -964,7 +1110,7 @@ export function parseLicenseText(raw: string): LicenseFields {
 
   fields.residence = findResidenceFromField8(text, lines);
 
-  fields.category = findCategoryAtField9(text, lines);
+  fields.category = formatCategory(findCategoryAtField9(text, lines));
 
   return fields;
 }

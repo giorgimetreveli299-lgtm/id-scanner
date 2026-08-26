@@ -4,12 +4,14 @@ import sharp from "sharp";
 import {
   ALLOWED_CATEGORIES,
   ISSUING_AUTHORITY,
+  findCategoriesFromQr,
+  formatCategory,
   mergeLicenseFields,
   parseLicenseText,
   type LicenseFields,
 } from "@/lib/parseLicense";
 import { detectQrOnLicenseBack } from "@/lib/detectQr";
-import { formatBilingualName, formatBilingualPlace, formatResidence } from "@/lib/georgianTranslit";
+import { formatBilingualName, formatBilingualPlace, formatResidence, findResidenceFromQr } from "@/lib/georgianTranslit";
 import type { FaceBox } from "@/lib/types";
 
 export type { FaceBox };
@@ -218,9 +220,14 @@ function detectCategoriesFromTableLayout(
     });
   }
 
-  // Merge split date tokens like "01.11" + "06" sitting on one row
+  // Merge split date tokens: "01.11"+"06", or three parts "01" "11" "06"
   const dateItems: Item[] = [];
   const used = new Set<number>();
+  const sameRow = (a: Item, b: Item) => Math.abs(b.cy - a.cy) <= 16;
+  const toRight = (a: Item, b: Item) =>
+    b.minX >= a.maxX - 2 && b.minX - a.maxX <= 36;
+  const digitsOf = (t: string) => t.replace(/\s+/g, "").replace(/\D/g, "");
+
   for (let i = 0; i < items.length; i++) {
     if (used.has(i)) continue;
     const a = items[i];
@@ -228,12 +235,42 @@ function detectCategoriesFromTableLayout(
       dateItems.push(a);
       continue;
     }
+
+    // 3-part DD MM YY sitting on one row
+    if (/^\d{1,2}[./-]?$/.test(a.text.replace(/\s+/g, ""))) {
+      const idxs = [i];
+      for (let j = i + 1; j < items.length && idxs.length < 3; j++) {
+        if (used.has(j)) continue;
+        const b = items[j];
+        const prev = items[idxs[idxs.length - 1]];
+        if (!sameRow(prev, b) || !toRight(prev, b)) continue;
+        if (!/^\d{1,2}[./-]?$/.test(b.text.replace(/\s+/g, ""))) break;
+        idxs.push(j);
+      }
+      if (idxs.length === 3) {
+        const compact = idxs.map((k) => digitsOf(items[k].text)).join("");
+        if (compact.length === 6 || compact.length === 8) {
+          idxs.slice(1).forEach((k) => used.add(k));
+          const first = items[idxs[0]];
+          const last = items[idxs[2]];
+          dateItems.push({
+            text: `${compact.slice(0, 2)}.${compact.slice(2, 4)}.${compact.slice(4)}`,
+            minX: first.minX,
+            maxX: last.maxX,
+            minY: Math.min(first.minY, last.minY),
+            maxY: Math.max(first.maxY, last.maxY),
+            cx: (first.minX + last.maxX) / 2,
+            cy: (first.cy + last.cy) / 2,
+          });
+          continue;
+        }
+      }
+    }
+
     for (let j = i + 1; j < Math.min(i + 4, items.length); j++) {
       if (used.has(j)) continue;
       const b = items[j];
-      if (Math.abs(b.cy - a.cy) > 14) continue;
-      if (b.minX < a.maxX - 2) continue;
-      if (b.minX - a.maxX > 28) continue;
+      if (!sameRow(a, b) || !toRight(a, b)) continue;
       const merged = `${a.text}${b.text}`.replace(/\s+/g, "");
       if (isCategoryDateToken(merged)) {
         used.add(j);
@@ -277,9 +314,8 @@ function detectCategoriesFromTableLayout(
     gaps.sort((a, b) => a - b);
     if (gaps.length) medianGap = gaps[Math.floor(gaps.length / 2)];
   }
-  const rowTol = Math.max(10, Math.min(22, medianGap * 0.45));
-  const leftBound = imageWidth * 0.72;
-  const maxGapX = Math.max(120, imageWidth * 0.55);
+  const rowTol = Math.max(12, Math.min(28, medianGap * 0.5));
+  const maxGapX = Math.max(80, imageWidth * 0.6);
 
   // Each date claims at most one code: nearest to its left on the same row
   const claimed = new Map<string, { code: string; cy: number }>();
@@ -287,7 +323,6 @@ function detectCategoriesFromTableLayout(
   for (const date of dateItems) {
     let best: { code: string; item: Item; score: number } | null = null;
     for (const { code, item } of codeHits) {
-      if (item.cx > leftBound) continue;
       if (date.cx <= item.cx + 2) continue;
       if (date.minX - item.maxX > maxGapX) continue;
       const dy = Math.abs(date.cy - item.cy);
@@ -600,12 +635,14 @@ export async function scanLicenseSides(
   const combinedText = [frontText, backText].filter(Boolean).join("\n\n---\n\n");
   const combinedFields = parseLicenseText(combinedText);
 
-  // Prefer spatial table read (col 9 codes with dates in 10/11), then text parsers
-  const category =
-    backAnalysis.categoryFromTable ||
-    backFields.category ||
-    frontFields.category ||
-    combinedFields.category;
+  // Field 9: uppercase Latin category codes from the QR payload first
+  const category = formatCategory(
+    findCategoriesFromQr(qr.value) ||
+      backAnalysis.categoryFromTable ||
+      backFields.category ||
+      frontFields.category ||
+      combinedFields.category
+  );
 
   const licenseNumber =
     frontFields.licenseNumber ||
@@ -642,10 +679,12 @@ export async function scanLicenseSides(
       backFields.placeOfBirth
   );
 
+  // Field 8: QR has `Georgia` then the city; OCR is fallback
   const residence = formatResidence(
-    frontFields.residence ||
+    findResidenceFromQr(qr.value) ||
+      backFields.residence ||
       combinedFields.residence ||
-      backFields.residence
+      frontFields.residence
   );
 
   const dateOfBirth =

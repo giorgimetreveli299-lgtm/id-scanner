@@ -40,14 +40,14 @@ function needlesForField(
 
   if (key === "residence") {
     const { latin } = splitBilingualName(raw);
-    // Prefer the English side only (e.g. "Georgia. Rustavi")
+    // Prefer the English side only (e.g. "Georgia, Kutaisi")
     let side = (latin || "").trim();
     if (!side && !/[\u10A0-\u10FF]/.test(raw)) side = raw;
     side = side.replace(/\s+/g, " ").trim();
     const out: string[] = [];
     if (side) {
       out.push(side);
-      out.push(side.replace(/\./g, " ").replace(/\s+/g, " ").trim());
+      out.push(side.replace(/[.,]/g, " ").replace(/\s+/g, " ").trim());
     }
     for (const part of side.split(/[.,;/|\s]+/)) {
       const t = part.trim();
@@ -157,7 +157,7 @@ function residenceCountryCity(value: string): {
     .map((p) => p.trim())
     .filter((p) => p.length >= 2);
 
-  // "Georgia. Rustavi" or "Georgia Rustavi"
+  // "Georgia, Kutaisi" or "Georgia. Rustavi" or "Georgia Kutaisi"
   let country = "";
   let city = "";
   if (parts.length >= 2) {
