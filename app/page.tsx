@@ -62,6 +62,17 @@ const EMPTY_FIELDS = Object.fromEntries(
 
 const EMPTY_SIDE: SideState = { file: null, preview: null };
 
+function userFacingRequestError(err: unknown, fallback: string): string {
+  const raw = err instanceof Error ? err.message : "";
+  if (
+    err instanceof TypeError ||
+    /failed to fetch|networkerror|load failed|fetch failed/i.test(raw)
+  ) {
+    return "Could not reach the scanner. Keep the app running and try again.";
+  }
+  return raw || fallback;
+}
+
 function fieldsToForm(fields: LicenseFields): Record<keyof LicenseFields, string> {
   const out = { ...EMPTY_FIELDS };
   (Object.keys(EMPTY_FIELDS) as (keyof LicenseFields)[]).forEach((key) => {
@@ -186,7 +197,10 @@ export default function HomePage() {
     front: string | null;
     back: string | null;
   }>({ front: null, back: null });
-  const [checkingSide, setCheckingSide] = useState<Side | null>(null);
+  const [checkingBySide, setCheckingBySide] = useState({
+    front: false,
+    back: false,
+  });
 
   const frontInputRef = useRef<HTMLInputElement>(null);
   const backInputRef = useRef<HTMLInputElement>(null);
@@ -196,6 +210,7 @@ export default function HomePage() {
   const scannedPairRef = useRef<string | null>(null);
   const scanningRef = useRef(false);
   const sideOpGenRef = useRef({ front: 0, back: 0 });
+  const checkingInflightRef = useRef({ front: 0, back: 0 });
   const qrDetailsRef = useRef<HTMLDetailsElement>(null);
   const qrHitRef = useRef<HTMLElement | null>(null);
 
@@ -210,7 +225,8 @@ export default function HomePage() {
     !cropSide &&
     !cameraSide &&
     !autoCropping &&
-    !checkingSide &&
+    !checkingBySide.front &&
+    !checkingBySide.back &&
     !sideIssue.front &&
     !sideIssue.back;
   const showResults = canExtract && scanned && !error;
@@ -262,7 +278,8 @@ export default function HomePage() {
 
   const checkLicenseSide = useCallback(async (side: Side, file: File) => {
     const gen = sideOpGenRef.current[side];
-    setCheckingSide(side);
+    checkingInflightRef.current[side] += 1;
+    setCheckingBySide((prev) => ({ ...prev, [side]: true }));
     setSideIssue((prev) => ({ ...prev, [side]: null }));
     try {
       const body = new FormData();
@@ -281,11 +298,23 @@ export default function HomePage() {
         setScanned(false);
         setForm(EMPTY_FIELDS);
       }
-    } catch {
-      // Full scan still validates both sides
+    } catch (err) {
+      if (sideOpGenRef.current[side] !== gen) return;
+      setSideIssue((prev) => ({
+        ...prev,
+        [side]: userFacingRequestError(err, "Could not check this photo."),
+      }));
+      setScanned(false);
+      setForm(EMPTY_FIELDS);
     } finally {
       if (sideOpGenRef.current[side] !== gen) return;
-      setCheckingSide((current) => (current === side ? null : current));
+      checkingInflightRef.current[side] = Math.max(
+        0,
+        checkingInflightRef.current[side] - 1
+      );
+      if (checkingInflightRef.current[side] === 0) {
+        setCheckingBySide((prev) => ({ ...prev, [side]: false }));
+      }
     }
   }, []);
 
@@ -300,6 +329,8 @@ export default function HomePage() {
       }
       sideOpGenRef.current[side] += 1;
       const gen = sideOpGenRef.current[side];
+      checkingInflightRef.current[side] = 0;
+      setCheckingBySide((prev) => ({ ...prev, [side]: false }));
       stopCamera();
       setError(null);
       setForm(EMPTY_FIELDS);
@@ -395,9 +426,13 @@ export default function HomePage() {
 
   const clearSide = (side: Side) => {
     sideOpGenRef.current[side] += 1;
-    if (side === "front") sideOpGenRef.current.back += 1;
-    setCheckingSide((current) =>
-      current === side || (side === "front" && current === "back") ? null : current
+    checkingInflightRef.current[side] = 0;
+    if (side === "front") {
+      sideOpGenRef.current.back += 1;
+      checkingInflightRef.current.back = 0;
+    }
+    setCheckingBySide((prev) =>
+      side === "front" ? { front: false, back: false } : { ...prev, back: false }
     );
     setAutoCropping((current) =>
       current === side || (side === "front" && current === "back") ? null : current
@@ -433,6 +468,8 @@ export default function HomePage() {
   const newDriver = () => {
     sideOpGenRef.current.front += 1;
     sideOpGenRef.current.back += 1;
+    checkingInflightRef.current.front = 0;
+    checkingInflightRef.current.back = 0;
     stopCamera();
     setError(null);
     setForm(EMPTY_FIELDS);
@@ -443,7 +480,7 @@ export default function HomePage() {
     setQrCodeValue(null);
     setQrCheckedSnapshot({});
     setSideIssue({ front: null, back: null });
-    setCheckingSide(null);
+    setCheckingBySide({ front: false, back: false });
     setQrHighlight(null);
     setQrDetailsOpen(false);
     scannedPairRef.current = null;
@@ -491,7 +528,7 @@ export default function HomePage() {
     if (side === "back" && (!front.file || Boolean(sideIssue.front))) {
       return;
     }
-    if (autoCropping === side || checkingSide === side) return;
+    if (autoCropping === side || checkingBySide[side]) return;
     setError(null);
     try {
       if (streamRef.current) {
@@ -649,7 +686,7 @@ export default function HomePage() {
       setScanned(true);
     } catch (err) {
       scannedPairRef.current = null;
-      const message = err instanceof Error ? err.message : "Error";
+      const message = userFacingRequestError(err, "Error");
       setError(message);
       setScanned(false);
       setForm(EMPTY_FIELDS);
@@ -683,7 +720,7 @@ export default function HomePage() {
     const label = side === "front" ? "Front" : "Back";
     const inputRef = side === "front" ? frontInputRef : backInputRef;
     const locked = side === "back" && (!front.file || Boolean(sideIssue.front));
-    const sideBusy = autoCropping === side || checkingSide === side;
+    const sideBusy = autoCropping === side || checkingBySide[side];
     const invalidMsg = side === "front" ? sideIssue.front : sideIssue.back;
     const sideInvalid = Boolean(state.file && invalidMsg);
 
@@ -695,7 +732,7 @@ export default function HomePage() {
             <span className="side-badge">
               {sideIssue.front ? "Fix front first" : "Upload front first"}
             </span>
-          ) : autoCropping === side || checkingSide === side ? (
+          ) : autoCropping === side || checkingBySide[side] ? (
             <span className="side-badge">Checking…</span>
           ) : sideInvalid ? (
             <span className="side-badge err">Error</span>

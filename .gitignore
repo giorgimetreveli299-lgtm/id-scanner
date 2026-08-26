@@ -19,8 +19,6 @@ tsconfig.tsbuildinfo
 venv/
 __pycache__/
 *.pyc
-.dockerignore
-Dockerfile
 id_verifier.py
 index.html
 main.py

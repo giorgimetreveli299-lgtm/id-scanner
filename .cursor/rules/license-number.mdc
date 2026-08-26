@@ -8,13 +8,14 @@ alwaysApply: false
 
 - Field **`1.`** on the front is always the **surname** (გვარი), often as `ქართული / Latin` (example: `გარიბოვი / Garibov` or `ქვათაძე / Kvatadze`).
 - Always fill the **first** dashboard field (Surname / გვარი) with whatever text follows `1.` on the licence — copy that value into the surname box.
-- When the back-side **QR code** is decoded, take the **first word** of the QR payload for the Surname field (preferred over OCR when QR data is available).
-- Always store Surname as bilingual **`ქართული / Latin`** (translate Latin→Georgian or Georgian→Latin so neither side is lost).
+- When the back-side **QR code** is decoded, copy the **English surname** from the QR **exactly as written** (first Latin name token). Keep Georgian from field `1.` OCR.
+- Store Surname as bilingual **`ქართული / QR-Latin`**. Do not title-case or transliterate over the QR English side.
 
 # Given names (field 2)
 
 - Field **`2.`** on the front is always the **given names** (სახელი), often as `ქართული / Latin` (example: `ქეთევანი / Ketevani`).
-- Always fill the Given names field from whatever text follows `2.` on the licence.
+- Fill Georgian from whatever text follows `2.` on the licence.
+- When the QR is decoded, copy **English given names exactly** from the QR tokens after the surname (until Georgia / dates / numbers / categories).
 
 # Date and place of birth (field 3)
 
@@ -54,8 +55,8 @@ alwaysApply: false
   **`საქართველო, ქალაქი`** then **`Georgia, City`** (comma, not a slash or period). Example: `საქართველო, ქუთაისი` / `Georgia, Kutaisi`.
 - Take only the text after `8.` and **stop before `9.`** / the category table / dates. Do not swallow the rest of the back.
 - If `8.` is missing, still accept a `საქართველო, City` + `Georgia, City` pair — but not the front header `საქართველო / GEORGIA` without a city.
-- Always store residence as **`საქართველო, ქალაქი / Georgia, City`**.
-- When the back-side **QR** is decoded, fill residence from **`Georgia` + the next city token** (example: `Georgia Kutaisi` → `საქართველო, ქუთაისი / Georgia, Kutaisi`). OCR of field `8.` is the fallback.
+- Always store residence as **`საქართველო, ქალაქი / QR-country, QR-city`**.
+- When the back-side **QR** is decoded, copy **English country and city exactly as in the QR** (do not change `GEORGIA` → `Georgia` or canonicalize the city). Georgian stays from field `8.` OCR. OCR of field `8.` is the fallback when QR has no city.
 
 # Category (field 9)
 

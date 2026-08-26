@@ -5,7 +5,8 @@
   "scripts": {
     "dev": "next dev",
     "build": "next build",
-    "start": "next start"
+    "start": "next start",
+    "deploy": "gcloud run deploy dizige-license-scanner --source . --region europe-west1 --project dizige --service-account python-web-runtime@dizige.iam.gserviceaccount.com --build-service-account projects/dizige/serviceAccounts/cloud-run-builder@dizige.iam.gserviceaccount.com --allow-unauthenticated --memory 1Gi --cpu 1 --concurrency 4 --timeout 300"
   },
   "dependencies": {
     "@google-cloud/vision": "^4.3.2",

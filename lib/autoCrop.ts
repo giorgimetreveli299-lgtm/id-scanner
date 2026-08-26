@@ -1,4 +1,5 @@
 import { ImageAnnotatorClient, protos } from "@google-cloud/vision";
+import fs from "fs";
 import jsQR from "jsqr";
 import path from "path";
 import sharp from "sharp";
@@ -10,20 +11,16 @@ const ANALYZE_MAX_SIDE = 1280;
 type Vertex = protos.google.cloud.vision.v1.IVertex;
 type PixelRect = { left: number; top: number; width: number; height: number };
 
-function getCredentialsPath(): string {
-  if (process.env.GOOGLE_APPLICATION_CREDENTIALS) {
-    return process.env.GOOGLE_APPLICATION_CREDENTIALS;
-  }
-  return path.join(process.cwd(), "clientdocsocr.json");
-}
-
 let client: ImageAnnotatorClient | null = null;
 
 function getClient(): ImageAnnotatorClient {
   if (!client) {
-    client = new ImageAnnotatorClient({
-      keyFilename: getCredentialsPath(),
-    });
+    const keyFilename =
+      process.env.GOOGLE_APPLICATION_CREDENTIALS ||
+      path.join(process.cwd(), "clientdocsocr.json");
+    client = fs.existsSync(keyFilename)
+      ? new ImageAnnotatorClient({ keyFilename })
+      : new ImageAnnotatorClient();
   }
   return client;
 }

@@ -8,5 +8,3 @@ node_modules
 *.pem
 clientdocsocr.json
 credentials.json
-README.md
-*.md

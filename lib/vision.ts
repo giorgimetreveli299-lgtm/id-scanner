@@ -1,4 +1,5 @@
 import { ImageAnnotatorClient, protos } from "@google-cloud/vision";
+import fs from "fs";
 import path from "path";
 import sharp from "sharp";
 import {
@@ -11,7 +12,7 @@ import {
   type LicenseFields,
 } from "@/lib/parseLicense";
 import { detectQrOnLicenseBack } from "@/lib/detectQr";
-import { formatBilingualName, formatBilingualPlace, formatResidence, findResidenceFromQr } from "@/lib/georgianTranslit";
+import { formatBilingualPlace, applyQrLatinToName, applyQrLatinToResidence, extractLatinIdentityFromQr } from "@/lib/georgianTranslit";
 import {
   BACK_SIDE_REQUIRED_ERROR,
   FRONT_SIDE_REQUIRED_ERROR,
@@ -43,20 +44,16 @@ export type ScanResult = {
   qrCodeDataUrl: string | null;
 };
 
-function getCredentialsPath(): string {
-  if (process.env.GOOGLE_APPLICATION_CREDENTIALS) {
-    return process.env.GOOGLE_APPLICATION_CREDENTIALS;
-  }
-  return path.join(process.cwd(), "clientdocsocr.json");
-}
-
 let client: ImageAnnotatorClient | null = null;
 
 function getClient(): ImageAnnotatorClient {
   if (!client) {
-    client = new ImageAnnotatorClient({
-      keyFilename: getCredentialsPath(),
-    });
+    const keyFilename =
+      process.env.GOOGLE_APPLICATION_CREDENTIALS ||
+      path.join(process.cwd(), "clientdocsocr.json");
+    client = fs.existsSync(keyFilename)
+      ? new ImageAnnotatorClient({ keyFilename })
+      : new ImageAnnotatorClient();
   }
   return client;
 }
@@ -747,17 +744,13 @@ export async function scanLicenseSides(
   const combinedFields = safeParse(combinedText);
 
   let qrCategory: string | null = null;
-  let qrResidence: string | null = null;
   try {
     qrCategory = findCategoriesFromQr(qr.value);
   } catch {
     qrCategory = null;
   }
-  try {
-    qrResidence = findResidenceFromQr(qr.value);
-  } catch {
-    qrResidence = null;
-  }
+
+  const qrLatin = extractLatinIdentityFromQr(qr.value);
 
   // Field 9: uppercase Latin category codes from the QR payload first
   const category = formatCategory(
@@ -774,48 +767,16 @@ export async function scanLicenseSides(
     combinedFields.licenseNumber ||
     backFields.licenseNumber;
 
-  // Surname: first word from QR when available, always bilingual ქართული / Latin
-  const surnameFromQr = (() => {
-    const raw = qr.value?.trim();
-    if (!raw) return null;
-    const first = raw.split(/[\s,;|]+/).find((w) => w.length > 0);
-    return first?.replace(/^["']+|["']+$/g, "") || null;
-  })();
+  // English sides from QR exactly as decoded; Georgian from OCR
+  const surname = applyQrLatinToName(
+    frontFields.surname || combinedFields.surname || backFields.surname,
+    qrLatin.surname
+  );
 
-  const surname = (() => {
-    try {
-      return formatBilingualName(
-        surnameFromQr ||
-          frontFields.surname ||
-          combinedFields.surname ||
-          backFields.surname
-      );
-    } catch {
-      return (
-        surnameFromQr ||
-        frontFields.surname ||
-        combinedFields.surname ||
-        backFields.surname
-      );
-    }
-  })();
-
-  // Field 2 (given names) — also keep bilingual when possible
-  const givenNames = (() => {
-    try {
-      return formatBilingualName(
-        frontFields.givenNames ||
-          combinedFields.givenNames ||
-          backFields.givenNames
-      );
-    } catch {
-      return (
-        frontFields.givenNames ||
-        combinedFields.givenNames ||
-        backFields.givenNames
-      );
-    }
-  })();
+  const givenNames = applyQrLatinToName(
+    frontFields.givenNames || combinedFields.givenNames || backFields.givenNames,
+    qrLatin.givenNames
+  );
 
   // Field 3 place of birth sits beside the DOB on the front
   const placeOfBirth = (() => {
@@ -834,24 +795,12 @@ export async function scanLicenseSides(
     }
   })();
 
-  // Field 8: QR has `Georgia` then the city; OCR is fallback
-  const residence = (() => {
-    try {
-      return formatResidence(
-        qrResidence ||
-          backFields.residence ||
-          combinedFields.residence ||
-          frontFields.residence
-      );
-    } catch {
-      return (
-        qrResidence ||
-        backFields.residence ||
-        combinedFields.residence ||
-        frontFields.residence
-      );
-    }
-  })();
+  // Field 8: English country + city exactly as in the QR; OCR is fallback
+  const residence = applyQrLatinToResidence(
+    backFields.residence || combinedFields.residence || frontFields.residence,
+    qrLatin.country,
+    qrLatin.city
+  );
 
   const dateOfBirth =
     frontFields.dateOfBirth ||

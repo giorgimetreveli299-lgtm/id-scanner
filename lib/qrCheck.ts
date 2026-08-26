@@ -64,11 +64,7 @@ function needlesForField(
       .filter((c) => /^[A-Z0-9]{1,3}$/.test(c));
   }
 
-  if (
-    key === "dateOfBirth" ||
-    key === "issueDate" ||
-    key === "expiryDate"
-  ) {
+  if (key === "dateOfBirth" || key === "expiryDate") {
     return dateNeedles(raw);
   }
 

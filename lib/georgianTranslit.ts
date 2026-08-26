@@ -504,6 +504,154 @@ export function findResidenceFromQr(
   return null;
 }
 
+export type QrLatinIdentity = {
+  surname: string | null;
+  givenNames: string | null;
+  country: string | null;
+  city: string | null;
+};
+
+/**
+ * Latin surname, given names, country and city exactly as they appear in the QR.
+ * Does not title-case or canonicalize.
+ */
+export function extractLatinIdentityFromQr(
+  payload: string | null | undefined
+): QrLatinIdentity {
+  const empty: QrLatinIdentity = {
+    surname: null,
+    givenNames: null,
+    country: null,
+    city: null,
+  };
+  const raw = (payload || "").trim();
+  if (!raw) return empty;
+
+  const tokens = raw
+    .split(/[^A-Za-z\u10A0-\u10FF0-9]+/)
+    .map((t) => t.trim())
+    .filter((t) => t.length > 0);
+
+  const isCountry = (t: string) =>
+    /^(georgia|sakartvelo|saqartvelo|საქართველო)$/i.test(t);
+
+  const isStop = (t: string) => {
+    const u = t.toUpperCase().replace(/[^A-Z0-9]/g, "");
+    if (!u) return true;
+    if (/^\d{6,}$/.test(u)) return true;
+    if (/^[A-Z]{2}\d{7}$/.test(u)) return true;
+    if (QR_RESIDENCE_STOP.test(u)) return true;
+    if (JUNK_CITY_LATIN.test(t)) return true;
+    return false;
+  };
+
+  const isLatinName = (t: string) => {
+    if (t.length < 2) return false;
+    if (!/[A-Za-z]/.test(t) || GEO_RE.test(t)) return false;
+    if (isCountry(t) || isStop(t)) return false;
+    if (/^\d+$/.test(t)) return false;
+    return true;
+  };
+
+  const isCityLike = (t: string) => {
+    if (t.length < 3) return false;
+    if (isCountry(t) || isStop(t)) return false;
+    if (/^\d+$/.test(t)) return false;
+    return /[A-Za-z\u10A0-\u10FF]/.test(t);
+  };
+
+  const nameParts: string[] = [];
+  for (const t of tokens) {
+    if (isCountry(t) || isStop(t)) break;
+    if (!isLatinName(t)) {
+      if (nameParts.length) break;
+      continue;
+    }
+    nameParts.push(t);
+    if (nameParts.length >= 4) break;
+  }
+
+  let country: string | null = null;
+  let city: string | null = null;
+  for (let i = 0; i < tokens.length; i++) {
+    if (!isCountry(tokens[i])) continue;
+    country = tokens[i];
+    const parts: string[] = [];
+    for (let j = i + 1; j < tokens.length && parts.length < 2; j++) {
+      const t = tokens[j];
+      if (isStop(t) || isCountry(t)) break;
+      if (!isCityLike(t)) break;
+      parts.push(t);
+      if (knownPlaceFromLatin(parts.join(" "))) break;
+    }
+    if (parts.length) {
+      city = parts.join(" ");
+      break;
+    }
+  }
+
+  return {
+    surname: nameParts[0] || null,
+    givenNames: nameParts.slice(1).join(" ") || null,
+    country,
+    city,
+  };
+}
+
+/** Keep OCR Georgian; put QR Latin on the English side exactly as decoded. */
+export function applyQrLatinToName(
+  ocr: string | null | undefined,
+  qrLatin: string | null | undefined
+): string | null {
+  const qr = (qrLatin || "").trim();
+  let formatted: string | null = null;
+  try {
+    formatted = formatBilingualName(ocr);
+  } catch {
+    formatted = (ocr || "").trim() || null;
+  }
+  if (!qr) return formatted;
+
+  const { geo } = splitBilingualName(formatted || ocr || "");
+  const geoSide =
+    (geo || "").trim() ||
+    (ocr && GEO_RE.test(ocr) ? georgianOnly(ocr) : "") ||
+    latinToGeorgianApprox(qr);
+  return joinBilingualName(geoSide, qr) || qr;
+}
+
+/** Keep OCR Georgian city; English country and city copied from the QR. */
+export function applyQrLatinToResidence(
+  ocr: string | null | undefined,
+  qrCountry: string | null | undefined,
+  qrCity: string | null | undefined
+): string | null {
+  const country = (qrCountry || "").trim();
+  const city = (qrCity || "").trim();
+  let formatted: string | null = null;
+  try {
+    formatted = formatResidence(
+      ocr || (city ? `${country || "Georgia"}, ${city}` : null)
+    );
+  } catch {
+    formatted = (ocr || "").trim() || null;
+  }
+
+  if (!country && !city) return formatted;
+
+  const { geo } = splitBilingualName(formatted || ocr || "");
+  let geoCity = stripGeoCountry(geo).trim();
+  if (!geoCity && city) {
+    geoCity = knownPlaceFromLatin(city) || latinToGeorgianApprox(city);
+  }
+  const latinCountry = country || "Georgia";
+  const latinCity = city;
+  if (!geoCity || !latinCity) {
+    return formatted;
+  }
+  return `საქართველო, ${geoCity} / ${latinCountry}, ${latinCity}`;
+}
+
 /** Split stored `ქართული / Latin` (or single-script) into two sides for UI. */
 export function splitBilingualName(
   value: string | null | undefined
