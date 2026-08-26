@@ -568,6 +568,22 @@ img {
   min-width: 0;
 }
 
+.qr-payload {
+  margin: 0;
+  padding: 0.75rem 0.85rem;
+  max-height: 14rem;
+  overflow: auto;
+  white-space: pre-wrap;
+  word-break: break-word;
+  font-family: ui-monospace, "Cascadia Code", "Segoe UI Mono", Consolas, monospace;
+  font-size: 0.78rem;
+  line-height: 1.45;
+  color: var(--ink-soft);
+  background: #f4eefb;
+  cursor: default;
+  user-select: text;
+}
+
 .qr-details {
   flex: 1 1 12rem;
   min-width: min(100%, 12rem);
@@ -607,20 +623,6 @@ img {
 .qr-details[open] summary {
   border-bottom: 1px solid var(--line);
   background: color-mix(in srgb, var(--lilac) 12%, #fff);
-}
-
-.qr-payload {
-  margin: 0;
-  padding: 0.75rem 0.85rem;
-  max-height: 14rem;
-  overflow: auto;
-  white-space: pre-wrap;
-  word-break: break-word;
-  font-family: ui-monospace, "Cascadia Code", "Segoe UI Mono", Consolas, monospace;
-  font-size: 0.78rem;
-  line-height: 1.45;
-  color: var(--ink);
-  background: #fffefb;
 }
 
 .lightbox {

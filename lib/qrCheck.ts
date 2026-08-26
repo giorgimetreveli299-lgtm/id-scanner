@@ -1,4 +1,4 @@
-import { splitBilingualName } from "@/lib/georgianTranslit";
+import { joinBilingualName, splitBilingualName } from "@/lib/georgianTranslit";
 
 export type QrHighlight = { start: number; end: number };
 
@@ -279,4 +279,56 @@ export function getQrCompareStatus(
   const hits = findFieldInQr(qr, fieldKey, raw);
   if (hits && hits.length) return "checked";
   return "error";
+}
+
+/** English-side (or full) string used for the QR badge on a field. */
+export function qrBadgeValue(
+  fieldKey: QrCheckableField,
+  formValue: string
+): string {
+  if (
+    fieldKey === "surname" ||
+    fieldKey === "givenNames" ||
+    fieldKey === "residence"
+  ) {
+    const { geo, latin } = splitBilingualName(formValue);
+    return latin || joinBilingualName(geo, latin);
+  }
+  return formValue;
+}
+
+/**
+ * Form values that were Checked against the QR at scan time.
+ * Any later edit (even one character) must show Error.
+ */
+export function buildQrCheckedSnapshot(
+  qrPayload: string | null | undefined,
+  fields: Record<string, string>
+): Partial<Record<QrCheckableField, string>> {
+  const snap: Partial<Record<QrCheckableField, string>> = {};
+  for (const key of QR_CHECKABLE_FIELDS) {
+    const raw = fields[key] ?? "";
+    if (getQrCompareStatus(qrPayload, key, qrBadgeValue(key, raw)) === "checked") {
+      snap[key] = raw;
+    }
+  }
+  return snap;
+}
+
+/** Status after scan: Checked only if the field is still exactly the scanned value. */
+export function getQrBadgeStatus(
+  qrPayload: string | null | undefined,
+  fieldKey: string,
+  badgeValue: string,
+  currentFormValue: string,
+  snapshot: Partial<Record<QrCheckableField, string>>
+): "checked" | "error" | null {
+  if (!isQrCheckableField(fieldKey)) return null;
+  if (!(qrPayload || "").trim()) return null;
+
+  if (Object.prototype.hasOwnProperty.call(snapshot, fieldKey)) {
+    return currentFormValue === snapshot[fieldKey] ? "checked" : "error";
+  }
+
+  return getQrCompareStatus(qrPayload, fieldKey, badgeValue);
 }

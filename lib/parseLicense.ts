@@ -245,7 +245,7 @@ function findLicenseNumber(text: string, lines: string[]): string | null {
 }
 
 function collectCategoryCodes(fragment: string): string[] {
-  const upper = fragment
+  const upper = (fragment.length > 4000 ? fragment.slice(0, 4000) : fragment)
     .toUpperCase()
     .replace(/\u0410/g, "A")
     .replace(/\u0412/g, "B")
@@ -929,14 +929,6 @@ function findResidenceFromField8(text: string, lines: string[]): string | null {
     /^(საცხოვრებელი\s*ადგილი|მისამართი|place\s*of\s*residence|permanent\s*address|address)\s*[:：]?\s*/i;
   const JUNK_CITY =
     /^(DRIVING|LICENCE|LICENSE|PLACE|RESIDENCE|CATEGORY|CATEGORIES|SERVICE|AGENCY|REPUBLIC|PERMANENT|ADDRESS|HOLDER|მართვის|მოწმობა|ადგილი|საცხოვრებელი|კატეგორია)$/i;
-  const GEO_CITY =
-    /საქართველო\s*[,.\u060C\uFF0C:]?\s*([\u10A0-\u10FF][\u10A0-\u10FF\s\-']{1,40}?)(?=\s*(?:GEORGIA|\/|$|\n|9[\.\)]))/iu;
-  const LAT_CITY =
-    /\bGEORGIA\s*[,.\u060C\uFF0C:]?\s*([A-Za-z][A-Za-z\s\-']{1,40}?)(?=\s*(?:\/|$|\n|9[\.\)]))/i;
-  const GEO_CITY_SEP =
-    /საქართველო\s*[,.\u060C\uFF0C]\s*([\u10A0-\u10FF][\u10A0-\u10FF\s\-']{1,40}?)(?=\s*(?:GEORGIA|\/|$|\n|9[\.\)]))/iu;
-  const LAT_CITY_SEP =
-    /\bGEORGIA\s*[,.\u060C\uFF0C]\s*([A-Za-z][A-Za-z\s\-']{1,40}?)(?=\s*(?:\/|$|\n|9[\.\)]))/i;
 
   const isStopLine = (line: string): boolean => {
     const t = line.trim();
@@ -968,48 +960,74 @@ function findResidenceFromField8(text: string, lines: string[]): string | null {
     return words[0];
   };
 
+  const cityAfterCountry = (
+    chunk: string,
+    country: "geo" | "lat",
+    requireSep: boolean
+  ): string => {
+    if (!chunk) return "";
+    const marker = country === "geo" ? "საქართველო" : "GEORGIA";
+    const hay = country === "geo" ? chunk : chunk.toUpperCase();
+    let from = 0;
+    for (let n = 0; n < 12; n++) {
+      const idx = hay.indexOf(marker, from);
+      if (idx < 0) return "";
+      if (country === "lat") {
+        const before = idx === 0 ? " " : hay[idx - 1];
+        const after = hay[idx + marker.length] || " ";
+        if (/[A-Z0-9]/.test(before || "") || /[A-Z0-9]/.test(after)) {
+          from = idx + marker.length;
+          continue;
+        }
+      }
+      const rest = chunk.slice(idx + marker.length, idx + marker.length + 96);
+      const sep = /^\s*[,.\u060C\uFF0C:]/.test(rest);
+      if (requireSep && !sep) {
+        from = idx + marker.length;
+        continue;
+      }
+      const cityMatch =
+        country === "geo"
+          ? rest.match(/^\s*[,.\u060C\uFF0C:]?\s*([\u10A0-\u10FF][\u10A0-\u10FF\-']{0,40})/u)
+          : rest.match(/^\s*[,.\u060C\uFF0C:]?\s*([A-Za-z][A-Za-z\-']{0,40})/);
+      const city = firstCity(cityMatch?.[1] || "");
+      if (city) return city;
+      from = idx + marker.length;
+    }
+    return "";
+  };
+
   const pairFrom = (chunk: string, requireSep: boolean): string | null => {
-    const geoRe = new RegExp(
-      requireSep ? GEO_CITY_SEP.source : GEO_CITY.source,
-      "giu"
-    );
-    const latRe = new RegExp(
-      requireSep ? LAT_CITY_SEP.source : LAT_CITY.source,
-      "gi"
-    );
-    let geoCity = "";
-    let latCity = "";
-    for (const m of chunk.matchAll(geoRe)) {
-      const c = firstCity(m[1] || "");
-      if (c) {
-        geoCity = c;
-        break;
-      }
-    }
-    for (const m of chunk.matchAll(latRe)) {
-      const c = firstCity(m[1] || "");
-      if (c) {
-        latCity = c;
-        break;
-      }
-    }
+    if (!chunk) return null;
+    const slice = chunk.length > 8000 ? chunk.slice(0, 8000) : chunk;
+    const geoCity = cityAfterCountry(slice, "geo", requireSep);
+    const latCity = cityAfterCountry(slice, "lat", requireSep);
     if (geoCity && latCity) return `${geoCity} / ${latCity}`;
     if (geoCity) return geoCity;
     if (latCity) return latCity;
     return null;
   };
 
-  const stripTrail = (raw: string) =>
-    raw
+  const stripTrail = (raw: string) => {
+    let s = raw
       .replace(/^8[\.\),:]?\s*/i, "")
       .replace(LABEL_RE, "")
       .replace(/\s+9[\.\)][\s\S]*$/i, "")
-      .replace(
-        /\s+\b(?:C1E|D1E|D13|AM|A1|A2|B1|C1|D1|BE|CE|DE|[ABCDTS])\b(?:\s+\b(?:C1E|D1E|D13|AM|A1|A2|B1|C1|D1|BE|CE|DE|[ABCDTS])\b)*\s*$/i,
-        ""
-      )
       .replace(/\s+/g, " ")
       .trim();
+    const tokens = s.split(/\s+/);
+    while (tokens.length) {
+      const last = (tokens[tokens.length - 1] || "").replace(/[.,;:]+$/, "");
+      if (
+        /^(C1E|D1E|D13|AM|A1|A2|B1|C1|D1|BE|CE|DE|[ABCDTS])$/i.test(last)
+      ) {
+        tokens.pop();
+        continue;
+      }
+      break;
+    }
+    return tokens.join(" ").trim();
+  };
 
   // 1) Lines from `8.` until `9.` / the category table
   for (let i = 0; i < lines.length; i++) {
@@ -1047,9 +1065,29 @@ function findResidenceFromField8(text: string, lines: string[]): string | null {
     if (hit) return hit;
   }
 
-  // 3) `საქართველო, City` / `Georgia, City` anywhere (skip the front header:
-  //    first matchAll hit with a junk city is ignored, later hits are used)
-  return pairFrom(text, true) || pairFrom(text, false);
+  // 3) `საქართველო, City` / `Georgia, City` on lines that mention the country
+  //    (skip the front header: "Georgia Driving Licence" has no comma/city)
+  const relevant = (lines.length ? lines : text.split("\n"))
+    .filter((l) => /საქართველო|georgia/i.test(l))
+    .map((l) => {
+      const windows: string[] = [];
+      let from = 0;
+      const upper = l.toUpperCase();
+      while (windows.length < 8) {
+        const geoAt = l.indexOf("საქართველო", from);
+        const latAt = upper.indexOf("GEORGIA", from);
+        const idx =
+          geoAt >= 0 && latAt >= 0
+            ? Math.min(geoAt, latAt)
+            : Math.max(geoAt, latAt);
+        if (idx < 0) break;
+        windows.push(l.slice(Math.max(0, idx - 16), idx + 160));
+        from = idx + 1;
+      }
+      return windows.join("\n") || l.slice(0, 200);
+    })
+    .join("\n");
+  return pairFrom(relevant, true) || pairFrom(relevant, false);
 }
 
 export function parseLicenseText(raw: string): LicenseFields {
@@ -1060,57 +1098,85 @@ export function parseLicenseText(raw: string): LicenseFields {
     .filter(Boolean);
 
   const fields: LicenseFields = { ...EMPTY };
+  const tryField = <T>(fn: () => T, fallback: T): T => {
+    try {
+      return fn();
+    } catch {
+      return fallback;
+    }
+  };
 
-  fields.surname = findSurnameFromField1(text, lines);
-  fields.givenNames = findGivenNamesFromField2(text, lines);
+  fields.surname = tryField(() => findSurnameFromField1(text, lines), null);
+  fields.givenNames = tryField(() => findGivenNamesFromField2(text, lines), null);
 
-  const field3 = findField3DateAndPlace(text, lines);
+  const field3 = tryField(
+    () => findField3DateAndPlace(text, lines),
+    { date: null, place: null }
+  );
   fields.dateOfBirth =
     field3.date ||
-    findDateNear(lines, [
-      /^3[\.\)]?\s/,
-      /დაბადების\s*თარიღი/i,
-      /date\s*of\s*birth/i,
-      /\bDOB\b/i,
-    ]) ||
+    tryField(
+      () =>
+        findDateNear(lines, [
+          /^3[\.\)]?\s/,
+          /დაბადების\s*თარიღი/i,
+          /date\s*of\s*birth/i,
+          /\bDOB\b/i,
+        ]),
+      null
+    ) ||
     null;
 
   fields.placeOfBirth =
     field3.place ||
-    sanitizePlaceOfBirth(
-      lineValue(lines, [/დაბადების\s*ადგილი/i, /place\s*of\s*birth/i])
+    tryField(
+      () =>
+        sanitizePlaceOfBirth(
+          lineValue(lines, [/დაბადების\s*ადგილი/i, /place\s*of\s*birth/i])
+        ),
+      null
     );
 
   // On every licence: 4a = issue date, 4b = expiry date
-  fields.issueDate =
-    findIssueDateFromField4a(text, lines) ||
-    findDateFromFieldLabel(text, lines, /4a[\.\)]?/i) ||
-    findDateNear(lines, [
-      /გაცემის\s*თარიღი/i,
-      /date\s*of\s*issue/i,
-    ]) ||
-    null;
+  fields.issueDate = tryField(
+    () =>
+      findIssueDateFromField4a(text, lines) ||
+      findDateFromFieldLabel(text, lines, /4a[\.\)]?/i) ||
+      findDateNear(lines, [
+        /გაცემის\s*თარიღი/i,
+        /date\s*of\s*issue/i,
+      ]) ||
+      null,
+    null
+  );
   if (fields.issueDate) {
     fields.issueDate = normalizeFlexDate(fields.issueDate) || fields.issueDate;
   }
 
-  fields.expiryDate =
-    findDateFromFieldLabel(text, lines, /4b[\.\)]?/i) ||
-    findDateNear(lines, [
-      /გაუქმების\s*თარიღი/i,
-      /მოქმედების\s*ვადა/i,
-      /date\s*of\s*expiry/i,
-    ]) ||
-    null;
+  fields.expiryDate = tryField(
+    () =>
+      findDateFromFieldLabel(text, lines, /4b[\.\)]?/i) ||
+      findDateNear(lines, [
+        /გაუქმების\s*თარიღი/i,
+        /მოქმედების\s*ვადა/i,
+        /date\s*of\s*expiry/i,
+      ]) ||
+      null,
+    null
+  );
 
   fields.issuingAuthority = ISSUING_AUTHORITY;
 
-  fields.personalNumber = findPersonalNumber(text);
-  fields.licenseNumber = findLicenseNumber(text, lines);
-
-  fields.residence = findResidenceFromField8(text, lines);
-
-  fields.category = formatCategory(findCategoryAtField9(text, lines));
+  fields.personalNumber = tryField(() => findPersonalNumber(text), null);
+  fields.licenseNumber = tryField(() => findLicenseNumber(text, lines), null);
+  fields.residence = tryField(
+    () => findResidenceFromField8(text, lines),
+    null
+  );
+  fields.category = tryField(
+    () => formatCategory(findCategoryAtField9(text, lines)),
+    null
+  );
 
   return fields;
 }

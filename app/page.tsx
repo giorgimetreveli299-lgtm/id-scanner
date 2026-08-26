@@ -19,9 +19,11 @@ import {
   splitBilingualName,
 } from "@/lib/georgianTranslit";
 import {
+  buildQrCheckedSnapshot,
   findFieldInQr,
-  getQrCompareStatus,
+  getQrBadgeStatus,
   isQrCheckableField,
+  type QrCheckableField,
   type QrHighlight,
 } from "@/lib/qrCheck";
 
@@ -171,6 +173,9 @@ export default function HomePage() {
   const [pdfBusy, setPdfBusy] = useState(false);
   const [qrHighlight, setQrHighlight] = useState<QrHighlight[] | null>(null);
   const [qrDetailsOpen, setQrDetailsOpen] = useState(false);
+  const [qrCheckedSnapshot, setQrCheckedSnapshot] = useState<
+    Partial<Record<QrCheckableField, string>>
+  >({});
 
   const frontInputRef = useRef<HTMLInputElement>(null);
   const backInputRef = useRef<HTMLInputElement>(null);
@@ -255,6 +260,7 @@ export default function HomePage() {
       setHolderSignature(null);
       setQrCodeImage(null);
       setQrCodeValue(null);
+      setQrCheckedSnapshot({});
       scannedPairRef.current = null;
 
       const url = URL.createObjectURL(next);
@@ -303,6 +309,7 @@ export default function HomePage() {
           setHolderSignature(null);
           setQrCodeImage(null);
           setQrCodeValue(null);
+          setQrCheckedSnapshot({});
           scannedPairRef.current = null;
           if (side === "front") setFront(apply);
           else setBack(apply);
@@ -326,6 +333,7 @@ export default function HomePage() {
     setHolderSignature(null);
     setQrCodeImage(null);
     setQrCodeValue(null);
+    setQrCheckedSnapshot({});
     scannedPairRef.current = null;
     setCropSide((current) =>
       current === side || (side === "front" && current === "back") ? null : current
@@ -351,6 +359,7 @@ export default function HomePage() {
     setHolderSignature(null);
     setQrCodeImage(null);
     setQrCodeValue(null);
+    setQrCheckedSnapshot({});
     setQrHighlight(null);
     setQrDetailsOpen(false);
     scannedPairRef.current = null;
@@ -499,6 +508,7 @@ export default function HomePage() {
     setHolderSignature(null);
     setQrCodeImage(null);
     setQrCodeValue(null);
+    setQrCheckedSnapshot({});
     setQrHighlight(null);
     setQrDetailsOpen(false);
     try {
@@ -510,7 +520,15 @@ export default function HomePage() {
       if (!res.ok || data.error) {
         throw new Error(data.error || "Scan failed.");
       }
-      if (data.fields) setForm(fieldsToForm(data.fields));
+      if (data.fields) {
+        const nextForm = fieldsToForm(data.fields);
+        setForm(nextForm);
+        setQrCheckedSnapshot(
+          buildQrCheckedSnapshot(data.qrCodeValue ?? null, nextForm)
+        );
+      } else {
+        setQrCheckedSnapshot({});
+      }
       setQrCodeValue(data.qrCodeValue ?? null);
 
       // Prefer server-cropped images (browser crop often fails on revoked/HEIC blobs)
@@ -704,7 +722,13 @@ export default function HomePage() {
   };
 
   const renderQrCompareBadge = (fieldKey: string, value: string) => {
-    const status = getQrCompareStatus(qrCodeValue, fieldKey, value);
+    const status = getQrBadgeStatus(
+      qrCodeValue,
+      fieldKey,
+      value,
+      isQrCheckableField(fieldKey) ? form[fieldKey] : value,
+      qrCheckedSnapshot
+    );
     if (!status) return null;
     if (status === "checked") {
       return (
@@ -781,13 +805,26 @@ export default function HomePage() {
 
     if (bilingualKeys.includes(textKey)) {
       const raw = form[textKey];
-      const normalized =
-        textKey === "residence"
-          ? formatResidence(raw) || raw
-          : textKey === "placeOfBirth"
-            ? formatBilingualPlace(raw) || raw
-            : formatBilingualName(raw) || raw;
-      const { geo, latin } = splitBilingualName(normalized);
+      const { geo, latin } = splitBilingualName(raw);
+      const commitBilingual = () => {
+        setForm((prev) => {
+          if (
+            isQrCheckableField(textKey) &&
+            Object.prototype.hasOwnProperty.call(qrCheckedSnapshot, textKey) &&
+            prev[textKey] === qrCheckedSnapshot[textKey]
+          ) {
+            return prev;
+          }
+          const current = prev[textKey];
+          const formatted =
+            textKey === "residence"
+              ? formatResidence(current)
+              : textKey === "placeOfBirth"
+                ? formatBilingualPlace(current)
+                : formatBilingualName(current);
+          return { ...prev, [textKey]: formatted || current };
+        });
+      };
       // Badge checks English side for bilingual fields (surname / names / residence)
       const checkValue =
         textKey === "surname" ||
@@ -814,6 +851,7 @@ export default function HomePage() {
               maxLength={field.maxLength}
               aria-label={`${title} (ქართული)`}
               placeholder="—"
+              onBlur={commitBilingual}
               onChange={(e) => {
                 const nextGeo = e.target.value;
                 setForm((prev) => {
@@ -832,6 +870,7 @@ export default function HomePage() {
                 maxLength={field.maxLength}
                 aria-label={`${title} (English)`}
                 placeholder="—"
+                onBlur={commitBilingual}
                 onChange={(e) => {
                   const nextLatin = e.target.value;
                   setForm((prev) => {
@@ -1011,7 +1050,7 @@ export default function HomePage() {
                                   ? "QR ინფორმაცია / QR data"
                                   : "ინფორმაცია არ წაიკითხა / No data"}
                               </summary>
-                              <pre className="qr-payload">
+                              <pre className="qr-payload" aria-readonly="true">
                                 {qrCodeValue
                                   ? renderHighlightedQr(qrCodeValue)
                                   : "—"}

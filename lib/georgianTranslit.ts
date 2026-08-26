@@ -379,6 +379,7 @@ export function formatResidence(
   if (!value) return null;
   let raw = value.trim();
   if (!raw) return null;
+  if (raw.length > 240) raw = raw.slice(0, 240);
 
   raw = raw
     .replace(/^8[\.\),:]?\s*/i, "")

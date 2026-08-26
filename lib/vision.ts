@@ -628,16 +628,35 @@ export async function scanLicenseSides(
     throw new Error("Could not read any text. Try clearer photos of both sides.");
   }
 
-  const frontFields = frontText
-    ? parseLicenseText(frontText)
-    : parseLicenseText("");
-  const backFields = backText ? parseLicenseText(backText) : parseLicenseText("");
+  const safeParse = (raw: string): LicenseFields => {
+    try {
+      return parseLicenseText(raw);
+    } catch {
+      return parseLicenseText("");
+    }
+  };
+
+  const frontFields = safeParse(frontText || "");
+  const backFields = safeParse(backText || "");
   const combinedText = [frontText, backText].filter(Boolean).join("\n\n---\n\n");
-  const combinedFields = parseLicenseText(combinedText);
+  const combinedFields = safeParse(combinedText);
+
+  let qrCategory: string | null = null;
+  let qrResidence: string | null = null;
+  try {
+    qrCategory = findCategoriesFromQr(qr.value);
+  } catch {
+    qrCategory = null;
+  }
+  try {
+    qrResidence = findResidenceFromQr(qr.value);
+  } catch {
+    qrResidence = null;
+  }
 
   // Field 9: uppercase Latin category codes from the QR payload first
   const category = formatCategory(
-    findCategoriesFromQr(qr.value) ||
+    qrCategory ||
       backAnalysis.categoryFromTable ||
       backFields.category ||
       frontFields.category ||
@@ -658,34 +677,76 @@ export async function scanLicenseSides(
     return first?.replace(/^["']+|["']+$/g, "") || null;
   })();
 
-  const surname = formatBilingualName(
-    surnameFromQr ||
-      frontFields.surname ||
-      combinedFields.surname ||
-      backFields.surname
-  );
+  const surname = (() => {
+    try {
+      return formatBilingualName(
+        surnameFromQr ||
+          frontFields.surname ||
+          combinedFields.surname ||
+          backFields.surname
+      );
+    } catch {
+      return (
+        surnameFromQr ||
+        frontFields.surname ||
+        combinedFields.surname ||
+        backFields.surname
+      );
+    }
+  })();
 
   // Field 2 (given names) — also keep bilingual when possible
-  const givenNames = formatBilingualName(
-    frontFields.givenNames ||
-      combinedFields.givenNames ||
-      backFields.givenNames
-  );
+  const givenNames = (() => {
+    try {
+      return formatBilingualName(
+        frontFields.givenNames ||
+          combinedFields.givenNames ||
+          backFields.givenNames
+      );
+    } catch {
+      return (
+        frontFields.givenNames ||
+        combinedFields.givenNames ||
+        backFields.givenNames
+      );
+    }
+  })();
 
   // Field 3 place of birth sits beside the DOB on the front
-  const placeOfBirth = formatBilingualPlace(
-    frontFields.placeOfBirth ||
-      combinedFields.placeOfBirth ||
-      backFields.placeOfBirth
-  );
+  const placeOfBirth = (() => {
+    try {
+      return formatBilingualPlace(
+        frontFields.placeOfBirth ||
+          combinedFields.placeOfBirth ||
+          backFields.placeOfBirth
+      );
+    } catch {
+      return (
+        frontFields.placeOfBirth ||
+        combinedFields.placeOfBirth ||
+        backFields.placeOfBirth
+      );
+    }
+  })();
 
   // Field 8: QR has `Georgia` then the city; OCR is fallback
-  const residence = formatResidence(
-    findResidenceFromQr(qr.value) ||
-      backFields.residence ||
-      combinedFields.residence ||
-      frontFields.residence
-  );
+  const residence = (() => {
+    try {
+      return formatResidence(
+        qrResidence ||
+          backFields.residence ||
+          combinedFields.residence ||
+          frontFields.residence
+      );
+    } catch {
+      return (
+        qrResidence ||
+        backFields.residence ||
+        combinedFields.residence ||
+        frontFields.residence
+      );
+    }
+  })();
 
   const dateOfBirth =
     frontFields.dateOfBirth ||
