@@ -8,7 +8,11 @@ import {
   type DashboardField,
   type LicenseFields,
 } from "@/lib/parseLicense";
-import type { FaceBox } from "@/lib/types";
+import {
+  BACK_SIDE_REQUIRED_ERROR,
+  FRONT_SIDE_REQUIRED_ERROR,
+  type FaceBox,
+} from "@/lib/types";
 import CropStraightenModal from "@/components/CropStraightenModal";
 import { downloadLicensePdf } from "@/lib/buildLicensePdf";
 import {
@@ -17,6 +21,8 @@ import {
   formatResidence,
   joinBilingualName,
   splitBilingualName,
+  syncBilingualFromGeo,
+  syncBilingualFromLatin,
 } from "@/lib/georgianTranslit";
 import {
   buildQrCheckedSnapshot,
@@ -176,6 +182,11 @@ export default function HomePage() {
   const [qrCheckedSnapshot, setQrCheckedSnapshot] = useState<
     Partial<Record<QrCheckableField, string>>
   >({});
+  const [sideIssue, setSideIssue] = useState<{
+    front: string | null;
+    back: string | null;
+  }>({ front: null, back: null });
+  const [checkingSide, setCheckingSide] = useState<Side | null>(null);
 
   const frontInputRef = useRef<HTMLInputElement>(null);
   const backInputRef = useRef<HTMLInputElement>(null);
@@ -194,8 +205,14 @@ export default function HomePage() {
       : null;
   // Extract only after both sides are present and no camera/crop/auto-crop is active
   const canExtract =
-    bothReady && !cropSide && !cameraSide && !autoCropping;
-  const showResults = canExtract && (loading || scanned || Boolean(error));
+    bothReady &&
+    !cropSide &&
+    !cameraSide &&
+    !autoCropping &&
+    !checkingSide &&
+    !sideIssue.front &&
+    !sideIssue.back;
+  const showResults = canExtract && scanned && !error;
 
   const stopCamera = useCallback(() => {
     streamRef.current?.getTracks().forEach((t) => t.stop());
@@ -242,14 +259,39 @@ export default function HomePage() {
     if (url) URL.revokeObjectURL(url);
   };
 
+  const checkLicenseSide = useCallback(async (side: Side, file: File) => {
+    setCheckingSide(side);
+    setSideIssue((prev) => ({ ...prev, [side]: null }));
+    try {
+      const body = new FormData();
+      body.append("image", file);
+      body.append("side", side);
+      const res = await fetch("/api/validate-side", { method: "POST", body });
+      const data = (await res.json()) as { error?: string };
+      if (!res.ok || data.error) {
+        const msg =
+          data.error ||
+          (side === "front"
+            ? FRONT_SIDE_REQUIRED_ERROR
+            : BACK_SIDE_REQUIRED_ERROR);
+        setSideIssue((prev) => ({ ...prev, [side]: msg }));
+        setScanned(false);
+        setForm(EMPTY_FIELDS);
+      }
+    } catch {
+      // Full scan still validates both sides
+    } finally {
+      setCheckingSide((current) => (current === side ? null : current));
+    }
+  }, []);
+
   const setSideFile = useCallback(
     (
       side: Side,
       next: File,
       options?: { openEditor?: boolean; skipAutoCrop?: boolean }
     ) => {
-      if (side === "back" && !front.file) {
-        setError("Upload the front side before adding the back.");
+      if (side === "back" && (!front.file || Boolean(sideIssue.front))) {
         return;
       }
       stopCamera();
@@ -261,6 +303,7 @@ export default function HomePage() {
       setQrCodeImage(null);
       setQrCodeValue(null);
       setQrCheckedSnapshot({});
+      setSideIssue((prev) => ({ ...prev, [side]: null }));
       scannedPairRef.current = null;
 
       const url = URL.createObjectURL(next);
@@ -278,7 +321,10 @@ export default function HomePage() {
         return;
       }
 
-      if (options?.skipAutoCrop) return;
+      if (options?.skipAutoCrop) {
+        void checkLicenseSide(side, next);
+        return;
+      }
 
       void (async () => {
         setAutoCropping(side);
@@ -292,9 +338,15 @@ export default function HomePage() {
             body,
             signal: controller.signal,
           });
-          if (!res.ok) return;
+          if (!res.ok) {
+            await checkLicenseSide(side, next);
+            return;
+          }
           const blob = await res.blob();
-          if (!blob.type.startsWith("image/")) return;
+          if (!blob.type.startsWith("image/")) {
+            await checkLicenseSide(side, next);
+            return;
+          }
           const processed = new File([blob], `license-${side}-auto.jpg`, {
             type: "image/jpeg",
           });
@@ -313,15 +365,16 @@ export default function HomePage() {
           scannedPairRef.current = null;
           if (side === "front") setFront(apply);
           else setBack(apply);
+          await checkLicenseSide(side, processed);
         } catch {
-          // Keep original if auto-crop fails / times out
+          await checkLicenseSide(side, next);
         } finally {
           window.clearTimeout(timer);
           setAutoCropping((current) => (current === side ? null : current));
         }
       })();
     },
-    [stopCamera, front.file]
+    [stopCamera, front.file, checkLicenseSide, sideIssue.front]
   );
 
   const clearSide = (side: Side) => {
@@ -334,6 +387,9 @@ export default function HomePage() {
     setQrCodeImage(null);
     setQrCodeValue(null);
     setQrCheckedSnapshot({});
+    setSideIssue((prev) =>
+      side === "front" ? { front: null, back: null } : { ...prev, back: null }
+    );
     scannedPairRef.current = null;
     setCropSide((current) =>
       current === side || (side === "front" && current === "back") ? null : current
@@ -360,6 +416,8 @@ export default function HomePage() {
     setQrCodeImage(null);
     setQrCodeValue(null);
     setQrCheckedSnapshot({});
+    setSideIssue({ front: null, back: null });
+    setCheckingSide(null);
     setQrHighlight(null);
     setQrDetailsOpen(false);
     scannedPairRef.current = null;
@@ -404,8 +462,7 @@ export default function HomePage() {
   };
 
   const startCamera = async (side: Side) => {
-    if (side === "back" && !front.file) {
-      setError("Upload the front side before capturing the back.");
+    if (side === "back" && (!front.file || Boolean(sideIssue.front))) {
       return;
     }
     setError(null);
@@ -565,8 +622,20 @@ export default function HomePage() {
       setScanned(true);
     } catch (err) {
       scannedPairRef.current = null;
-      setError(err instanceof Error ? err.message : "Error");
+      const message = err instanceof Error ? err.message : "Error";
+      setError(message);
       setScanned(false);
+      setForm(EMPTY_FIELDS);
+      setHolderPhoto(null);
+      setHolderSignature(null);
+      setQrCodeImage(null);
+      setQrCodeValue(null);
+      setQrCheckedSnapshot({});
+      if (message === FRONT_SIDE_REQUIRED_ERROR) {
+        setSideIssue((prev) => ({ ...prev, front: message }));
+      } else if (message === BACK_SIDE_REQUIRED_ERROR) {
+        setSideIssue((prev) => ({ ...prev, back: message }));
+      }
     } finally {
       scanningRef.current = false;
       setLoading(false);
@@ -586,16 +655,24 @@ export default function HomePage() {
   const renderSideCard = (side: Side, state: SideState) => {
     const label = side === "front" ? "Front" : "Back";
     const inputRef = side === "front" ? frontInputRef : backInputRef;
-    const locked = side === "back" && !front.file;
+    const locked = side === "back" && (!front.file || Boolean(sideIssue.front));
+    const invalidMsg = side === "front" ? sideIssue.front : sideIssue.back;
+    const sideInvalid = Boolean(state.file && invalidMsg);
 
     return (
-      <div className={`side-card ${locked ? "locked" : ""}`}>
+      <div className={`side-card ${locked ? "locked" : ""} ${sideInvalid ? "has-error" : ""}`}>
         <div className="side-card-head">
           <h2>{label}</h2>
           {locked ? (
-            <span className="side-badge">Upload front first</span>
-          ) : autoCropping === side ? (
-            <span className="side-badge">Cropping…</span>
+            <span className="side-badge">
+              {sideIssue.front ? "Fix front first" : "Upload front first"}
+            </span>
+          ) : autoCropping === side || checkingSide === side ? (
+            <span className="side-badge">Checking…</span>
+          ) : sideInvalid ? (
+            <span className="side-badge err">Error</span>
+          ) : loading && state.file ? (
+            <span className="side-badge">Checking…</span>
           ) : state.file ? (
             <span className="side-badge ready">Ready</span>
           ) : (
@@ -604,7 +681,7 @@ export default function HomePage() {
         </div>
 
         <div
-          className={`dropzone compact ${dragging === side ? "active" : ""} ${state.preview ? "has-preview" : ""} ${locked ? "locked" : ""}`}
+          className={`dropzone compact ${dragging === side ? "active" : ""} ${state.preview ? "has-preview" : ""} ${locked ? "locked" : ""} ${sideInvalid ? "invalid" : ""}`}
           onDragOver={(e) => {
             e.preventDefault();
             if (locked) return;
@@ -655,6 +732,9 @@ export default function HomePage() {
             }}
           />
         </div>
+        {sideInvalid ? (
+          <p className="side-error">{invalidMsg}</p>
+        ) : null}
 
         <div className="actions">
           <button
@@ -800,12 +880,21 @@ export default function HomePage() {
       "surname",
       "givenNames",
       "placeOfBirth",
+      "issuingAuthority",
       "residence",
     ];
 
     if (bilingualKeys.includes(textKey)) {
       const raw = form[textKey];
       const { geo, latin } = splitBilingualName(raw);
+      const bilingualKind =
+        textKey === "residence"
+          ? "residence"
+          : textKey === "placeOfBirth"
+            ? "place"
+            : textKey === "issuingAuthority"
+              ? "authority"
+              : "name";
       const commitBilingual = () => {
         setForm((prev) => {
           if (
@@ -854,13 +943,10 @@ export default function HomePage() {
               onBlur={commitBilingual}
               onChange={(e) => {
                 const nextGeo = e.target.value;
-                setForm((prev) => {
-                  const parts = splitBilingualName(prev[textKey]);
-                  return {
-                    ...prev,
-                    [textKey]: joinBilingualName(nextGeo, parts.latin),
-                  };
-                });
+                setForm((prev) => ({
+                  ...prev,
+                  [textKey]: syncBilingualFromGeo(nextGeo, bilingualKind),
+                }));
               }}
             />
             <div className={`input-with-badge${enBadge ? " has-badge" : ""}`}>
@@ -873,13 +959,10 @@ export default function HomePage() {
                 onBlur={commitBilingual}
                 onChange={(e) => {
                   const nextLatin = e.target.value;
-                  setForm((prev) => {
-                    const parts = splitBilingualName(prev[textKey]);
-                    return {
-                      ...prev,
-                      [textKey]: joinBilingualName(parts.geo, nextLatin),
-                    };
-                  });
+                  setForm((prev) => ({
+                    ...prev,
+                    [textKey]: syncBilingualFromLatin(nextLatin, bilingualKind),
+                  }));
                 }}
               />
               {enBadge}
@@ -938,6 +1021,11 @@ export default function HomePage() {
           {renderSideCard("front", front)}
           {renderSideCard("back", back)}
         </div>
+        {error &&
+        error !== FRONT_SIDE_REQUIRED_ERROR &&
+        error !== BACK_SIDE_REQUIRED_ERROR ? (
+          <p className="side-error capture-error">{error}</p>
+        ) : null}
       </section>
 
       {showResults && (

@@ -72,6 +72,15 @@ export function transliterateKa(geo: string): string {
  * Ambiguous letters use common personal-name forms (თ/კ/პ/ჩ/ც).
  */
 export function latinToGeorgianApprox(latin: string): string {
+  return mapLatinToGeoChars(latin, true);
+}
+
+/** Live Latin→Georgian: one letter in, one letter out. No extra trailing ი. */
+function latinToGeorgianLive(latin: string): string {
+  return latin.replace(/[A-Za-z]+/g, (word) => mapLatinToGeoChars(word, false));
+}
+
+function mapLatinToGeoChars(latin: string, addFinalI: boolean): string {
   const s = latinNorm(latin);
   if (!s) return "";
 
@@ -128,9 +137,12 @@ export function latinToGeorgianApprox(latin: string): string {
     if (!matched) i += 1;
   }
   let geo = out.join("");
-  // ID cards often keep Latin without final -i while Georgian ends with ი
-  // (e.g. Garibov → გარიბოვი). Append ი when Latin ends on a consonant.
-  if (geo && !geo.endsWith("ი") && !/[AEIOUY]$/.test(s)) {
+  if (
+    addFinalI &&
+    geo &&
+    !geo.endsWith("ი") &&
+    !/[AEIOUY]$/.test(s)
+  ) {
     geo += "ი";
   }
   return geo;
@@ -271,6 +283,12 @@ function knownLatinForGeo(geo: string): string {
   const compact = geo.replace(/\s+/g, "");
   if (KNOWN_LATIN_BY_GEO[compact]) return KNOWN_LATIN_BY_GEO[compact];
   return "";
+}
+
+function knownPlaceExact(latin: string): string {
+  const n = latinNorm(latin);
+  if (!n || COUNTRY_LATIN.has(n)) return "";
+  return KNOWN_PLACE_BY_LATIN[n] || "";
 }
 
 function knownPlaceFromLatin(latin: string): string {
@@ -519,4 +537,86 @@ export function joinBilingualName(geo: string, latin: string): string {
   const l = latin.trim();
   if (g && l) return `${g} / ${l}`;
   return g || l;
+}
+
+const AUTHORITY_GEO = "შსს მომსახურების სააგენტო";
+const AUTHORITY_LATIN = "Service Agency of MIA";
+
+function counterpartLatinFromGeo(
+  geo: string,
+  kind: "name" | "place" | "residence" | "authority"
+): string {
+  const g = geo.trim();
+  if (!g) return "";
+
+  if (kind === "authority") {
+    if (g === AUTHORITY_GEO) return AUTHORITY_LATIN;
+    return titleLatin(transliterateKa(g));
+  }
+
+  if (kind === "residence") {
+    const city = stripGeoCountry(g);
+    const cityLat = knownLatinForGeo(city) || transliterateKa(city);
+    if (/^საქართველო\b/i.test(g)) {
+      return cityLat ? `Georgia, ${titleLatin(cityLat)}` : "Georgia";
+    }
+    return titleLatin(cityLat);
+  }
+
+  if (kind === "place") {
+    const city = stripGeoCountry(g);
+    return titleLatin(knownLatinForGeo(city) || transliterateKa(city));
+  }
+
+  return titleLatin(transliterateKa(g));
+}
+
+function counterpartGeoFromLatin(
+  latin: string,
+  kind: "name" | "place" | "residence" | "authority"
+): string {
+  const l = latin.trim();
+  if (!l) return "";
+
+  if (kind === "authority") {
+    if (l.toLowerCase() === AUTHORITY_LATIN.toLowerCase()) return AUTHORITY_GEO;
+    return latinToGeorgianLive(l);
+  }
+
+  if (kind === "residence") {
+    const hasCountry = /^\s*georgia\b/i.test(l);
+    const city = stripLatCountry(l);
+    const cityGeo = knownPlaceExact(city) || latinToGeorgianLive(city);
+    if (hasCountry) {
+      return cityGeo ? `საქართველო, ${cityGeo}` : "საქართველო";
+    }
+    return cityGeo;
+  }
+
+  if (kind === "place") {
+    const city = stripLatCountry(l);
+    return knownPlaceExact(city) || latinToGeorgianLive(city);
+  }
+
+  return latinToGeorgianLive(l);
+}
+
+/**
+ * Keep the Georgian and English sides of a bilingual field in lockstep.
+ * The typed side is kept as-is; the other side is regenerated.
+ */
+export function syncBilingualFromGeo(
+  geo: string,
+  kind: "name" | "place" | "residence" | "authority"
+): string {
+  if (!geo.trim()) return "";
+  return joinBilingualName(geo, counterpartLatinFromGeo(geo, kind));
+}
+
+export function syncBilingualFromLatin(
+  latin: string,
+  kind: "name" | "place" | "residence" | "authority"
+): string {
+  if (!latin.trim()) return "";
+  return joinBilingualName(counterpartGeoFromLatin(latin, kind), latin);
 }

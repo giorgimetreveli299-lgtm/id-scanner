@@ -161,6 +161,28 @@ img {
   background: var(--accent-glow);
 }
 
+.side-badge.err {
+  color: #fff;
+  background: var(--danger);
+}
+
+.side-error {
+  margin: 0.55rem 0.15rem 0;
+  color: var(--danger);
+  font-size: 0.88rem;
+  font-weight: 600;
+  line-height: 1.35;
+}
+
+.capture-error {
+  margin-top: 0.9rem;
+}
+
+.dropzone.invalid {
+  border-color: var(--danger);
+  box-shadow: 0 0 0 4px rgba(180, 35, 24, 0.16);
+}
+
 .side-card.locked {
   opacity: 0.72;
 }

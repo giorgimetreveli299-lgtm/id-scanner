@@ -12,9 +12,14 @@ import {
 } from "@/lib/parseLicense";
 import { detectQrOnLicenseBack } from "@/lib/detectQr";
 import { formatBilingualName, formatBilingualPlace, formatResidence, findResidenceFromQr } from "@/lib/georgianTranslit";
-import type { FaceBox } from "@/lib/types";
+import {
+  BACK_SIDE_REQUIRED_ERROR,
+  FRONT_SIDE_REQUIRED_ERROR,
+  type FaceBox,
+} from "@/lib/types";
 
 export type { FaceBox };
+export { BACK_SIDE_REQUIRED_ERROR, FRONT_SIDE_REQUIRED_ERROR };
 
 export type ScanResult = {
   fields: LicenseFields;
@@ -580,9 +585,82 @@ async function analyzeFront(imageBuffer: Buffer): Promise<{
 async function detectQrOnBack(imageBuffer: Buffer): Promise<{
   box: FaceBox | null;
   value: string | null;
+  source: "decoded" | "plate" | "layout";
 }> {
   const result = await detectQrOnLicenseBack(imageBuffer);
-  return { box: result.box, value: result.value };
+  return { box: result.box, value: result.value, source: result.source };
+}
+
+/** True when the image contains a person face (typical of the front photo). */
+async function imageHasFace(imageBuffer: Buffer): Promise<boolean> {
+  const vision = getClient();
+  const [result] = await vision.faceDetection({
+    image: { content: imageBuffer.toString("base64") },
+  });
+  const faces = result.faceAnnotations ?? [];
+  return faces.some((face) => (face.detectionConfidence ?? 0) >= 0.35);
+}
+
+function looksLikeLicenseFrontText(text: string): boolean {
+  if (!text) return false;
+  if (/driving\s*licen[cs]e/i.test(text)) return true;
+  if (/მართვის\s*მოწმობა/i.test(text) && /(?:^|\n)\s*1[\.\)]/.test(text)) {
+    return true;
+  }
+  return false;
+}
+
+function looksLikeLicenseBackText(text: string): boolean {
+  if (!text || looksLikeLicenseFrontText(text)) return false;
+  const has8 = /(?:^|\n)\s*8[\.\)]/.test(text);
+  const has9 =
+    /(?:^|\n)\s*9[\.\)]/.test(text) || /^9\s+10(\s+11)?/m.test(text);
+  if (has8 && has9) return true;
+  if (/საცხოვრებელი\s*ადგილი|place\s*of\s*residence/i.test(text)) return true;
+  if (has8 && /კატეგორი|categor(?:y|ies)/i.test(text)) return true;
+  return false;
+}
+
+function qrWasDecoded(qr: { value: string | null; source: string }): boolean {
+  return Boolean(qr.value) || qr.source === "decoded";
+}
+
+async function readDocumentText(imageBuffer: Buffer): Promise<string> {
+  const vision = getClient();
+  const [docResult] = await vision.documentTextDetection({
+    image: { content: imageBuffer.toString("base64") },
+  });
+  return (
+    docResult.fullTextAnnotation?.text?.trim() ||
+    docResult.textAnnotations?.[0]?.description?.trim() ||
+    ""
+  );
+}
+
+/** Reject a front/back upload that is clearly the other side of the card. */
+export async function validateLicenseSide(
+  imageBuffer: Buffer,
+  side: "front" | "back"
+): Promise<void> {
+  const [text, qr, hasFace] = await Promise.all([
+    readDocumentText(imageBuffer),
+    detectQrOnBack(imageBuffer).catch(() => ({
+      box: null,
+      value: null,
+      source: "layout" as const,
+    })),
+    imageHasFace(imageBuffer).catch(() => false),
+  ]);
+  const qrFound = qrWasDecoded(qr);
+  if (side === "back") {
+    if (!qrFound && (hasFace || looksLikeLicenseFrontText(text))) {
+      throw new Error(BACK_SIDE_REQUIRED_ERROR);
+    }
+    return;
+  }
+  if (qrFound || (!hasFace && looksLikeLicenseBackText(text))) {
+    throw new Error(FRONT_SIDE_REQUIRED_ERROR);
+  }
 }
 
 async function cropBoxToDataUrl(
@@ -615,14 +693,41 @@ export async function scanLicenseSides(
   frontBuffer: Buffer,
   backBuffer: Buffer
 ): Promise<ScanResult> {
-  const [frontAnalysis, backAnalysis, qr] = await Promise.all([
-    analyzeFront(frontBuffer),
-    analyzeBack(backBuffer),
-    detectQrOnBack(backBuffer).catch(() => ({ box: null, value: null })),
-  ]);
+  const [frontAnalysis, backAnalysis, backQr, frontQr, backHasFace, frontHasFace] =
+    await Promise.all([
+      analyzeFront(frontBuffer),
+      analyzeBack(backBuffer),
+      detectQrOnBack(backBuffer).catch(() => ({
+        box: null,
+        value: null,
+        source: "layout" as const,
+      })),
+      detectQrOnBack(frontBuffer).catch(() => ({
+        box: null,
+        value: null,
+        source: "layout" as const,
+      })),
+      imageHasFace(backBuffer).catch(() => false),
+      imageHasFace(frontBuffer).catch(() => false),
+    ]);
 
   const frontText = frontAnalysis.text;
   const backText = backAnalysis.text;
+  const qr = backQr;
+
+  const frontLooksWrong =
+    qrWasDecoded(frontQr) ||
+    (!frontHasFace && looksLikeLicenseBackText(frontText));
+  const backLooksWrong =
+    !qrWasDecoded(backQr) &&
+    (backHasFace || looksLikeLicenseFrontText(backText));
+
+  if (frontLooksWrong) {
+    throw new Error(FRONT_SIDE_REQUIRED_ERROR);
+  }
+  if (backLooksWrong) {
+    throw new Error(BACK_SIDE_REQUIRED_ERROR);
+  }
 
   if (!frontText && !backText) {
     throw new Error("Could not read any text. Try clearer photos of both sides.");
