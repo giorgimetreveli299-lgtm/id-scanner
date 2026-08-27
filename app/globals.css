@@ -287,6 +287,30 @@ img {
   margin-top: 0.9rem;
 }
 
+.extract-status-banner {
+  margin: 1.15rem 0 0;
+  padding: 1.15rem 1.25rem;
+  border-radius: var(--radius);
+  font-family: var(--font-display);
+  font-size: clamp(1.05rem, 2.4vw, 1.25rem);
+  font-weight: 700;
+  line-height: 1.35;
+  text-align: center;
+  border: 2px solid transparent;
+}
+
+.extract-status-banner.is-ok {
+  color: #166534;
+  background: #dcfce7;
+  border-color: #86efac;
+}
+
+.extract-status-banner.is-error {
+  color: #991b1b;
+  background: #fee2e2;
+  border-color: #fca5a5;
+}
+
 .dropzone.invalid {
   border-color: var(--danger);
   box-shadow: 0 0 0 4px rgba(180, 35, 24, 0.16);

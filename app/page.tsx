@@ -30,6 +30,8 @@ import {
   findFieldInQr,
   getQrBadgeStatus,
   isQrCheckableField,
+  qrBadgeValue,
+  QR_CHECKABLE_FIELDS,
   type QrCheckableField,
   type QrHighlight,
 } from "@/lib/qrCheck";
@@ -804,6 +806,25 @@ export default function HomePage() {
     Boolean(holderPhoto || holderSignature || qrCodeImage);
   const cameraLabel = cameraSide === "front" ? "Front" : "Back";
 
+  const extractionErrorFields = (() => {
+    if (!showResults || !hasResult) return [] as string[];
+    const labels: string[] = [];
+    for (const key of QR_CHECKABLE_FIELDS) {
+      const raw = form[key] ?? "";
+      const status = getQrBadgeStatus(
+        qrCodeValue,
+        key,
+        qrBadgeValue(key, raw),
+        raw,
+        qrCheckedSnapshot
+      );
+      if (status !== "error") continue;
+      const field = DASHBOARD_FIELDS.find((f) => f.key === key);
+      labels.push(field?.labelEn ?? key);
+    }
+    return labels;
+  })();
+
   const renderSideCard = (side: Side, state: SideState) => {
     const label = side === "front" ? "Front" : "Back";
     const inputRef = side === "front" ? frontInputRef : backInputRef;
@@ -1168,11 +1189,8 @@ export default function HomePage() {
       ) : hubMethod === null ? (
         <section className="method-choice-card">
           <h1 className="brand method-choice-title">
-            Which verification method do you choose?
-          </h1>
-          <p className="lede method-choice-lede">
             Select a document type to continue.
-          </p>
+          </h1>
           {legacyError ? (
             <p className="side-error method-choice-error">{legacyError}</p>
           ) : null}
@@ -1251,6 +1269,20 @@ export default function HomePage() {
           <p className="side-error capture-error">{error}</p>
         ) : null}
       </section>
+
+      {showResults && hasResult && !loading ? (
+        <div
+          className={`extract-status-banner ${
+            extractionErrorFields.length ? "is-error" : "is-ok"
+          }`}
+          role="status"
+          aria-live="polite"
+        >
+          {extractionErrorFields.length
+            ? `There is error in (${extractionErrorFields.join(", ")})`
+            : "Every extracted information is correct and ready to process"}
+        </div>
+      ) : null}
 
       {showResults && (
         <section className="panel results-panel">
