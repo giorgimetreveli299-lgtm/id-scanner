@@ -3,27 +3,41 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="driver-license-app-url" content="__DRIVER_LICENSE_APP_URL__">
   <title>ID Verification</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link
+    href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=Noto+Sans+Georgian:wght@400;500;600;700&family=Syne:wght@600;700;800&display=swap"
+    rel="stylesheet"
+  />
   <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
   <style>
     :root {
-      --bg: #e8edf3;
+      --bg: #faf5ff;
       --surface: #ffffff;
-      --accent: #1a5f9e;
-      --accent-dark: #134a7c;
+      --accent: #f97316;
+      --accent-dark: #ea580c;
+      --accent-soft: #fb923c;
+      --lilac: #a78bfa;
+      --lilac-deep: #7c3aed;
       --ok: #1f8a4c;
-      --warn: #c9a227;
-      --danger: #c0392b;
-      --text: #1e293b;
-      --muted: #64748b;
+      --warn: #c2410c;
+      --danger: #b42318;
+      --text: #2a1840;
+      --muted: #6b5a7c;
+      --line: rgba(124, 58, 237, 0.14);
+      --font-body: "Noto Sans Georgian", "DM Sans", "Segoe UI", sans-serif;
+      --font-display: "Syne", "Noto Sans Georgian", "DM Sans", sans-serif;
     }
     * { box-sizing: border-box; }
     body {
-      font-family: "Segoe UI", Tahoma, Geneva, Verdana, sans-serif;
+      font-family: var(--font-body);
       background:
-        radial-gradient(ellipse at 20% 0%, #d6e4f5 0%, transparent 50%),
-        radial-gradient(ellipse at 80% 100%, #cfe0d8 0%, transparent 45%),
-        var(--bg);
+        radial-gradient(1100px 560px at 8% -8%, rgba(251, 146, 60, 0.38) 0%, transparent 55%),
+        radial-gradient(900px 520px at 100% 0%, rgba(196, 181, 253, 0.55) 0%, transparent 52%),
+        radial-gradient(700px 400px at 50% 100%, rgba(249, 115, 22, 0.12) 0%, transparent 50%),
+        linear-gradient(165deg, #fff7ed 0%, #faf5ff 42%, #f3e8ff 100%);
       margin: 0;
       padding: 24px 16px 48px;
       color: var(--text);
@@ -31,13 +45,18 @@
     }
     .container { max-width: 860px; margin: 0 auto; }
     .card {
-      background: var(--surface);
+      background: rgba(255, 255, 255, 0.86);
       padding: 24px;
       border-radius: 14px;
-      box-shadow: 0 8px 28px rgba(30, 41, 59, 0.08);
+      border: 1px solid var(--line);
+      box-shadow: 0 18px 40px rgba(42, 24, 64, 0.06);
       margin-bottom: 18px;
     }
-    h2, h3 { color: var(--accent); margin-top: 0; }
+    h2, h3 {
+      font-family: var(--font-display);
+      color: var(--accent-dark);
+      margin-top: 0;
+    }
     .step-hint { color: var(--muted); font-size: 14px; margin: 0 0 16px; }
     .photo-slots {
       display: grid;
@@ -49,11 +68,11 @@
       .photo-slots { grid-template-columns: 1fr; }
     }
     .slot-box {
-      border: 2px dashed #9bb8d4;
+      border: 2px dashed rgba(124, 58, 237, 0.28);
       border-radius: 12px;
       padding: 16px;
       text-align: center;
-      background: #f5f8fb;
+      background: rgba(255, 247, 237, 0.65);
       transition: border-color 0.25s, background 0.25s;
     }
     .slot-box.done {
@@ -69,7 +88,7 @@
       border-radius: 8px;
       margin-top: 12px;
       display: none;
-      border: 1px solid #dde3ea;
+      border: 1px solid rgba(124, 58, 237, 0.16);
       background: #111;
     }
     .btn {
@@ -130,6 +149,13 @@
     .method-choice-card h2 {
       margin-bottom: 8px;
       font-size: 1.45rem;
+      font-family: var(--font-display);
+      font-weight: 800;
+      letter-spacing: -0.03em;
+      background: linear-gradient(120deg, var(--accent-dark) 0%, var(--accent) 40%, var(--lilac-deep) 100%);
+      -webkit-background-clip: text;
+      background-clip: text;
+      color: transparent;
     }
     .method-options {
       display: grid;
@@ -140,15 +166,19 @@
       margin-left: auto;
       margin-right: auto;
     }
+    .method-box-wide {
+      grid-column: 1 / -1;
+    }
     @media (max-width: 520px) {
       .method-options { grid-template-columns: 1fr; }
+      .method-box-wide { grid-column: auto; }
     }
     .method-box {
       appearance: none;
       -webkit-appearance: none;
-      border: 2px solid #9bb8d4;
+      border: 2px solid rgba(124, 58, 237, 0.22);
       border-radius: 14px;
-      background: #f5f8fb;
+      background: rgba(255, 255, 255, 0.9);
       padding: 28px 18px;
       cursor: pointer;
       font: inherit;
@@ -163,18 +193,19 @@
     }
     .method-box:hover {
       border-color: var(--accent);
-      background: #eef5fb;
-      box-shadow: 0 6px 18px rgba(26, 95, 158, 0.12);
+      background: #fff7ed;
+      box-shadow: 0 8px 22px rgba(249, 115, 22, 0.12);
       transform: translateY(-2px);
     }
     .method-box:focus-visible {
-      outline: 3px solid rgba(26, 95, 158, 0.35);
+      outline: 3px solid rgba(249, 115, 22, 0.35);
       outline-offset: 2px;
     }
     .method-box-title {
+      font-family: var(--font-display);
       font-size: 1.35rem;
       font-weight: 700;
-      color: var(--accent);
+      color: var(--accent-dark);
       letter-spacing: 0.02em;
     }
     .method-box-sub {
@@ -184,7 +215,7 @@
     .view-back {
       background: none;
       border: none;
-      color: var(--accent);
+      color: var(--lilac-deep);
       font-size: 14px;
       font-weight: 600;
       cursor: pointer;
@@ -316,8 +347,8 @@
     }
     .btn-capture:hover { background: #176f3d; }
     .btn-capture:disabled { opacity: 0.55; }
-    .btn-upload { background: #2b6cb0; font-size: 16px; }
-    .btn-upload:hover { background: #1e4e8c; }
+    .btn-upload { background: var(--lilac-deep); font-size: 16px; }
+    .btn-upload:hover { background: #6d28d9; }
     .btn-close { background: var(--danger); font-size: 16px; }
     .btn-close:hover { background: #9b2c22; }
     .slot-actions {
@@ -447,8 +478,8 @@
       gap: 10px 14px;
       margin: 0 0 14px;
       padding: 12px 14px;
-      background: #f4f7fb;
-      border: 1px solid #dde3ea;
+      background: #fff7ed;
+      border: 1px solid rgba(124, 58, 237, 0.16);
       border-radius: 8px;
     }
     .generate-bar label {
@@ -495,7 +526,7 @@
       width: 100%;
       height: auto;
       object-fit: contain;
-      border: 1px solid #dde3ea;
+      border: 1px solid rgba(124, 58, 237, 0.16);
       border-radius: 6px;
       background: #fff;
     }
@@ -521,7 +552,7 @@
       margin: 0 auto;
       border: 1px solid #ccd3db;
       border-radius: 8px;
-      background: #f1f5f9;
+      background: #faf5ff;
       overflow: hidden;
       box-shadow: 0 1px 2px rgba(15, 23, 42, 0.06);
     }
@@ -531,7 +562,7 @@
       object-fit: contain;
       object-position: center center;
       display: block;
-      background: #f1f5f9;
+      background: #faf5ff;
     }
 
     .mrz-block {
@@ -546,7 +577,7 @@
     .mrz-toggle {
       flex: 1;
       text-align: left;
-      background: #f0f4f8;
+      background: #f7f2fb;
       border: 1px solid #ccd3db;
       border-radius: 8px;
       padding: 12px 14px;
@@ -558,7 +589,7 @@
       justify-content: space-between;
       align-items: center;
     }
-    .mrz-toggle:hover { background: #e8eef5; }
+    .mrz-toggle:hover { background: #efe6f7; }
     .mrz-overall-status {
       flex-shrink: 0;
       min-width: 118px;
@@ -677,6 +708,10 @@
         <button type="button" class="method-box" onclick="selectMethod('passport')">
           <span class="method-box-title">Passport</span>
           <span class="method-box-sub">Passport</span>
+        </button>
+        <button type="button" class="method-box method-box-wide" onclick="selectMethod('license')">
+          <span class="method-box-title">Driver License</span>
+          <span class="method-box-sub">Driver license</span>
         </button>
       </div>
     </div>
@@ -946,7 +981,21 @@
       }
     }
 
+    function getDriverLicenseAppUrl() {
+      const meta = document.querySelector('meta[name="driver-license-app-url"]');
+      let url = (meta && meta.getAttribute("content") || "").trim();
+      if (!url || url.indexOf("__DRIVER_LICENSE_APP_URL__") !== -1) {
+        url = "http://localhost:3000";
+      }
+      return url.replace(/\/$/, "");
+    }
+
     function showMethodChoice() {
+      const embed = new URLSearchParams(window.location.search).get("embed") === "1";
+      if (embed && window.parent && window.parent !== window) {
+        window.parent.postMessage({ type: "id-scanner-back" }, "*");
+        return;
+      }
       closeCamera();
       selectedMethod = null;
       setPortrait("");
@@ -959,6 +1008,14 @@
     }
 
     function selectMethod(method) {
+      // Driver license runs in the Next.js app (app/, components/, lib/) only.
+      if (method === "license") {
+        const base = getDriverLicenseAppUrl();
+        const ret = encodeURIComponent(window.location.origin + "/");
+        window.location.assign(base + "/?mode=license&return=" + ret);
+        return;
+      }
+
       selectedMethod = method;
       clearPassportUploadError();
       clearIdUploadError();
@@ -4710,6 +4767,13 @@
       placeImage(backImg, y, 0.5);
       pdf.save("georgian_id_documents.pdf");
     }
+
+    (function bootMethodFromQuery() {
+      const method = new URLSearchParams(window.location.search).get("method");
+      if (method === "id" || method === "passport") {
+        selectMethod(method);
+      }
+    })();
   </script>
 </body>
 </html>

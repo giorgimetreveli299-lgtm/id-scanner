@@ -65,6 +65,115 @@ img {
   padding: 2.5rem 0 4rem;
 }
 
+.hub-back {
+  display: inline-block;
+  margin: 0 0 0.85rem;
+  padding: 0;
+  color: var(--lilac-deep);
+  font-size: 0.95rem;
+  font-weight: 600;
+}
+
+.hub-back:hover {
+  text-decoration: underline;
+}
+
+.hub-boot {
+  min-height: 12rem;
+}
+
+.method-choice-card {
+  text-align: center;
+  background: rgba(255, 255, 255, 0.72);
+  border: 1px solid var(--line);
+  border-radius: calc(var(--radius) + 4px);
+  padding: 2.25rem 1.5rem 2.5rem;
+  box-shadow: 0 18px 40px rgba(42, 24, 64, 0.06);
+}
+
+.method-choice-title {
+  font-size: clamp(1.35rem, 3.2vw, 1.85rem);
+  margin-bottom: 0.5rem;
+}
+
+.method-choice-lede {
+  margin: 0 auto 1.75rem;
+  max-width: 28rem;
+}
+
+.method-choice-error {
+  max-width: 32rem;
+  margin: 0 auto 1.25rem;
+  text-align: left;
+}
+
+.legacy-frame {
+  display: block;
+  width: 100%;
+  min-height: calc(100vh - 5rem);
+  border: 0;
+  border-radius: var(--radius);
+  background: #fff;
+  box-shadow: 0 12px 32px rgba(42, 24, 64, 0.08);
+}
+
+.method-options {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 1rem;
+  max-width: 30rem;
+  margin: 0 auto;
+}
+
+.method-box {
+  appearance: none;
+  border: 2px solid rgba(124, 58, 237, 0.22);
+  border-radius: var(--radius);
+  background: rgba(255, 255, 255, 0.9);
+  padding: 1.6rem 1rem;
+  cursor: pointer;
+  color: var(--ink);
+  transition: border-color 0.2s, background 0.2s, transform 0.15s, box-shadow 0.2s;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.45rem;
+  min-height: 7.5rem;
+  justify-content: center;
+}
+
+.method-box:hover {
+  border-color: var(--carrot);
+  background: #fff7ed;
+  box-shadow: 0 8px 22px rgba(249, 115, 22, 0.12);
+  transform: translateY(-2px);
+}
+
+.method-box-wide {
+  grid-column: 1 / -1;
+}
+
+.method-box-title {
+  font-family: var(--font-display);
+  font-size: 1.35rem;
+  font-weight: 700;
+  color: var(--carrot-deep);
+}
+
+.method-box-sub {
+  font-size: 0.9rem;
+  color: var(--ink-soft);
+}
+
+@media (max-width: 520px) {
+  .method-options {
+    grid-template-columns: 1fr;
+  }
+
+  .method-box-wide {
+    grid-column: auto;
+  }
+}
 .footer-actions {
   display: grid;
   grid-template-columns: 1fr;

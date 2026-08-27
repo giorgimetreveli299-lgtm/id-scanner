@@ -4,7 +4,7 @@ from pathlib import Path
 
 from fastapi import FastAPI, File, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import FileResponse, Response
+from fastapi.responses import HTMLResponse, Response
 
 # ID path — only id_verifier
 from id_verifier import extract_id_info, extract_mrz_ids, extract_mrz_strip, ocr_image
@@ -38,11 +38,21 @@ async def favicon():
     return Response(status_code=204)
 
 
+@app.get("/health")
+async def health():
+    return {"ok": True}
+
+
 @app.get("/")
 async def serve_index():
     # No caching: the scanner UI must always match the running backend
-    return FileResponse(
-        BASE_DIR / "index.html",
+    html = (BASE_DIR / "index.html").read_text(encoding="utf-8")
+    license_url = os.environ.get(
+        "DRIVER_LICENSE_APP_URL", "http://localhost:3000"
+    ).rstrip("/")
+    html = html.replace("__DRIVER_LICENSE_APP_URL__", license_url)
+    return HTMLResponse(
+        content=html,
         headers={
             "Cache-Control": "no-store, no-cache, must-revalidate, max-age=0",
             "Pragma": "no-cache",

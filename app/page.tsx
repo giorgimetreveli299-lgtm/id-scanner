@@ -1,6 +1,7 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
+import { useCallback, useEffect, useLayoutEffect, useRef, useState, type ReactNode } from "react";
+import { flushSync } from "react-dom";
 import {
   DASHBOARD_FIELDS,
   fieldTitle,
@@ -169,7 +170,32 @@ function getCoverCrop(
   return { drawW, drawH, offsetX, offsetY };
 }
 
+/** Only allow http(s) return URLs back to the ID/passport hub. */
+function safeHubReturnUrl(raw: string | null): string | null {
+  if (!raw) return null;
+  try {
+    const u = new URL(raw);
+    if (u.protocol !== "http:" && u.protocol !== "https:") return null;
+    return u.toString();
+  } catch {
+    return null;
+  }
+}
+
+function getIdScannerAppUrl(): string {
+  const fromEnv = (process.env.NEXT_PUBLIC_ID_SCANNER_APP_URL || "").trim();
+  const url = fromEnv || "http://127.0.0.1:8080";
+  return url.replace(/\/$/, "");
+}
+
 export default function HomePage() {
+  const [hubMethod, setHubMethod] = useState<"id" | "passport" | "license" | null>(
+    null
+  );
+  const [hubReady, setHubReady] = useState(false);
+  const [hubReturnUrl, setHubReturnUrl] = useState<string | null>(null);
+  const [legacyError, setLegacyError] = useState<string | null>(null);
+  const [legacyBusy, setLegacyBusy] = useState(false);
   const [front, setFront] = useState<SideState>(EMPTY_SIDE);
   const [back, setBack] = useState<SideState>(EMPTY_SIDE);
   const [dragging, setDragging] = useState<Side | null>(null);
@@ -239,6 +265,57 @@ export default function HomePage() {
 
   useEffect(() => () => stopCamera(), [stopCamera]);
 
+  // Resolve ?mode= before paint so the method-choice screen never flashes.
+  useLayoutEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    setHubReturnUrl(safeHubReturnUrl(params.get("return")));
+    if (params.get("mode") === "license") {
+      setHubMethod("license");
+    }
+    setHubReady(true);
+  }, []);
+
+  useEffect(() => {
+    const onMessage = (event: MessageEvent) => {
+      if (event?.data?.type === "id-scanner-back") {
+        setHubMethod(null);
+        setLegacyError(null);
+      }
+    };
+    window.addEventListener("message", onMessage);
+    return () => window.removeEventListener("message", onMessage);
+  }, []);
+
+  const openLicenseMethod = useCallback(() => {
+    setLegacyError(null);
+    setHubMethod("license");
+  }, []);
+
+  const backToMethodChoice = useCallback(() => {
+    if (hubReturnUrl) {
+      window.location.href = hubReturnUrl;
+      return;
+    }
+    setHubMethod(null);
+    setLegacyError(null);
+  }, [hubReturnUrl]);
+
+  const openLegacyMethod = useCallback(async (method: "id" | "passport") => {
+    setLegacyBusy(true);
+    setLegacyError(null);
+    const base = getIdScannerAppUrl();
+    try {
+      const res = await fetch(`${base}/health`, { cache: "no-store" });
+      if (!res.ok) throw new Error("bad status");
+      setHubMethod(method);
+    } catch {
+      setLegacyError(
+        "ID/Passport server is not running on port 8080. Stop this page, run npm run dev again (it starts both servers), then retry."
+      );
+    } finally {
+      setLegacyBusy(false);
+    }
+  }, []);
   useEffect(() => {
     if (!cameraSide || !streamRef.current || !videoRef.current) return;
     videoRef.current.srcObject = streamRef.current;
@@ -465,12 +542,23 @@ export default function HomePage() {
     }
   };
 
-  const newDriver = () => {
+  const newClient = () => {
+    stopCamera();
+
+    // Leave the license screen immediately — do not paint the empty upload stage first.
+    if (hubReturnUrl) {
+      window.location.replace(hubReturnUrl);
+      return;
+    }
+    flushSync(() => {
+      setHubMethod(null);
+      setLegacyError(null);
+    });
+
     sideOpGenRef.current.front += 1;
     sideOpGenRef.current.back += 1;
     checkingInflightRef.current.front = 0;
     checkingInflightRef.current.back = 0;
-    stopCamera();
     setError(null);
     setForm(EMPTY_FIELDS);
     setScanned(false);
@@ -1075,6 +1163,77 @@ export default function HomePage() {
 
   return (
     <main className="shell">
+      {!hubReady ? (
+        <div className="hub-boot" aria-busy="true" aria-label="Loading" />
+      ) : hubMethod === null ? (
+        <section className="method-choice-card">
+          <h1 className="brand method-choice-title">
+            Which verification method do you choose?
+          </h1>
+          <p className="lede method-choice-lede">
+            Select a document type to continue.
+          </p>
+          {legacyError ? (
+            <p className="side-error method-choice-error">{legacyError}</p>
+          ) : null}
+          <div className="method-options">
+            <button
+              type="button"
+              className="method-box"
+              disabled={legacyBusy}
+              onClick={() => void openLegacyMethod("id")}
+            >
+              <span className="method-box-title">ID</span>
+              <span className="method-box-sub">ID card</span>
+            </button>
+            <button
+              type="button"
+              className="method-box"
+              disabled={legacyBusy}
+              onClick={() => void openLegacyMethod("passport")}
+            >
+              <span className="method-box-title">Passport</span>
+              <span className="method-box-sub">Passport</span>
+            </button>
+            <button
+              type="button"
+              className="method-box method-box-wide"
+              disabled={legacyBusy}
+              onClick={openLicenseMethod}
+            >
+              <span className="method-box-title">Driver License</span>
+              <span className="method-box-sub">Driver license</span>
+            </button>
+          </div>
+        </section>
+      ) : hubMethod === "id" || hubMethod === "passport" ? (
+        <>
+          <button
+            type="button"
+            className="hub-back"
+            onClick={() => {
+              setHubMethod(null);
+              setLegacyError(null);
+            }}
+          >
+            ← Back
+          </button>
+          <iframe
+            className="legacy-frame"
+            title={hubMethod === "id" ? "ID card scanner" : "Passport scanner"}
+            src={`${getIdScannerAppUrl()}/?method=${hubMethod}&embed=1`}
+            allow="camera; microphone; fullscreen"
+          />
+        </>
+      ) : (
+        <>
+      <button
+        type="button"
+        className="hub-back"
+        onClick={backToMethodChoice}
+      >
+        ← Back
+      </button>
       <h1 className="brand">Driver License Verificator</h1>
       <p className="lede">
         Capture both sides of the driver license. Identification fields appear
@@ -1227,9 +1386,9 @@ export default function HomePage() {
                 <button
                   type="button"
                   className="btn btn-xl btn-ghost"
-                  onClick={newDriver}
+                  onClick={newClient}
                 >
-                  New Driver
+                  New Client
                 </button>
                 <button
                   type="button"
@@ -1346,6 +1505,8 @@ export default function HomePage() {
             />
           </div>
         </div>
+      )}
+        </>
       )}
     </main>
   );

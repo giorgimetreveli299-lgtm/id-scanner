@@ -3,7 +3,10 @@
   "version": "1.0.0",
   "private": true,
   "scripts": {
-    "dev": "next dev",
+    "dev": "node ./scripts/dev.mjs",
+    "dev:web": "next dev",
+    "dev:api": "venv/Scripts/uvicorn.exe main:app --host 127.0.0.1 --port 8080 --reload",
+    "dev:all": "node ./scripts/dev.mjs",
     "build": "next build",
     "start": "next start",
     "deploy": "gcloud run deploy dizige-license-scanner --source . --region europe-west1 --project dizige --service-account python-web-runtime@dizige.iam.gserviceaccount.com --build-service-account projects/dizige/serviceAccounts/cloud-run-builder@dizige.iam.gserviceaccount.com --allow-unauthenticated --memory 1Gi --cpu 1 --concurrency 4 --timeout 300"
