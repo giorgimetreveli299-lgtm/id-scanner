@@ -1,10 +1,12 @@
+import json
 import os
 import re
+import traceback
 from pathlib import Path
 
-from fastapi import FastAPI, File, UploadFile
+from fastapi import FastAPI, File, Request, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import HTMLResponse, Response
+from fastapi.responses import HTMLResponse, JSONResponse, Response
 
 # ID path — only id_verifier
 from id_verifier import extract_id_info, extract_mrz_ids, extract_mrz_strip, ocr_image
@@ -15,6 +17,8 @@ from passport_verifier import (
     extract_passport_mrz_strip,
     has_passport_mrz,
 )
+
+from license_verifier import extract_license_info
 
 BASE_DIR = Path(__file__).resolve().parent
 
@@ -31,6 +35,39 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+
+@app.exception_handler(Exception)
+async def unhandled_exception_handler(_request: Request, exc: Exception):
+    print("Unhandled error:", ascii(str(exc)))
+    traceback.print_exc()
+    return JSONResponse(
+        status_code=500,
+        content={
+            "error": str(exc) or "Internal server error",
+            "extracted_data": {},
+            "display": {},
+            "is_valid": False,
+        },
+    )
+
+
+def _license_json_response(payload: dict) -> JSONResponse:
+    """Ensure license responses always serialize as JSON."""
+    try:
+        json.dumps(payload)
+    except (TypeError, ValueError) as exc:
+        print("License JSON encode failed:", ascii(str(exc)))
+        return JSONResponse(
+            status_code=500,
+            content={
+                "error": "License response could not be encoded as JSON.",
+                "extracted_data": {},
+                "display": {},
+                "is_valid": False,
+            },
+        )
+    return JSONResponse(content=payload)
 
 
 @app.get("/favicon.ico")
@@ -241,6 +278,50 @@ async def verify_passport(image: UploadFile = File(...)):
     except Exception as e:
         print("Passport error:", ascii(str(e)))
         return {"error": str(e), "extracted_data": {}, "is_valid": False}
+
+
+@app.post("/verify-license")
+async def verify_license(
+    front: UploadFile = File(...),
+    back: UploadFile = File(...),
+):
+    """Driver license — front + back → license_verifier (Node OCR)."""
+    try:
+        front_bytes = await front.read()
+        back_bytes = await back.read()
+        result = extract_license_info(front_bytes, back_bytes)
+        if not result.get("ok"):
+            print("License OCR failed:", ascii(result.get("error") or ""))
+            return _license_json_response(
+                {
+                    "error": result.get("error") or "License scan failed",
+                    "extracted_data": result.get("extracted_data") or {},
+                    "display": result.get("display") or {},
+                    "is_valid": False,
+                }
+            )
+        return _license_json_response(
+            {
+                "extracted_data": result.get("extracted_data") or {},
+                "display": result.get("display") or {},
+            "qr_code_value": result.get("qr_code_value"),
+            "holder_photo_data_url": result.get("holder_photo_data_url"),
+                "holder_signature_data_url": result.get("holder_signature_data_url"),
+                "qr_code_data_url": result.get("qr_code_data_url"),
+                "is_valid": True,
+            }
+        )
+    except Exception as e:
+        print("License error:", ascii(str(e)))
+        traceback.print_exc()
+        return _license_json_response(
+            {
+                "error": str(e),
+                "extracted_data": {},
+                "display": {},
+                "is_valid": False,
+            }
+        )
 
 
 @app.post("/check-mrz")

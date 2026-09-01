@@ -6,10 +6,11 @@ Web app for Georgian ID card and passport verification using Google Cloud Vision
 
 1. Make sure `clientdocsocr.json` is in the project root (or set `GOOGLE_APPLICATION_CREDENTIALS`).
 2. Cloud Vision API must be enabled on the GCP project `dizige`.
-3. Install Python dependencies and run:
+3. Install dependencies and run:
 
 ```bash
 pip install -r requirements.txt
+npm install
 npm run dev
 ```
 

@@ -3,7 +3,19 @@
   "version": "1.0.0",
   "private": true,
   "scripts": {
-    "dev": "venv/Scripts/uvicorn.exe main:app --host 127.0.0.1 --port 8080 --reload",
-    "deploy": "powershell -ExecutionPolicy Bypass -File ./deploy.ps1"
+    "dev": "node scripts/dev-server.js",
+    "deploy": "powershell -ExecutionPolicy Bypass -File ./deploy.ps1",
+    "scan:license": "tsx scripts/scan-license.ts"
+  },
+  "dependencies": {
+    "@google-cloud/vision": "^4.3.2",
+    "@zxing/library": "^0.23.0",
+    "jsqr": "^1.4.0",
+    "sharp": "^0.35.3"
+  },
+  "devDependencies": {
+    "@types/node": "^22.10.0",
+    "tsx": "^4.19.2",
+    "typescript": "^5.7.0"
   }
 }

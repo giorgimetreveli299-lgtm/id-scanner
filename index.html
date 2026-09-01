@@ -107,13 +107,13 @@
       cursor: not-allowed;
     }
     .btn-pdf {
-      background: var(--ok);
+      background: var(--accent);
       flex: 1;
       padding: 14px;
       font-size: 16px;
       display: none;
     }
-    .btn-pdf:hover { background: #176f3d; }
+    .btn-pdf:hover { background: var(--accent-dark); }
     .btn-pdf.visible { display: block; }
     .bottom-actions {
       display: none;
@@ -140,6 +140,8 @@
     #scanner-view.visible { display: block; }
     #passport-view { display: none; }
     #passport-view.visible { display: block; }
+    #license-view { display: none; }
+    #license-view.visible { display: block; }
 
     .method-choice-card {
       text-align: center;
@@ -211,6 +213,379 @@
       font-size: 13px;
       color: var(--muted);
     }
+
+    /* Driver license — identification data */
+    .license-ocr-status {
+      display: none;
+      text-align: center;
+      padding: 12px;
+      color: var(--muted);
+      font-size: 14px;
+      margin-top: 12px;
+    }
+    .license-ocr-status.visible { display: block; }
+
+    .license-results {
+      display: none;
+      margin-top: 18px;
+      text-align: left;
+    }
+    .license-results.visible { display: block; }
+
+    .license-results-head {
+      margin: 0 0 14px;
+    }
+    .license-results-head h3 {
+      margin: 0;
+      font-family: var(--font-display);
+      color: var(--lilac-deep);
+      font-size: 1.15rem;
+    }
+
+    .license-extract-banner {
+      margin: 0 0 16px;
+      padding: 14px 16px;
+      border-radius: 12px;
+      font-family: var(--font-display);
+      font-size: clamp(0.95rem, 2.2vw, 1.1rem);
+      font-weight: 700;
+      line-height: 1.35;
+      text-align: center;
+      border: 2px solid transparent;
+    }
+    .license-extract-banner.is-ok {
+      color: #166534;
+      background: #dcfce7;
+      border-color: #86efac;
+    }
+    .license-extract-banner.is-error {
+      color: #991b1b;
+      background: #fee2e2;
+      border-color: #fca5a5;
+    }
+
+    .license-fields {
+      display: grid;
+      gap: 10px;
+    }
+    .license-field {
+      display: grid;
+      grid-template-columns: minmax(7rem, 34%) 1fr;
+      gap: 10px;
+      padding: 10px 12px;
+      border-radius: 10px;
+      background: rgba(247, 242, 251, 0.85);
+      border: 1px solid rgba(124, 58, 237, 0.1);
+      align-items: center;
+    }
+    .license-field-pair {
+      display: grid;
+      gap: 10px;
+      grid-template-columns: 1fr;
+    }
+    @media (min-width: 720px) {
+      .license-field-pair {
+        grid-template-columns: 1fr 1fr;
+      }
+      .license-field-pair .license-field {
+        grid-template-columns: 1fr;
+        gap: 6px;
+      }
+    }
+    .license-field label {
+      color: var(--muted);
+      font-size: 0.82rem;
+      line-height: 1.25;
+    }
+    .license-field label .field-code {
+      font-family: var(--font-display);
+      font-weight: 700;
+      color: var(--lilac-deep);
+      margin-right: 0.35rem;
+    }
+    .license-field label .label-en {
+      display: block;
+      font-size: 0.76rem;
+      color: var(--muted);
+    }
+    .license-input-wrap {
+      position: relative;
+      min-width: 0;
+    }
+    .license-input-wrap input {
+      width: 100%;
+      border: 1px solid rgba(124, 58, 237, 0.16);
+      border-radius: 8px;
+      padding: 0.45rem 0.55rem;
+      background: #fff;
+      color: var(--text);
+      font: inherit;
+    }
+    .license-dual {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 8px;
+    }
+    .license-input-wrap.has-badge input {
+      padding-right: 4.2rem;
+    }
+    .license-dual .license-input-wrap.has-badge input {
+      padding-right: 4.2rem;
+    }
+    .license-checked-badge {
+      position: absolute;
+      top: 50%;
+      right: 0.28rem;
+      transform: translateY(-50%);
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      height: 1.05rem;
+      padding: 0 0.35rem;
+      border-radius: 4px;
+      font-family: var(--font-display);
+      font-size: 0.58rem;
+      font-weight: 700;
+      color: #166534;
+      background: color-mix(in srgb, #86efac 70%, #fff);
+      border: 1px solid color-mix(in srgb, #22c55e 40%, transparent);
+    }
+    .license-image-row {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 12px;
+      margin-top: 4px;
+    }
+    .license-image-slot {
+      border: 1px solid rgba(124, 58, 237, 0.16);
+      border-radius: 8px;
+      background: #fff;
+      overflow: hidden;
+      display: grid;
+      place-items: center;
+      color: var(--muted);
+      font-size: 0.82rem;
+    }
+    .license-image-slot.photo {
+      width: min(100%, 120px);
+      aspect-ratio: 3 / 4;
+      justify-self: start;
+    }
+    .license-image-slot.signature {
+      width: min(100%, 180px);
+      aspect-ratio: 2.4 / 1;
+      justify-self: start;
+    }
+    .license-image-slot.qr {
+      width: min(100%, 100px);
+      aspect-ratio: 1 / 1;
+      justify-self: start;
+      flex-shrink: 0;
+    }
+    .license-image-slot img {
+      width: 100%;
+      height: 100%;
+      object-fit: contain;
+    }
+
+    .license-checked-badge.hidden {
+      display: none;
+    }
+
+    .license-field-qr .license-input-wrap {
+      min-width: 0;
+    }
+    .license-qr-row {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: flex-start;
+      gap: 12px;
+    }
+    .license-qr-data {
+      flex: 1 1 180px;
+      min-width: 0;
+    }
+    .license-qr-toggle {
+      width: 100%;
+      text-align: left;
+      background: #f7f2fb;
+      border: 1px solid rgba(124, 58, 237, 0.16);
+      border-radius: 8px;
+      padding: 10px 12px;
+      font-size: 0.82rem;
+      font-weight: 600;
+      color: #334155;
+      cursor: pointer;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      gap: 8px;
+    }
+    .license-qr-toggle:hover:not(:disabled) { background: #efe6f7; }
+    .license-qr-toggle:disabled {
+      opacity: 0.45;
+      cursor: not-allowed;
+    }
+    .license-qr-panel {
+      margin-top: 8px;
+      overflow: hidden;
+      transition: max-height 0.25s ease, opacity 0.2s ease;
+      max-height: 480px;
+      opacity: 1;
+    }
+    .license-qr-panel.collapsed {
+      max-height: 0;
+      opacity: 0;
+      margin-top: 0;
+    }
+    .license-qr-fields {
+      display: none;
+    }
+    .license-qr-raw {
+      margin: 0;
+      padding: 10px 12px;
+      border-radius: 8px;
+      background: rgba(247, 242, 251, 0.85);
+      border: 1px solid rgba(124, 58, 237, 0.1);
+      font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+      font-size: 0.78rem;
+      line-height: 1.45;
+      word-break: break-word;
+      white-space: pre-wrap;
+      color: var(--text);
+      max-height: 460px;
+      overflow-y: auto;
+    }
+
+    .license-actions {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 12px;
+      margin-top: 22px;
+    }
+    .license-actions .btn {
+      flex: 1 1 160px;
+      min-height: 52px;
+      padding: 16px 20px;
+      font-family: var(--font-display);
+      font-size: 1rem;
+      font-weight: 700;
+      border: none;
+      border-radius: 10px;
+      cursor: pointer;
+      transition: background 0.2s, opacity 0.2s;
+    }
+    .license-actions .btn-license-new {
+      background: #5a6268;
+      color: #fff;
+    }
+    .license-actions .btn-license-new:hover {
+      background: #434a50;
+    }
+    .license-actions .btn-license-pdf {
+      background: var(--accent);
+      color: #fff;
+    }
+    .license-actions .btn-license-pdf:hover {
+      background: var(--accent-dark);
+    }
+    .license-actions .btn:disabled {
+      opacity: 0.45;
+      cursor: not-allowed;
+    }
+
+    /* License image zoom */
+    #license-view .slot-box img.license-zoomable,
+    #license-view .license-image-slot img.license-zoomable {
+      cursor: zoom-in;
+    }
+    #license-view .slot-box img {
+      background: #fff;
+      aspect-ratio: 85.6 / 54;
+      max-height: none;
+    }
+    #license-view .license-image-slot.has-image {
+      cursor: zoom-in;
+    }
+
+    #license-zoom-modal {
+      display: none;
+      position: fixed;
+      inset: 0;
+      z-index: 12000;
+      background: rgba(15, 23, 42, 0.92);
+      flex-direction: column;
+      touch-action: none;
+    }
+    #license-zoom-modal.open {
+      display: flex;
+    }
+    .license-zoom-toolbar {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 10px;
+      padding: 10px 14px;
+      background: rgba(0, 0, 0, 0.45);
+      color: #f8fafc;
+      flex-shrink: 0;
+    }
+    .license-zoom-caption {
+      font-size: 0.9rem;
+      font-weight: 600;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+      min-width: 0;
+    }
+    .license-zoom-controls {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      flex-shrink: 0;
+    }
+    .license-zoom-controls button {
+      min-width: 2.4rem;
+      height: 2.4rem;
+      padding: 0 0.55rem;
+      border: 1px solid rgba(255, 255, 255, 0.25);
+      border-radius: 8px;
+      background: rgba(255, 255, 255, 0.12);
+      color: #fff;
+      font: inherit;
+      font-weight: 700;
+      cursor: pointer;
+    }
+    .license-zoom-controls button:hover {
+      background: rgba(255, 255, 255, 0.22);
+    }
+    .license-zoom-stage {
+      flex: 1;
+      min-height: 0;
+      overflow: hidden;
+      display: grid;
+      place-items: center;
+      cursor: grab;
+    }
+    .license-zoom-stage.is-dragging {
+      cursor: grabbing;
+    }
+    .license-zoom-stage img {
+      max-width: none;
+      max-height: none;
+      transform-origin: center center;
+      user-select: none;
+      -webkit-user-drag: none;
+      pointer-events: none;
+    }
+    .license-zoom-hint {
+      text-align: center;
+      padding: 6px 12px 10px;
+      font-size: 0.78rem;
+      color: rgba(248, 250, 252, 0.75);
+      flex-shrink: 0;
+    }
+
     .view-back {
       background: none;
       border: none;
@@ -707,6 +1082,10 @@
           <span class="method-box-title">Passport</span>
           <span class="method-box-sub">Passport</span>
         </button>
+        <button type="button" class="method-box method-box-wide" onclick="selectMethod('license')">
+          <span class="method-box-title">Driver License</span>
+          <span class="method-box-sub">Driver license</span>
+        </button>
       </div>
     </div>
 
@@ -768,6 +1147,186 @@
               <button type="button" class="btn btn-upload" id="btn-passport-upload" onclick="triggerUpload('passport')">Upload</button>
             </div>
             <img id="img-passport" alt="Passport">
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div id="license-view">
+      <div class="card">
+        <button type="button" class="view-back" onclick="licenseBackToChoice()">← Back</button>
+        <h2>Driver License</h2>
+        <p class="step-hint" id="license-step-hint">
+          Capture or upload the front side first.
+        </p>
+        <div class="photo-slots">
+          <div class="slot-box" id="slot-license-front">
+            <h4>Front Side</h4>
+            <div class="slot-actions">
+              <button type="button" class="btn" id="btn-license-front" onclick="openLicenseCamera('front')">Capture</button>
+              <button type="button" class="btn btn-upload" id="btn-license-front-upload" onclick="triggerLicenseUpload('front')">Upload</button>
+            </div>
+            <img id="img-license-front" class="license-zoomable" alt="Front side">
+          </div>
+          <div class="slot-box" id="slot-license-back">
+            <h4>Back Side</h4>
+            <div class="slot-actions">
+              <button type="button" class="btn" id="btn-license-back" onclick="openLicenseCamera('back')" disabled>Capture</button>
+              <button type="button" class="btn btn-upload" id="btn-license-back-upload" onclick="triggerLicenseUpload('back')" disabled>Upload</button>
+            </div>
+            <img id="img-license-back" class="license-zoomable" alt="Back side">
+          </div>
+        </div>
+
+        <div id="license-ocr-status" class="license-ocr-status" aria-live="polite"></div>
+
+        <div id="license-results" class="license-results">
+          <div
+            id="license-extract-banner"
+            class="license-extract-banner is-ok"
+            role="status"
+          ></div>
+          <div class="license-results-head">
+            <h3>Identification data</h3>
+          </div>
+          <div class="license-fields">
+            <div class="license-field">
+              <label><span class="field-code">1</span>გვარი<span class="label-en">Surname</span></label>
+              <div class="license-dual">
+                <div class="license-input-wrap" id="wrap-lic-surname-geo">
+                  <input type="text" id="lic-surname-geo" placeholder="—">
+                </div>
+                <div class="license-input-wrap" id="wrap-lic-surname-lat">
+                  <input type="text" id="lic-surname-lat" placeholder="—">
+                  <span class="license-checked-badge hidden" id="badge-lic-surname-lat">Checked</span>
+                </div>
+              </div>
+            </div>
+            <div class="license-field">
+              <label><span class="field-code">2</span>სახელი<span class="label-en">Given names</span></label>
+              <div class="license-dual">
+                <div class="license-input-wrap">
+                  <input type="text" id="lic-given-geo" placeholder="—">
+                </div>
+                <div class="license-input-wrap" id="wrap-lic-given-lat">
+                  <input type="text" id="lic-given-lat" placeholder="—">
+                  <span class="license-checked-badge hidden" id="badge-lic-given-lat">Checked</span>
+                </div>
+              </div>
+            </div>
+            <div class="license-field-pair">
+              <div class="license-field">
+                <label><span class="field-code">3</span>დაბადების თარიღი<span class="label-en">Date of birth</span></label>
+                <div class="license-input-wrap" id="wrap-lic-dob">
+                  <input type="text" id="lic-dob" placeholder="—">
+                  <span class="license-checked-badge hidden" id="badge-lic-dob">Checked</span>
+                </div>
+              </div>
+              <div class="license-field">
+                <label>დაბადების ადგილი<span class="label-en">Place of birth</span></label>
+                <div class="license-dual">
+                  <div class="license-input-wrap">
+                    <input type="text" id="lic-pob-geo" placeholder="—">
+                  </div>
+                  <div class="license-input-wrap">
+                    <input type="text" id="lic-pob-lat" placeholder="—">
+                  </div>
+                </div>
+              </div>
+            </div>
+            <div class="license-field-pair">
+              <div class="license-field">
+                <label><span class="field-code">4a</span>გაცემის თარიღი<span class="label-en">Date of issue</span></label>
+                <div class="license-input-wrap" id="wrap-lic-issue">
+                  <input type="text" id="lic-issue" placeholder="—">
+                  <span class="license-checked-badge hidden" id="badge-lic-issue">Checked</span>
+                </div>
+              </div>
+              <div class="license-field">
+                <label><span class="field-code">4b</span>გაუქმების თარიღი<span class="label-en">Date of expiry</span></label>
+                <div class="license-input-wrap">
+                  <input type="text" id="lic-expiry" placeholder="—">
+                </div>
+              </div>
+            </div>
+            <div class="license-field">
+              <label><span class="field-code">4c</span>გამცემი ორგანო<span class="label-en">Issuing authority</span></label>
+              <div class="license-input-wrap">
+                <input type="text" id="lic-authority" placeholder="—">
+              </div>
+            </div>
+            <div class="license-field">
+              <label><span class="field-code">4d</span>პირადი ნომერი<span class="label-en">Personal number</span></label>
+              <div class="license-input-wrap" id="wrap-lic-personal">
+                <input type="text" id="lic-personal" placeholder="—">
+                <span class="license-checked-badge hidden" id="badge-lic-personal">Checked</span>
+              </div>
+            </div>
+            <div class="license-field">
+              <label><span class="field-code">5</span>მოწმობის ნომერი<span class="label-en">License number</span></label>
+              <div class="license-input-wrap" id="wrap-lic-number">
+                <input type="text" id="lic-number" placeholder="—">
+                <span class="license-checked-badge hidden" id="badge-lic-number">Checked</span>
+              </div>
+            </div>
+            <div class="license-field">
+              <label><span class="field-code">6</span>მფლობელის ფოტოსურათი<span class="label-en">Holder photo</span></label>
+              <div class="license-input-wrap">
+                <div class="license-image-slot photo" id="lic-photo-slot">Photo</div>
+              </div>
+            </div>
+            <div class="license-field">
+              <label><span class="field-code">7</span>მფლობელის ხელმოწერა<span class="label-en">Holder signature</span></label>
+              <div class="license-input-wrap">
+                <div class="license-image-slot signature" id="lic-signature-slot">Signature</div>
+              </div>
+            </div>
+            <div class="license-field">
+              <label><span class="field-code">8</span>საცხოვრებელი ადგილი<span class="label-en">Place of residence</span></label>
+              <div class="license-dual">
+                <div class="license-input-wrap">
+                  <input type="text" id="lic-residence-geo" placeholder="—">
+                </div>
+                <div class="license-input-wrap" id="wrap-lic-residence-lat">
+                  <input type="text" id="lic-residence-lat" placeholder="—">
+                  <span class="license-checked-badge hidden" id="badge-lic-residence-lat">Checked</span>
+                </div>
+              </div>
+            </div>
+            <div class="license-field">
+              <label><span class="field-code">9</span>კატეგორია<span class="label-en">Category</span></label>
+              <div class="license-input-wrap" id="wrap-lic-category">
+                <input type="text" id="lic-category" placeholder="—">
+                <span class="license-checked-badge hidden" id="badge-lic-category">Checked</span>
+              </div>
+            </div>
+            <div class="license-field license-field-qr">
+              <label>QR კოდი<span class="label-en">QR code</span></label>
+              <div class="license-input-wrap">
+                <div class="license-qr-row">
+                  <div class="license-image-slot qr" id="lic-qr-slot">QR</div>
+                  <div class="license-qr-data">
+                    <button
+                      type="button"
+                      class="license-qr-toggle"
+                      id="license-qr-toggle"
+                      onclick="toggleLicenseQrData()"
+                      disabled
+                    >
+                      <span id="license-qr-toggle-label">QR ტექსტი / QR text</span>
+                      <span id="license-qr-chevron" aria-hidden="true">▼</span>
+                    </button>
+                    <div class="license-qr-panel collapsed" id="license-qr-panel">
+                      <pre class="license-qr-raw" id="license-qr-raw"></pre>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+          <div class="license-actions" id="license-actions">
+            <button type="button" class="btn btn-license-new" id="btn-license-new" onclick="licenseNewClient()">New Client</button>
+            <button type="button" class="btn btn-license-pdf" id="btn-license-pdf" onclick="downloadLicensePDF()">Download PDF</button>
           </div>
         </div>
       </div>
@@ -902,7 +1461,7 @@
               </button>
             </div>
             <div class="mrz-panel" id="mrz-panel">
-              <textarea id="mrz_strip" readonly placeholder="MRZ…"></textarea>
+              <textarea id="mrz_strip" placeholder="MRZ…"></textarea>
               <pre id="mrz-view" class="mrz-view" aria-label="MRZ display"></pre>
             </div>
           </div>
@@ -929,12 +1488,30 @@
     </div>
   </div>
 
+  <div id="license-zoom-modal" role="dialog" aria-modal="true" aria-label="Zoom image">
+    <div class="license-zoom-toolbar">
+      <span class="license-zoom-caption" id="license-zoom-caption"></span>
+      <div class="license-zoom-controls">
+        <button type="button" id="license-zoom-out" title="Zoom out">−</button>
+        <button type="button" id="license-zoom-reset" title="Reset zoom">100%</button>
+        <button type="button" id="license-zoom-in" title="Zoom in">+</button>
+        <button type="button" id="license-zoom-close" title="Close">✕</button>
+      </div>
+    </div>
+    <div class="license-zoom-stage" id="license-zoom-stage">
+      <img id="license-zoom-img" alt="">
+    </div>
+    <p class="license-zoom-hint">Scroll or pinch to zoom · drag to pan · Esc to close</p>
+  </div>
+
   <input type="file" id="file-input" accept="image/*" style="display:none;">
   <canvas id="hidden-canvas" style="display:none;"></canvas>
 
   <script>
     const FRAME_W = 0.82;
     const FRAME_H = 0.78;
+    const LICENSE_ASPECT = 85.6 / 54;
+    const LICENSE_SCAN_WIDTH = 1400;
 
     let activeSlot = null;
     let videoStream = null;
@@ -949,10 +1526,617 @@
     let frontStages = null;
     let backStages = null;
     let passportStages = null;
+    let licenseFrontBlob = null;
+    let licenseBackBlob = null;
+    let licenseFrontDataUrl = null;
+    let licenseBackDataUrl = null;
     let readyStreak = 0; // consecutive good frames before "ready"
     let readyGraceUntil = 0; // keep Capture enabled briefly (iOS tap vs flicker)
     let capturingNow = false;
     let selectedMethod = null;
+
+    function isLicenseSlot(slot) {
+      return slot === "license-front" || slot === "license-back";
+    }
+
+    function licenseSlotId(side) {
+      return side === "back" ? "license-back" : "license-front";
+    }
+
+    function resetLicenseCapture() {
+      licenseFrontBlob = null;
+      licenseBackBlob = null;
+      licenseFrontDataUrl = null;
+      licenseBackDataUrl = null;
+      clearLicenseResults();
+      ["license-front", "license-back"].forEach((slot) => {
+        const side = slot.replace("license-", "");
+        const img = document.getElementById(`img-${slot}`);
+        if (img) {
+          img.src = "";
+          img.style.display = "none";
+        }
+        const box = document.getElementById(`slot-${slot}`);
+        if (box) box.classList.remove("done");
+      });
+      const frontBtn = document.getElementById("btn-license-front");
+      const frontUpload = document.getElementById("btn-license-front-upload");
+      const backBtn = document.getElementById("btn-license-back");
+      const backUpload = document.getElementById("btn-license-back-upload");
+      if (frontBtn) frontBtn.disabled = false;
+      if (frontUpload) frontUpload.disabled = false;
+      if (backBtn) backBtn.disabled = true;
+      if (backUpload) backUpload.disabled = true;
+      updateLicenseStepHint();
+    }
+
+    function updateLicenseStepHint() {
+      const hint = document.getElementById("license-step-hint");
+      if (!hint) return;
+      if (!licenseFrontDataUrl) {
+        hint.textContent = "Capture or upload the front side first.";
+      } else if (!licenseBackDataUrl) {
+        hint.textContent = "Now capture or upload the back side.";
+      } else {
+        hint.textContent = "Both sides are ready.";
+      }
+    }
+
+    function licenseBackToChoice() {
+      licenseNewClient();
+    }
+
+    function openLicenseCamera(side) {
+      openCamera(licenseSlotId(side));
+    }
+
+    function triggerLicenseUpload(side) {
+      triggerUpload(licenseSlotId(side));
+    }
+
+    const LICENSE_TEXT_IDS = [
+      "lic-surname-geo", "lic-surname-lat", "lic-given-geo", "lic-given-lat",
+      "lic-dob", "lic-pob-geo", "lic-pob-lat", "lic-issue", "lic-expiry",
+      "lic-authority", "lic-personal", "lic-number", "lic-residence-geo",
+      "lic-residence-lat", "lic-category",
+    ];
+
+    function clearLicenseResults() {
+      LICENSE_TEXT_IDS.forEach((id) => {
+        const el = document.getElementById(id);
+        if (el) el.value = "";
+      });
+      [
+        "badge-lic-surname-lat", "badge-lic-given-lat", "badge-lic-dob", "badge-lic-personal",
+        "badge-lic-issue", "badge-lic-number", "badge-lic-category", "badge-lic-residence-lat",
+      ].forEach((id) => {
+        const badge = document.getElementById(id);
+        if (badge) badge.classList.add("hidden");
+      });
+      [
+        "wrap-lic-surname-lat", "wrap-lic-given-lat", "wrap-lic-dob", "wrap-lic-personal",
+        "wrap-lic-issue", "wrap-lic-number", "wrap-lic-category", "wrap-lic-residence-lat",
+      ].forEach((id) => {
+        const wrap = document.getElementById(id);
+        if (wrap) wrap.classList.remove("has-badge");
+      });
+      ["lic-photo-slot", "lic-signature-slot", "lic-qr-slot"].forEach((id) => {
+        const slot = document.getElementById(id);
+        if (!slot) return;
+        slot.textContent = id.includes("photo") ? "Photo" : id.includes("signature") ? "Signature" : "QR";
+        slot.innerHTML = slot.textContent;
+        slot.classList.remove("has-image");
+      });
+      const banner = document.getElementById("license-extract-banner");
+      if (banner) {
+        banner.textContent = "";
+        banner.classList.remove("is-ok", "is-error");
+      }
+      document.getElementById("license-results")?.classList.remove("visible");
+      document.getElementById("license-ocr-status")?.classList.remove("visible");
+      clearLicenseQrPanel();
+    }
+
+    function clearLicenseQrPanel() {
+      const toggle = document.getElementById("license-qr-toggle");
+      const panel = document.getElementById("license-qr-panel");
+      const rawEl = document.getElementById("license-qr-raw");
+      const chev = document.getElementById("license-qr-chevron");
+      const label = document.getElementById("license-qr-toggle-label");
+      if (rawEl) rawEl.textContent = "";
+      if (toggle) toggle.disabled = true;
+      if (label) label.textContent = "QR ტექსტი / QR text";
+      if (panel) panel.classList.add("collapsed");
+      if (chev) chev.textContent = "▼";
+    }
+
+    function toggleLicenseQrData() {
+      const toggle = document.getElementById("license-qr-toggle");
+      const panel = document.getElementById("license-qr-panel");
+      const chev = document.getElementById("license-qr-chevron");
+      if (!panel || toggle?.disabled) return;
+      panel.classList.toggle("collapsed");
+      if (chev) chev.textContent = panel.classList.contains("collapsed") ? "▼" : "▲";
+    }
+
+    function populateLicenseQrPanel(data) {
+      const toggle = document.getElementById("license-qr-toggle");
+      const panel = document.getElementById("license-qr-panel");
+      const rawEl = document.getElementById("license-qr-raw");
+      const chev = document.getElementById("license-qr-chevron");
+      if (!toggle || !panel || !rawEl) return;
+
+      const raw = (data.qr_code_value || "").trim();
+      if (!raw) {
+        clearLicenseQrPanel();
+        return;
+      }
+
+      rawEl.textContent = raw;
+      toggle.disabled = false;
+      panel.classList.add("collapsed");
+      if (chev) chev.textContent = "▼";
+    }
+
+    function setLicenseInput(id, value) {
+      const el = document.getElementById(id);
+      if (el) el.value = value || "";
+    }
+
+    function showLicenseCheckedBadge(inputId, badgeId, wrapId, show) {
+      const badge = document.getElementById(badgeId);
+      const wrap = document.getElementById(wrapId);
+      if (!badge) return;
+      if (show) {
+        badge.classList.remove("hidden");
+        wrap?.classList.add("has-badge");
+      } else {
+        badge.classList.add("hidden");
+        wrap?.classList.remove("has-badge");
+      }
+    }
+
+    function setLicenseImageSlot(slotId, dataUrl, alt) {
+      const slot = document.getElementById(slotId);
+      if (!slot) return;
+      if (!dataUrl) {
+        slot.textContent = alt;
+        slot.classList.remove("has-image");
+        return;
+      }
+      slot.classList.add("has-image");
+      slot.innerHTML = `<img src="${dataUrl}" alt="${alt}" class="license-zoomable">`;
+    }
+
+    const licenseZoomState = {
+      scale: 1,
+      x: 0,
+      y: 0,
+      minScale: 0.35,
+      maxScale: 8,
+      dragging: false,
+      dragStartX: 0,
+      dragStartY: 0,
+      panStartX: 0,
+      panStartY: 0,
+      pointers: new Map(),
+      pinchStartDist: 0,
+      pinchStartScale: 1,
+    };
+
+    function applyLicenseZoomTransform() {
+      const img = document.getElementById("license-zoom-img");
+      if (!img) return;
+      img.style.transform = `translate(${licenseZoomState.x}px, ${licenseZoomState.y}px) scale(${licenseZoomState.scale})`;
+      const resetBtn = document.getElementById("license-zoom-reset");
+      if (resetBtn) {
+        resetBtn.textContent = `${Math.round(licenseZoomState.scale * 100)}%`;
+      }
+    }
+
+    function resetLicenseZoomView() {
+      licenseZoomState.scale = 1;
+      licenseZoomState.x = 0;
+      licenseZoomState.y = 0;
+      applyLicenseZoomTransform();
+    }
+
+    function clampLicenseZoomScale(next) {
+      return Math.max(licenseZoomState.minScale, Math.min(licenseZoomState.maxScale, next));
+    }
+
+    function setLicenseZoomScale(next, originX, originY) {
+      const stage = document.getElementById("license-zoom-stage");
+      if (!stage) return;
+      const prev = licenseZoomState.scale;
+      const scale = clampLicenseZoomScale(next);
+      if (scale === prev) return;
+
+      const rect = stage.getBoundingClientRect();
+      const cx = originX != null ? originX - rect.left - rect.width / 2 : 0;
+      const cy = originY != null ? originY - rect.top - rect.height / 2 : 0;
+      const ratio = scale / prev;
+      licenseZoomState.x = cx - (cx - licenseZoomState.x) * ratio;
+      licenseZoomState.y = cy - (cy - licenseZoomState.y) * ratio;
+      licenseZoomState.scale = scale;
+      applyLicenseZoomTransform();
+    }
+
+    function openLicenseImageZoom(src, caption) {
+      if (!src) return;
+      const modal = document.getElementById("license-zoom-modal");
+      const img = document.getElementById("license-zoom-img");
+      const cap = document.getElementById("license-zoom-caption");
+      if (!modal || !img) return;
+      img.src = src;
+      img.alt = caption || "License photo";
+      if (cap) cap.textContent = caption || "License photo";
+      resetLicenseZoomView();
+      modal.classList.add("open");
+      document.body.style.overflow = "hidden";
+    }
+
+    function closeLicenseImageZoom() {
+      const modal = document.getElementById("license-zoom-modal");
+      if (!modal) return;
+      modal.classList.remove("open");
+      document.body.style.overflow = "";
+      licenseZoomState.dragging = false;
+      licenseZoomState.pointers.clear();
+      document.getElementById("license-zoom-stage")?.classList.remove("is-dragging");
+    }
+
+    function initLicenseImageZoom() {
+      const modal = document.getElementById("license-zoom-modal");
+      const stage = document.getElementById("license-zoom-stage");
+      const licenseView = document.getElementById("license-view");
+      if (!modal || !stage || !licenseView) return;
+
+      licenseView.addEventListener("click", (e) => {
+        const slot = e.target.closest(".license-image-slot.has-image");
+        const img = e.target.closest("img.license-zoomable");
+        if (slot && !img) {
+          const inner = slot.querySelector("img.license-zoomable");
+          if (inner?.src) {
+            openLicenseImageZoom(inner.src, inner.alt || "Extracted photo");
+          }
+          return;
+        }
+        if (img?.src && img.style.display !== "none") {
+          const captureSlot = img.closest(".slot-box");
+          if (captureSlot && !captureSlot.classList.contains("done")) return;
+          openLicenseImageZoom(img.src, img.alt || "License photo");
+        }
+      });
+
+      document.getElementById("license-zoom-close")?.addEventListener("click", closeLicenseImageZoom);
+      document.getElementById("license-zoom-reset")?.addEventListener("click", resetLicenseZoomView);
+      document.getElementById("license-zoom-in")?.addEventListener("click", () => {
+        setLicenseZoomScale(licenseZoomState.scale * 1.25);
+      });
+      document.getElementById("license-zoom-out")?.addEventListener("click", () => {
+        setLicenseZoomScale(licenseZoomState.scale / 1.25);
+      });
+
+      modal.addEventListener("click", (e) => {
+        if (e.target === modal) closeLicenseImageZoom();
+      });
+
+      document.addEventListener("keydown", (e) => {
+        if (e.key === "Escape" && modal.classList.contains("open")) {
+          closeLicenseImageZoom();
+        }
+      });
+
+      stage.addEventListener("wheel", (e) => {
+        if (!modal.classList.contains("open")) return;
+        e.preventDefault();
+        const delta = e.deltaY > 0 ? 0.9 : 1.1;
+        setLicenseZoomScale(licenseZoomState.scale * delta, e.clientX, e.clientY);
+      }, { passive: false });
+
+      stage.addEventListener("dblclick", (e) => {
+        if (!modal.classList.contains("open")) return;
+        if (licenseZoomState.scale !== 1 || licenseZoomState.x || licenseZoomState.y) {
+          resetLicenseZoomView();
+        } else {
+          setLicenseZoomScale(2.5, e.clientX, e.clientY);
+        }
+      });
+
+      stage.addEventListener("pointerdown", (e) => {
+        if (!modal.classList.contains("open")) return;
+        stage.setPointerCapture(e.pointerId);
+        licenseZoomState.pointers.set(e.pointerId, { x: e.clientX, y: e.clientY });
+        if (licenseZoomState.pointers.size === 1) {
+          licenseZoomState.dragging = true;
+          licenseZoomState.dragStartX = e.clientX;
+          licenseZoomState.dragStartY = e.clientY;
+          licenseZoomState.panStartX = licenseZoomState.x;
+          licenseZoomState.panStartY = licenseZoomState.y;
+          stage.classList.add("is-dragging");
+        } else if (licenseZoomState.pointers.size === 2) {
+          const pts = [...licenseZoomState.pointers.values()];
+          licenseZoomState.pinchStartDist = Math.hypot(
+            pts[0].x - pts[1].x,
+            pts[0].y - pts[1].y
+          );
+          licenseZoomState.pinchStartScale = licenseZoomState.scale;
+          licenseZoomState.dragging = false;
+        }
+      });
+
+      stage.addEventListener("pointermove", (e) => {
+        if (!modal.classList.contains("open") || !licenseZoomState.pointers.has(e.pointerId)) return;
+        licenseZoomState.pointers.set(e.pointerId, { x: e.clientX, y: e.clientY });
+
+        if (licenseZoomState.pointers.size === 2) {
+          const pts = [...licenseZoomState.pointers.values()];
+          const dist = Math.hypot(pts[0].x - pts[1].x, pts[0].y - pts[1].y);
+          if (licenseZoomState.pinchStartDist > 0) {
+            setLicenseZoomScale(
+              licenseZoomState.pinchStartScale * (dist / licenseZoomState.pinchStartDist),
+              (pts[0].x + pts[1].x) / 2,
+              (pts[0].y + pts[1].y) / 2
+            );
+          }
+          return;
+        }
+
+        if (!licenseZoomState.dragging) return;
+        licenseZoomState.x = licenseZoomState.panStartX + (e.clientX - licenseZoomState.dragStartX);
+        licenseZoomState.y = licenseZoomState.panStartY + (e.clientY - licenseZoomState.dragStartY);
+        applyLicenseZoomTransform();
+      });
+
+      const endPointer = (e) => {
+        licenseZoomState.pointers.delete(e.pointerId);
+        if (licenseZoomState.pointers.size === 0) {
+          licenseZoomState.dragging = false;
+          stage.classList.remove("is-dragging");
+        } else if (licenseZoomState.pointers.size === 1) {
+          const remaining = [...licenseZoomState.pointers.values()][0];
+          licenseZoomState.dragging = true;
+          licenseZoomState.dragStartX = remaining.x;
+          licenseZoomState.dragStartY = remaining.y;
+          licenseZoomState.panStartX = licenseZoomState.x;
+          licenseZoomState.panStartY = licenseZoomState.y;
+        }
+      };
+      stage.addEventListener("pointerup", endPointer);
+      stage.addEventListener("pointercancel", endPointer);
+    }
+
+    function populateLicenseResults(data) {
+      const display = data.display || {};
+      setLicenseInput("lic-surname-geo", display.surname_geo);
+      setLicenseInput("lic-surname-lat", display.surname_lat);
+      setLicenseInput("lic-given-geo", display.givenNames_geo);
+      setLicenseInput("lic-given-lat", display.givenNames_lat);
+      setLicenseInput("lic-dob", display.dateOfBirth);
+      setLicenseInput("lic-pob-geo", display.placeOfBirth_geo);
+      setLicenseInput("lic-pob-lat", display.placeOfBirth_lat);
+      setLicenseInput("lic-issue", display.issueDate);
+      setLicenseInput("lic-expiry", display.expiryDate);
+      setLicenseInput("lic-authority", display.issuingAuthority);
+      setLicenseInput("lic-personal", display.personalNumber);
+      setLicenseInput("lic-number", display.licenseNumber);
+      setLicenseInput("lic-residence-geo", display.residence_geo);
+      setLicenseInput("lic-residence-lat", display.residence_lat);
+      setLicenseInput("lic-category", display.category);
+
+      const qr = (data.qr_code_value || "").toUpperCase();
+      const hasQr = Boolean(qr);
+      showLicenseCheckedBadge(
+        "lic-surname-lat",
+        "badge-lic-surname-lat",
+        "wrap-lic-surname-lat",
+        hasQr && display.surname_lat
+      );
+      showLicenseCheckedBadge(
+        "lic-given-lat",
+        "badge-lic-given-lat",
+        "wrap-lic-given-lat",
+        hasQr && display.givenNames_lat
+      );
+      showLicenseCheckedBadge(
+        "lic-dob",
+        "badge-lic-dob",
+        "wrap-lic-dob",
+        hasQr && display.dateOfBirth
+      );
+      showLicenseCheckedBadge(
+        "lic-personal",
+        "badge-lic-personal",
+        "wrap-lic-personal",
+        hasQr && display.personalNumber
+      );
+      showLicenseCheckedBadge(
+        "lic-issue",
+        "badge-lic-issue",
+        "wrap-lic-issue",
+        hasQr && display.issueDate
+      );
+      showLicenseCheckedBadge(
+        "lic-number",
+        "badge-lic-number",
+        "wrap-lic-number",
+        hasQr && display.licenseNumber
+      );
+      showLicenseCheckedBadge(
+        "lic-category",
+        "badge-lic-category",
+        "wrap-lic-category",
+        hasQr && display.category
+      );
+      showLicenseCheckedBadge(
+        "lic-residence-lat",
+        "badge-lic-residence-lat",
+        "wrap-lic-residence-lat",
+        hasQr && display.residence_lat
+      );
+
+      setLicenseImageSlot("lic-photo-slot", data.holder_photo_data_url, "Holder photo");
+      setLicenseImageSlot("lic-signature-slot", data.holder_signature_data_url, "Signature");
+      setLicenseImageSlot("lic-qr-slot", data.qr_code_data_url, "QR code");
+      populateLicenseQrPanel(data);
+
+      const required = [
+        display.surname_geo,
+        display.givenNames_geo,
+        display.dateOfBirth,
+        display.licenseNumber,
+      ];
+      const filled = required.filter(Boolean).length;
+      const banner = document.getElementById("license-extract-banner");
+      if (banner) {
+        if (filled >= 3) {
+          banner.textContent =
+            "Every extracted information is correct and ready to process";
+          banner.classList.add("is-ok");
+          banner.classList.remove("is-error");
+        } else {
+          banner.textContent =
+            "Some fields could not be read. Try clearer photos of both sides.";
+          banner.classList.add("is-error");
+          banner.classList.remove("is-ok");
+        }
+      }
+
+      document.getElementById("license-results")?.classList.add("visible");
+      updateLicenseActionButtons();
+    }
+
+    function licenseFieldValue(id) {
+      return (document.getElementById(id)?.value || "").trim();
+    }
+
+    function updateLicenseActionButtons() {
+      const pdfBtn = document.getElementById("btn-license-pdf");
+      if (!pdfBtn) return;
+      const ready = Boolean(licenseFrontDataUrl && licenseBackDataUrl);
+      pdfBtn.disabled = !ready;
+    }
+
+    function licenseNewClient() {
+      closeLicenseImageZoom();
+      resetLicenseCapture();
+      showMethodChoice();
+    }
+
+    async function downloadLicensePDF() {
+      if (!licenseFrontDataUrl || !licenseBackDataUrl) {
+        alert("Capture or upload both sides first.");
+        return;
+      }
+
+      const JsPDF = await ensureJsPDF();
+      if (!JsPDF) {
+        alert("PDF library failed to load. Check your internet and try again.");
+        return;
+      }
+
+      const pdf = new JsPDF({ orientation: "portrait", unit: "mm", format: "a4" });
+      const pageW = pdf.internal.pageSize.getWidth();
+      const pageH = pdf.internal.pageSize.getHeight();
+      const margin = 12;
+      const maxW = pageW - margin * 2;
+      const gap = 10;
+
+      const placeImage = (img, y, maxHFrac) => {
+        const ratio = img.width / img.height;
+        let w = maxW;
+        let h = w / ratio;
+        const maxH = (pageH - margin * 2 - gap) * maxHFrac;
+        if (h > maxH) {
+          h = maxH;
+          w = h * ratio;
+        }
+        const x = margin + (maxW - w) / 2;
+        pdf.addImage(img.src, "JPEG", x, y, w, h, undefined, "MEDIUM");
+        return y + h;
+      };
+
+      const frontImg = await loadImage(licenseFrontDataUrl);
+      const backImg = await loadImage(licenseBackDataUrl);
+      let y = margin;
+      y = placeImage(frontImg, y, 0.5);
+      y += gap;
+      placeImage(backImg, y, 0.5);
+
+      const surname = licenseFieldValue("lic-surname-lat") || licenseFieldValue("lic-surname-geo") || "license";
+      const safeName = surname.replace(/[^\w\-]+/g, "_").slice(0, 40) || "license";
+      pdf.save(`driver_license_${safeName}.pdf`);
+    }
+
+    async function runLicenseVerification() {
+      if (selectedMethod !== "license" || !licenseFrontBlob || !licenseBackBlob) return;
+
+      const status = document.getElementById("license-ocr-status");
+      const results = document.getElementById("license-results");
+      results?.classList.remove("visible");
+      clearLicenseResults();
+      status?.classList.add("visible");
+
+      const startedAt = performance.now();
+      const tickTimer = setInterval(() => {
+        const sec = ((performance.now() - startedAt) / 1000).toFixed(1);
+        if (status) status.textContent = `Reading license with Google Vision… ${sec}s`;
+      }, 200);
+      if (status) status.textContent = "Reading license with Google Vision… 0.0s";
+
+      const formData = new FormData();
+      formData.append("front", licenseFrontBlob, "license-front.jpg");
+      formData.append("back", licenseBackBlob, "license-back.jpg");
+
+      try {
+        const response = await fetch(`${window.location.origin}/verify-license`, {
+          method: "POST",
+          body: formData,
+        });
+        clearInterval(tickTimer);
+
+        const contentType = response.headers.get("content-type") || "";
+        if (!response.ok || !contentType.includes("application/json")) {
+          const preview = await response.text();
+          console.error("verify-license failed:", response.status, preview.slice(0, 300));
+          if (status) {
+            status.textContent =
+              response.status === 404
+                ? "License API not found — restart the server after npm install."
+                : response.status === 500
+                  ? "License scan failed (500). Stop any old server on port 8080, then run npm run dev again."
+                  : `License scan failed (${response.status}). Check server logs.`;
+          }
+          return;
+        }
+
+        const data = await response.json();
+        if (data.error) {
+          if (status) status.textContent = "Error: " + data.error;
+          populateLicenseResults(data);
+          const banner = document.getElementById("license-extract-banner");
+          if (banner) {
+            banner.textContent = data.error;
+            banner.classList.add("is-error");
+            banner.classList.remove("is-ok");
+          }
+          document.getElementById("license-results")?.classList.add("visible");
+          return;
+        }
+
+        populateLicenseResults(data);
+        const totalSec = ((performance.now() - startedAt) / 1000).toFixed(1);
+        if (status) status.textContent = `Extracted in ${totalSec}s`;
+      } catch (err) {
+        clearInterval(tickTimer);
+        console.error(err);
+        if (status) {
+          status.textContent =
+            "Could not reach the scanner. Keep the server running and try again.";
+        }
+      }
+    }
 
     function applyDocLabels() {
       const docLabel = document.getElementById("label-doc-number");
@@ -989,16 +2173,30 @@
       document.getElementById("method-choice").classList.remove("hidden");
       document.getElementById("scanner-view").classList.remove("visible");
       document.getElementById("passport-view").classList.remove("visible");
+      document.getElementById("license-view").classList.remove("visible");
       window.scrollTo({ top: 0, behavior: "smooth" });
     }
 
     function selectMethod(method) {
+      if (method === "license") {
+        selectedMethod = "license";
+        clearPassportUploadError();
+        clearIdUploadError();
+        resetLicenseCapture();
+        document.getElementById("method-choice").classList.add("hidden");
+        document.getElementById("scanner-view").classList.remove("visible");
+        document.getElementById("passport-view").classList.remove("visible");
+        document.getElementById("license-view").classList.add("visible");
+        window.scrollTo({ top: 0, behavior: "smooth" });
+        return;
+      }
       selectedMethod = method;
       clearPassportUploadError();
       clearIdUploadError();
       document.getElementById("method-choice").classList.add("hidden");
       document.getElementById("scanner-view").classList.remove("visible");
       document.getElementById("passport-view").classList.remove("visible");
+      document.getElementById("license-view").classList.remove("visible");
       applyDocLabels();
 
       // Strict routing: ID UI ↔ ID logic, Passport UI ↔ Passport logic
@@ -1158,6 +2356,10 @@
       if (!slot) return;
       if (slot === "passport") clearPassportUploadError();
       if (slot === "front" || slot === "back") clearIdUploadError();
+      if (slot === "license-back" && !licenseFrontDataUrl) {
+        alert("Capture or upload the front side first.");
+        return;
+      }
       if (slot === "back" && !frontDataUrl) {
         const status = document.getElementById("ocr-status");
         if (status) {
@@ -1188,7 +2390,10 @@
         let final = { blob: originalBlob, dataUrl: originalUrl };
         const bitmap = await toDrawableBitmap(file);
         try {
-          if (activeSlot === "passport") {
+          if (isLicenseSlot(activeSlot)) {
+            stages = await processLicenseForGenerate(bitmap);
+            final = stages.final;
+          } else if (activeSlot === "passport") {
             // Results photo: biodata only (REMARKS cut). Original stays in top slot.
             final = await processPassportImage(bitmap);
           } else {
@@ -1197,6 +2402,15 @@
             });
             final = stages.final;
           }
+        } catch (procErr) {
+          console.warn("Processing failed, using original upload:", procErr);
+          final = { blob: originalBlob, dataUrl: originalUrl };
+          stages = {
+            crop: final,
+            straighten: final,
+            brightness: final,
+            final,
+          };
         } finally {
           if (bitmap && typeof bitmap.close === "function") bitmap.close();
         }
@@ -1489,7 +2703,8 @@
       // ID aspect stays 85.6/54 unless caller (passport) passes another ratio
       const ID_ASPECT = aspectRatio || 85.6 / 54;
       const passport = !!options.passport;
-      const idCard = !!options.idCard || (!passport && !aspectRatio);
+      const licenseScan = !!options.licenseScan;
+      const idCard = !!options.idCard || licenseScan || (!passport && !aspectRatio);
       const protectMrz = !!options.protectMrz;
       let analysisTemps = [];
 
@@ -1570,7 +2785,9 @@
             passport,
           })) {
             try {
-              warpedExtra = await warpQuadToIdBitmap(workingOrig, quadOrig, ID_ASPECT);
+              warpedExtra = await warpQuadToIdBitmap(workingOrig, quadOrig, ID_ASPECT, {
+                targetWidth: licenseScan ? 1800 : undefined,
+              });
               let result = await canvasToJpeg(
                 warpedExtra, 0, 0, warpedExtra.width, warpedExtra.height
               );
@@ -1617,7 +2834,9 @@
 
       // Prefer full-bleed card (reference scans have almost no desk margin).
       // ID back keeps a larger bottom pad so the MRZ strip is never shaved.
-      const padRatio = idCard
+      const padRatio = licenseScan
+        ? (det.whiteBg ? 0.003 : 0.001)
+        : idCard
         ? (det.whiteBg ? 0.008 : 0.004)
         : (det.whiteBg ? 0.03 : 0.015);
       const padX = Math.max(1, Math.round((maxX - minX) * padRatio));
@@ -1641,7 +2860,10 @@
       }
 
       // Crop from ORIGINAL pixels only — analysis black paint never reaches output
-      let result = await rectifyToIdAspect(workingOrig, sx, sy, sw, sh, ID_ASPECT);
+      let result = await rectifyToIdAspect(workingOrig, sx, sy, sw, sh, ID_ASPECT, {
+        targetWidth: licenseScan ? 1800 : undefined,
+        fillColor: licenseScan ? "#ffffff" : "#111111",
+      });
       if (idCard && !protectMrz) {
         result = await trimIdScanBorders(result, ID_ASPECT);
       }
@@ -1845,6 +3067,58 @@
       } finally {
         if (isolated && isolated !== bitmap && typeof isolated.close === "function") {
           try { isolated.close(); } catch (_) {}
+        }
+      }
+    }
+
+    async function processLicenseForGenerate(bitmap) {
+      const cropped = await cropDocumentBitmap(bitmap, LICENSE_ASPECT, {
+        idCard: true,
+        licenseScan: true,
+      });
+      const scanBase = cropped.straighten || cropped;
+      const polished = await polishLicenseScan(scanBase, LICENSE_ASPECT);
+      const bright = await applyBrightnessToResult(polished, 1.03);
+      return {
+        crop: { blob: polished.blob, dataUrl: polished.dataUrl },
+        straighten: { blob: polished.blob, dataUrl: polished.dataUrl },
+        brightness: { blob: bright.blob, dataUrl: bright.dataUrl },
+        final: { blob: bright.blob, dataUrl: bright.dataUrl },
+      };
+    }
+
+    /**
+     * Normalize a license crop to flatbed-scan quality: tight trim, exact ID-1
+     * aspect, thin white margin, consistent output size.
+     */
+    async function polishLicenseScan(result, aspect = LICENSE_ASPECT) {
+      let trimmed = await trimIdScanBorders(result, aspect);
+      trimmed = await trimIdScanBorders(trimmed, aspect);
+      const bmp = await toDrawableBitmap(trimmed.blob || trimmed.dataUrl);
+      try {
+        const outW = LICENSE_SCAN_WIDTH;
+        const outH = Math.round(outW / aspect);
+        const pad = 0.014;
+        const innerW = Math.round(outW * (1 - 2 * pad));
+        const innerH = Math.round(innerW / aspect);
+        const px = Math.round((outW - innerW) / 2);
+        const py = Math.round((outH - innerH) / 2);
+
+        const out = document.createElement("canvas");
+        out.width = outW;
+        out.height = outH;
+        const ctx = out.getContext("2d");
+        ctx.fillStyle = "#ffffff";
+        ctx.fillRect(0, 0, outW, outH);
+        ctx.imageSmoothingEnabled = true;
+        ctx.imageSmoothingQuality = "high";
+        ctx.filter = "contrast(1.02)";
+        ctx.drawImage(bmp, 0, 0, bmp.width, bmp.height, px, py, innerW, innerH);
+        ctx.filter = "none";
+        return await canvasToJpeg(out, 0, 0, outW, outH, 0.97);
+      } finally {
+        if (typeof bmp.close === "function") {
+          try { bmp.close(); } catch (_) {}
         }
       }
     }
@@ -2265,8 +3539,9 @@
     /**
      * Perspective-warp a card quad on the original bitmap into a flat ID rectangle.
      */
-    async function warpQuadToIdBitmap(bitmap, quad, aspect) {
-      const targetW = Math.min(1600, Math.max(1000, Math.round(
+    async function warpQuadToIdBitmap(bitmap, quad, aspect, warpOptions = {}) {
+      const maxW = warpOptions.targetWidth || 1600;
+      const targetW = Math.min(maxW, Math.max(1000, Math.round(
         (Math.hypot(quad[1].x - quad[0].x, quad[1].y - quad[0].y) +
           Math.hypot(quad[2].x - quad[3].x, quad[2].y - quad[3].y)) / 2
       )));
@@ -2430,9 +3705,11 @@
     }
 
     /** Crop to axis-aligned box, then output a symmetric ID-aspect rectangle. */
-    function rectifyToIdAspect(source, sx, sy, sw, sh, aspect) {
+    function rectifyToIdAspect(source, sx, sy, sw, sh, aspect, rectOptions = {}) {
       return new Promise((resolve, reject) => {
-        // Fit ID aspect inside the crop (centered), or expand slightly with letterbox black
+        const fillColor = rectOptions.fillColor || "#111111";
+        const maxTargetW = rectOptions.targetWidth || 1600;
+        // Fit ID aspect inside the crop (centered), or expand slightly with letterbox
         let outW = sw;
         let outH = Math.round(sw / aspect);
         let srcX = sx;
@@ -2456,7 +3733,7 @@
         }
 
         // Normalize to a consistent output size (sharp for OCR)
-        const targetW = Math.min(1600, Math.max(outW, 900));
+        const targetW = Math.min(maxTargetW, Math.max(outW, 900));
         const targetH = Math.round(targetW / aspect);
 
         const out = document.createElement("canvas");
@@ -2465,18 +3742,19 @@
         const ctx = out.getContext("2d");
         ctx.imageSmoothingEnabled = true;
         ctx.imageSmoothingQuality = "high";
-        ctx.fillStyle = "#111";
+        ctx.fillStyle = fillColor;
         ctx.fillRect(0, 0, targetW, targetH);
         ctx.drawImage(
           source,
           srcX, srcY, srcW, srcH,
           0, 0, targetW, targetH
         );
-        const dataUrl = out.toDataURL("image/jpeg", 0.95);
+        const quality = fillColor === "#ffffff" ? 0.97 : 0.95;
+        const dataUrl = out.toDataURL("image/jpeg", quality);
         out.toBlob((blob) => {
           if (!blob) return reject(new Error("blob failed"));
           resolve({ blob, dataUrl, width: targetW, height: targetH });
-        }, "image/jpeg", 0.95);
+        }, "image/jpeg", quality);
       });
     }
 
@@ -2852,7 +4130,7 @@
       }
     }
 
-    function canvasToJpeg(source, sx, sy, sw, sh) {
+    function canvasToJpeg(source, sx, sy, sw, sh, quality = 0.95) {
       return new Promise((resolve, reject) => {
         const out = document.createElement("canvas");
         out.width = sw;
@@ -2861,11 +4139,11 @@
         ctx.imageSmoothingEnabled = true;
         ctx.imageSmoothingQuality = "high";
         ctx.drawImage(source, sx, sy, sw, sh, 0, 0, sw, sh);
-        const dataUrl = out.toDataURL("image/jpeg", 0.95);
+        const dataUrl = out.toDataURL("image/jpeg", quality);
         out.toBlob((blob) => {
           if (!blob) return reject(new Error("blob failed"));
           resolve({ blob, dataUrl, width: sw, height: sh });
-        }, "image/jpeg", 0.95);
+        }, "image/jpeg", quality);
       });
     }
 
@@ -2904,6 +4182,37 @@
         document.getElementById("pdf-img-front").src = finalUrl;
         document.getElementById("pdf-img-back").src = "";
         runPassportVerification();
+        return;
+      }
+
+      if (slot === "license-front") {
+        licenseFrontBlob = finalBlob;
+        licenseFrontDataUrl = finalUrl;
+        const img = document.getElementById("img-license-front");
+        img.src = finalUrl;
+        img.style.display = "block";
+        document.getElementById("slot-license-front").classList.add("done");
+        document.getElementById("btn-license-back").disabled = false;
+        document.getElementById("btn-license-back-upload").disabled = false;
+        updateLicenseStepHint();
+        updateLicenseActionButtons();
+        if (licenseBackBlob) runLicenseVerification();
+        if (autoOpenNext) {
+          setTimeout(() => openLicenseCamera("back"), 400);
+        }
+        return;
+      }
+
+      if (slot === "license-back") {
+        licenseBackBlob = finalBlob;
+        licenseBackDataUrl = finalUrl;
+        const img = document.getElementById("img-license-back");
+        img.src = finalUrl;
+        img.style.display = "block";
+        document.getElementById("slot-license-back").classList.add("done");
+        updateLicenseStepHint();
+        updateLicenseActionButtons();
+        runLicenseVerification();
         return;
       }
 
@@ -3001,6 +4310,10 @@
     }
 
     async function openCamera(slot) {
+      if (slot === "license-back" && !licenseFrontDataUrl) {
+        alert("Capture or upload the front side first.");
+        return;
+      }
       if (slot === "back" && !frontDataUrl) {
         const status = document.getElementById("ocr-status");
         if (status) {
@@ -3018,6 +4331,8 @@
         front: "Front side",
         back: "Back side (MRZ)",
         passport: "Passport (data page + MRZ)",
+        "license-front": "Front Side",
+        "license-back": "Back Side",
       };
       document.getElementById("camera-title").textContent = titles[slot] || "Document";
       const vc = document.getElementById("video-container");
@@ -3233,7 +4548,10 @@
       const q = assessDocumentQuality(gray, cropW, cropH);
 
       // Back (MRZ) / passport: much easier to enable Capture
-      const softSlot = activeSlot === "back" || activeSlot === "passport";
+      const softSlot =
+        activeSlot === "back" ||
+        activeSlot === "passport" ||
+        isLicenseSlot(activeSlot);
       const brightOk = softSlot
         ? meanBrightness > 28 && meanBrightness < 245
         : meanBrightness > 40 && meanBrightness < 230;
@@ -3309,6 +4627,9 @@
     }
 
     async function validateCapturedSide(slot, blob) {
+      if (isLicenseSlot(slot)) {
+        return true;
+      }
       // If backend is down, do not block the user.
       try {
         const data = await fetchMrzCheck(blob);
@@ -3439,6 +4760,9 @@
           if (slot === "passport") {
             // Results photo: biodata only (REMARKS cut). Original stays in top slot.
             final = await processPassportImage(bitmap);
+          } else if (isLicenseSlot(slot)) {
+            stages = await processLicenseForGenerate(bitmap);
+            final = stages.final;
           } else {
             // Front: full-bleed ID-1. Back: same, but protect MRZ bottom strip.
             stages = await processFrameCaptureForGenerate(bitmap, {
@@ -4750,6 +6074,7 @@
       if (method === "id" || method === "passport") {
         selectMethod(method);
       }
+      initLicenseImageZoom();
     })();
   </script>
 </body>
