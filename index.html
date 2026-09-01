@@ -3,7 +3,6 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <meta name="driver-license-app-url" content="__DRIVER_LICENSE_APP_URL__">
   <title>ID Verification</title>
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
@@ -708,10 +707,6 @@
           <span class="method-box-title">Passport</span>
           <span class="method-box-sub">Passport</span>
         </button>
-        <button type="button" class="method-box method-box-wide" onclick="selectMethod('license')">
-          <span class="method-box-title">Driver License</span>
-          <span class="method-box-sub">Driver license</span>
-        </button>
       </div>
     </div>
 
@@ -980,15 +975,6 @@
       }
     }
 
-    function getDriverLicenseAppUrl() {
-      const meta = document.querySelector('meta[name="driver-license-app-url"]');
-      let url = (meta && meta.getAttribute("content") || "").trim();
-      if (!url || url.indexOf("__DRIVER_LICENSE_APP_URL__") !== -1) {
-        url = "http://localhost:3000";
-      }
-      return url.replace(/\/$/, "");
-    }
-
     function showMethodChoice() {
       const embed = new URLSearchParams(window.location.search).get("embed") === "1";
       if (embed && window.parent && window.parent !== window) {
@@ -1007,14 +993,6 @@
     }
 
     function selectMethod(method) {
-      // Driver license runs in the Next.js app (app/, components/, lib/) only.
-      if (method === "license") {
-        const base = getDriverLicenseAppUrl();
-        const ret = encodeURIComponent(window.location.origin + "/");
-        window.location.assign(base + "/?mode=license&return=" + ret);
-        return;
-      }
-
       selectedMethod = method;
       clearPassportUploadError();
       clearIdUploadError();

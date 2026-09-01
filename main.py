@@ -47,10 +47,6 @@ async def health():
 async def serve_index():
     # No caching: the scanner UI must always match the running backend
     html = (BASE_DIR / "index.html").read_text(encoding="utf-8")
-    license_url = os.environ.get(
-        "DRIVER_LICENSE_APP_URL", "http://localhost:3000"
-    ).rstrip("/")
-    html = html.replace("__DRIVER_LICENSE_APP_URL__", license_url)
     return HTMLResponse(
         content=html,
         headers={
