@@ -2,6 +2,7 @@
   "name": "id-scanner",
   "version": "1.0.0",
   "private": true,
+  "description": "ID, passport, and driver license document scanner",
   "scripts": {
     "dev": "node scripts/dev-server.js",
     "deploy": "powershell -ExecutionPolicy Bypass -File ./deploy.ps1",

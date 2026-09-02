@@ -300,7 +300,8 @@ const SINGLE_LETTER_CATEGORIES = new Set(["A", "B", "C", "D", "T", "S"]);
 
 /**
  * Field 9 from the back-side QR: standalone uppercase Latin category codes
- * (e.g. `B`, `C`, `AM`, `B1`). Ignores letters inside names / Georgia / cities.
+ * (e.g. `B`, `C`, `AM`, `B1`). Rule: a token of exactly one uppercase Latin
+ * letter is always a category code — not part of a name or place.
  */
 export function findCategoriesFromQr(
   payload: string | null | undefined
@@ -314,16 +315,24 @@ export function findCategoriesFromQr(
     if (allowed.has(code) && !found.includes(code)) found.push(code);
   };
 
-  const tokens = raw
+  const upper = raw
     .toUpperCase()
     .replace(/\u0410/g, "A")
     .replace(/\u0412/g, "B")
     .replace(/\u0421/g, "C")
     .replace(/\u0415/g, "E")
     .replace(/\u0422/g, "T")
-    .replace(/\u041C/g, "M")
-    .split(/[^A-Z0-9]+/)
-    .filter(Boolean);
+    .replace(/\u041C/g, "M");
+
+  // Standalone single uppercase Latin letters (field 9 category codes)
+  const standaloneLetterRe = /(?<![A-Za-z0-9])([A-Z])(?![A-Za-z0-9])/g;
+  let letterMatch: RegExpExecArray | null;
+  while ((letterMatch = standaloneLetterRe.exec(upper)) !== null) {
+    const ch = letterMatch[1];
+    if (SINGLE_LETTER_CATEGORIES.has(ch)) add(ch);
+  }
+
+  const tokens = upper.split(/[^A-Z0-9]+/).filter(Boolean);
 
   for (const token of tokens) {
     if (allowed.has(token)) {

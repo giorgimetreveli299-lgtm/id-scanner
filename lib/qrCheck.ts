@@ -189,12 +189,11 @@ export function findFieldInQr(
   const needles = needlesForField(fieldKey, fieldValue);
   if (!needles.length) return null;
 
-  // Category: every listed code must appear in QR
+  // Category: every listed code must appear in QR as its own token
   if (fieldKey === "category") {
     const hits: QrHighlight[] = [];
     for (const code of needles) {
-      const hit =
-        findInsensitive(qr, code, true) || findInsensitive(qr, code, false);
+      const hit = findCategoryCodeInQr(qr, code);
       if (!hit) return null;
       hits.push(hit);
     }
@@ -233,6 +232,26 @@ export function findFieldInQr(
   }
 
   return null;
+}
+
+/**
+ * Georgian licence QR rule (field 9): a standalone single uppercase Latin letter
+ * in the payload is a category code (e.g. `B`, `C`). Multi-char codes must appear
+ * as their own token too (`AM`, `B1`).
+ */
+export function findCategoryCodeInQr(
+  qrPayload: string | null | undefined,
+  code: string
+): QrHighlight | null {
+  const qr = (qrPayload || "").trim();
+  const c = code.trim().toUpperCase();
+  if (!qr || !c) return null;
+
+  if (c.length === 1 && /^[A-Z]$/.test(c)) {
+    return findInsensitive(qr, c, true);
+  }
+
+  return findInsensitive(qr, c, true) || findInsensitive(qr, c, false);
 }
 
 export function fieldIsQrChecked(

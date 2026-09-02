@@ -391,6 +391,21 @@
     .license-checked-badge.hidden {
       display: none;
     }
+    .license-checked-badge:not(.hidden) {
+      cursor: pointer;
+    }
+    .license-checked-badge:not(.hidden):hover {
+      filter: brightness(0.94);
+    }
+    .license-qr-hl {
+      background: #c8f0d8;
+      color: #0f5132;
+      outline: 2px solid #1f8a4c;
+      outline-offset: 1px;
+      border-radius: 3px;
+      box-shadow: 0 0 0 3px rgba(31, 138, 76, 0.18);
+      font-weight: 700;
+    }
 
     .license-field-qr .license-input-wrap {
       min-width: 0;
@@ -1237,15 +1252,15 @@
             <div class="license-field-pair">
               <div class="license-field">
                 <label><span class="field-code">4a</span>გაცემის თარიღი<span class="label-en">Date of issue</span></label>
-                <div class="license-input-wrap" id="wrap-lic-issue">
+                <div class="license-input-wrap">
                   <input type="text" id="lic-issue" placeholder="—">
-                  <span class="license-checked-badge hidden" id="badge-lic-issue">Checked</span>
                 </div>
               </div>
               <div class="license-field">
                 <label><span class="field-code">4b</span>გაუქმების თარიღი<span class="label-en">Date of expiry</span></label>
-                <div class="license-input-wrap">
+                <div class="license-input-wrap" id="wrap-lic-expiry">
                   <input type="text" id="lic-expiry" placeholder="—">
+                  <span class="license-checked-badge hidden" id="badge-lic-expiry">Checked</span>
                 </div>
               </div>
             </div>
@@ -1527,6 +1542,7 @@
     let backStages = null;
     let passportStages = null;
     let licenseFrontBlob = null;
+    let licenseQrPayload = "";
     let licenseBackBlob = null;
     let licenseFrontDataUrl = null;
     let licenseBackDataUrl = null;
@@ -1608,14 +1624,14 @@
       });
       [
         "badge-lic-surname-lat", "badge-lic-given-lat", "badge-lic-dob", "badge-lic-personal",
-        "badge-lic-issue", "badge-lic-number", "badge-lic-category", "badge-lic-residence-lat",
+        "badge-lic-expiry", "badge-lic-number", "badge-lic-category", "badge-lic-residence-lat",
       ].forEach((id) => {
         const badge = document.getElementById(id);
         if (badge) badge.classList.add("hidden");
       });
       [
         "wrap-lic-surname-lat", "wrap-lic-given-lat", "wrap-lic-dob", "wrap-lic-personal",
-        "wrap-lic-issue", "wrap-lic-number", "wrap-lic-category", "wrap-lic-residence-lat",
+        "wrap-lic-expiry", "wrap-lic-number", "wrap-lic-category", "wrap-lic-residence-lat",
       ].forEach((id) => {
         const wrap = document.getElementById(id);
         if (wrap) wrap.classList.remove("has-badge");
@@ -1638,6 +1654,7 @@
     }
 
     function clearLicenseQrPanel() {
+      licenseQrPayload = "";
       const toggle = document.getElementById("license-qr-toggle");
       const panel = document.getElementById("license-qr-panel");
       const rawEl = document.getElementById("license-qr-raw");
@@ -1648,6 +1665,318 @@
       if (label) label.textContent = "QR ტექსტი / QR text";
       if (panel) panel.classList.add("collapsed");
       if (chev) chev.textContent = "▼";
+    }
+
+    const LICENSE_QR_FIELD_MAP = {
+      "lic-surname-lat": "surname",
+      "lic-given-lat": "givenNames",
+      "lic-dob": "dateOfBirth",
+      "lic-personal": "personalNumber",
+      "lic-expiry": "expiryDate",
+      "lic-number": "licenseNumber",
+      "lic-category": "category",
+      "lic-residence-lat": "residence",
+    };
+
+    function licenseQrEscapeRegExp(value) {
+      return String(value).replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+    }
+
+    const LICENSE_GEO_RE = /[\u10A0-\u10FF]/;
+    const LICENSE_LATIN_RE = /[A-Za-z]/;
+
+    function licenseLatinOnly(value) {
+      return String(value || "")
+        .replace(/[^\u0020-\u007E]/g, " ")
+        .replace(/[^A-Za-z\s\-'.]/g, " ")
+        .replace(/\s+/g, " ")
+        .trim();
+    }
+
+    function licenseGeorgianOnly(value) {
+      return String(value || "")
+        .replace(/[^\u10A0-\u10FF\s\-'.]/g, " ")
+        .replace(/\s+/g, " ")
+        .trim();
+    }
+
+    /** Split "geo / latin" values — QR payload is English-only. */
+    function licenseSplitBilingualName(value) {
+      const raw = String(value || "").trim();
+      if (!raw) return { geo: "", latin: "" };
+
+      if (raw.includes("/")) {
+        const [left, right] = raw.split("/", 2).map((p) => p.trim());
+        let geo = licenseGeorgianOnly(left);
+        let latin = licenseLatinOnly(right || "");
+        if (!geo && !LICENSE_LATIN_RE.test(left) && left) geo = left;
+        if (!latin && LICENSE_LATIN_RE.test(right || "")) latin = right || "";
+        if (!geo && LICENSE_LATIN_RE.test(left) && !LICENSE_GEO_RE.test(left)) {
+          latin = latin || licenseLatinOnly(left) || left;
+        }
+        return { geo, latin };
+      }
+
+      if (LICENSE_GEO_RE.test(raw) && !LICENSE_LATIN_RE.test(raw)) {
+        return { geo: licenseGeorgianOnly(raw) || raw, latin: "" };
+      }
+      if (LICENSE_LATIN_RE.test(raw) && !LICENSE_GEO_RE.test(raw)) {
+        return { geo: "", latin: licenseLatinOnly(raw) || raw };
+      }
+      return { geo: licenseGeorgianOnly(raw), latin: licenseLatinOnly(raw) };
+    }
+
+    function licenseQrEnglishSide(value) {
+      const { latin } = licenseSplitBilingualName(value);
+      const raw = String(value || "").trim();
+      if (latin) return latin;
+      if (!LICENSE_GEO_RE.test(raw)) return raw;
+      return "";
+    }
+
+    function licenseQrResidenceCountryCity(value) {
+      let side = licenseQrEnglishSide(value).replace(/\s+/g, " ").trim();
+      if (!side && !LICENSE_GEO_RE.test(String(value || ""))) {
+        side = String(value || "").trim();
+      }
+
+      const parts = side
+        .split(/[.,;/|]+/)
+        .map((p) => p.trim())
+        .filter((p) => p.length >= 2);
+
+      let country = "";
+      let city = "";
+      if (parts.length >= 2) {
+        country = parts[0];
+        city = parts.slice(1).join(" ");
+      } else if (parts.length === 1) {
+        const spaced = parts[0].split(/\s+/).filter(Boolean);
+        if (spaced.length >= 2) {
+          country = spaced[0];
+          city = spaced.slice(1).join(" ");
+        } else {
+          city = parts[0];
+        }
+      }
+
+      return { country, city };
+    }
+
+    function licenseQrDateNeedles(raw) {
+      const compact = String(raw || "").replace(/\s+/g, "");
+      const m =
+        compact.match(/^(\d{1,2})[./\-](\d{1,2})[./\-](\d{4}|\d{2})$/) ||
+        compact.match(/^(\d{4})[./\-](\d{1,2})[./\-](\d{1,2})$/);
+      if (!m) return compact.length >= 6 ? [compact] : [];
+
+      let day;
+      let month;
+      let year;
+      if (m[0].startsWith(m[1]) && m[1].length === 4) {
+        year = m[1];
+        month = m[2].padStart(2, "0");
+        day = m[3].padStart(2, "0");
+      } else {
+        day = m[1].padStart(2, "0");
+        month = m[2].padStart(2, "0");
+        year = m[3].length === 2 ? (parseInt(m[3], 10) >= 70 ? `19${m[3]}` : `20${m[3]}`) : m[3];
+      }
+      const yy = year.slice(-2);
+      return [
+        `${day}/${month}/${year}`,
+        `${day}.${month}.${year}`,
+        `${day}-${month}-${year}`,
+        `${day}/${month}/${yy}`,
+        `${day}.${month}.${yy}`,
+        `${day}-${month}-${yy}`,
+        `${year}${month}${day}`,
+        `${day}${month}${year}`,
+        `${year}-${month}-${day}`,
+      ];
+    }
+
+    function licenseQrNeedlesForField(key, value) {
+      const raw = (value || "").trim();
+      if (!raw) return [];
+
+      if (key === "surname" || key === "givenNames") {
+        const n = licenseQrEnglishSide(raw).trim();
+        return n ? [n] : [];
+      }
+
+      if (key === "residence") {
+        let side = licenseQrEnglishSide(raw).replace(/\s+/g, " ").trim();
+        if (!side && !LICENSE_GEO_RE.test(raw)) side = raw;
+        const out = [];
+        if (side) {
+          out.push(side);
+          out.push(side.replace(/[.,]/g, " ").replace(/\s+/g, " ").trim());
+        }
+        for (const part of side.split(/[.,;/|\s]+/)) {
+          const t = part.trim();
+          if (t.length >= 3) out.push(t);
+        }
+        return [...new Set(out.filter(Boolean))];
+      }
+
+      if (key === "category") {
+        return raw
+          .toUpperCase()
+          .split(/[\s,;|/+\-]+/)
+          .map((c) => c.trim())
+          .filter((c) => /^[A-Z0-9]{1,3}$/.test(c));
+      }
+
+      if (key === "dateOfBirth" || key === "expiryDate") {
+        return licenseQrDateNeedles(raw);
+      }
+
+      if (key === "personalNumber") {
+        const digits = raw.replace(/\D/g, "");
+        return digits.length >= 11 ? [digits.slice(0, 11)] : digits ? [digits] : [];
+      }
+
+      if (key === "licenseNumber") {
+        const code = raw.replace(/\s+/g, "").toUpperCase();
+        return code ? [code] : [];
+      }
+
+      return [raw];
+    }
+
+    function licenseQrFindCategoryCode(qr, code) {
+      const c = String(code || "").trim().toUpperCase();
+      if (!qr || !c) return null;
+      // Standalone single uppercase Latin letter in QR = category (field 9)
+      if (c.length === 1 && /^[A-Z]$/.test(c)) {
+        return licenseQrFindInsensitive(qr, c, true);
+      }
+      return (
+        licenseQrFindInsensitive(qr, c, true) ||
+        licenseQrFindInsensitive(qr, c, false)
+      );
+    }
+
+    function licenseQrFindInsensitive(haystack, needle, wholeWord = false) {
+      if (!haystack || !needle) return null;
+      const flags = wholeWord ? "gi" : "i";
+      const pattern = wholeWord
+        ? `(?<![A-Za-z0-9])${licenseQrEscapeRegExp(needle)}(?![A-Za-z0-9])`
+        : licenseQrEscapeRegExp(needle);
+      try {
+        const re = new RegExp(pattern, flags);
+        const m = re.exec(haystack);
+        if (!m || m.index == null) return null;
+        return { start: m.index, end: m.index + m[0].length };
+      } catch {
+        const lower = haystack.toLowerCase();
+        const idx = lower.indexOf(String(needle).toLowerCase());
+        if (idx < 0) return null;
+        return { start: idx, end: idx + needle.length };
+      }
+    }
+
+    function findLicenseFieldInQr(qrPayload, fieldKey, fieldValue) {
+      const qr = (qrPayload || "").trim();
+      if (!qr) return null;
+
+      const needles = licenseQrNeedlesForField(fieldKey, fieldValue);
+      if (!needles.length) return null;
+
+      if (fieldKey === "category") {
+        const hits = [];
+        for (const code of needles) {
+          const hit = licenseQrFindCategoryCode(qr, code);
+          if (!hit) return null;
+          hits.push(hit);
+        }
+        hits.sort((a, b) => a.start - b.start);
+        return hits.length ? hits : null;
+      }
+
+      if (fieldKey === "residence") {
+        const { country, city } = licenseQrResidenceCountryCity(fieldValue);
+        if (!city) return null;
+
+        const cityHit =
+          licenseQrFindInsensitive(qr, city, false) ||
+          licenseQrFindInsensitive(qr, city.replace(/\s+/g, ""), false);
+        if (!cityHit) return null;
+
+        const hits = [];
+        if (country) {
+          const countryHit = licenseQrFindInsensitive(qr, country, false);
+          if (!countryHit) return null;
+          hits.push(countryHit);
+        }
+        hits.push(cityHit);
+        hits.sort((a, b) => a.start - b.start);
+        return hits;
+      }
+
+      const wholeWord = fieldKey === "licenseNumber";
+      const ordered = [...needles].sort((a, b) => b.length - a.length);
+      for (const needle of ordered) {
+        const hit = licenseQrFindInsensitive(qr, needle, wholeWord);
+        if (hit) return [hit];
+      }
+      return null;
+    }
+
+    function licenseFieldIsQrChecked(inputId, value) {
+      const key = LICENSE_QR_FIELD_MAP[inputId];
+      if (!key || !licenseQrPayload) return false;
+      const hits = findLicenseFieldInQr(licenseQrPayload, key, value);
+      return Boolean(hits && hits.length);
+    }
+
+    function renderLicenseQrView(qrText, highlights) {
+      const rawEl = document.getElementById("license-qr-raw");
+      if (!rawEl) return;
+      const text = String(qrText || "");
+      if (!highlights || !highlights.length) {
+        rawEl.textContent = text;
+        return;
+      }
+
+      const sorted = [...highlights].sort((a, b) => a.start - b.start);
+      let html = "";
+      let pos = 0;
+      for (const h of sorted) {
+        const a = Math.max(0, h.start);
+        const b = Math.min(text.length, h.end);
+        if (a < pos || b <= a) continue;
+        html += escapeHtml(text.slice(pos, a));
+        html += '<mark class="license-qr-hl">' + escapeHtml(text.slice(a, b)) + "</mark>";
+        pos = b;
+      }
+      html += escapeHtml(text.slice(pos));
+      rawEl.innerHTML = html;
+    }
+
+    function highlightLicenseQrForInput(inputId) {
+      const fieldKey = LICENSE_QR_FIELD_MAP[inputId];
+      if (!fieldKey || !licenseQrPayload) return;
+
+      const input = document.getElementById(inputId);
+      const value = input ? input.value : "";
+      const hits = findLicenseFieldInQr(licenseQrPayload, fieldKey, value);
+      if (!hits || !hits.length) return;
+
+      const panel = document.getElementById("license-qr-panel");
+      const chev = document.getElementById("license-qr-chevron");
+      if (panel) panel.classList.remove("collapsed");
+      if (chev) chev.textContent = "▲";
+
+      renderLicenseQrView(licenseQrPayload, hits);
+
+      const rawEl = document.getElementById("license-qr-raw");
+      const mark = rawEl ? rawEl.querySelector(".license-qr-hl") : null;
+      if (rawEl) rawEl.scrollIntoView({ behavior: "smooth", block: "nearest" });
+      if (mark) {
+        mark.scrollIntoView({ behavior: "smooth", block: "nearest", inline: "nearest" });
+      }
     }
 
     function toggleLicenseQrData() {
@@ -1672,7 +2001,8 @@
         return;
       }
 
-      rawEl.textContent = raw;
+      licenseQrPayload = raw;
+      renderLicenseQrView(raw, null);
       toggle.disabled = false;
       panel.classList.add("collapsed");
       if (chev) chev.textContent = "▼";
@@ -1690,9 +2020,17 @@
       if (show) {
         badge.classList.remove("hidden");
         wrap?.classList.add("has-badge");
+        badge.title = "Click to highlight in QR text";
+        badge.onclick = (e) => {
+          e.preventDefault();
+          e.stopPropagation();
+          highlightLicenseQrForInput(inputId);
+        };
       } else {
         badge.classList.add("hidden");
         wrap?.classList.remove("has-badge");
+        badge.title = "";
+        badge.onclick = null;
       }
     }
 
@@ -1925,55 +2263,54 @@
       setLicenseInput("lic-residence-lat", display.residence_lat);
       setLicenseInput("lic-category", display.category);
 
-      const qr = (data.qr_code_value || "").toUpperCase();
-      const hasQr = Boolean(qr);
+      licenseQrPayload = (data.qr_code_value || "").trim();
       showLicenseCheckedBadge(
         "lic-surname-lat",
         "badge-lic-surname-lat",
         "wrap-lic-surname-lat",
-        hasQr && display.surname_lat
+        licenseFieldIsQrChecked("lic-surname-lat", display.surname_lat)
       );
       showLicenseCheckedBadge(
         "lic-given-lat",
         "badge-lic-given-lat",
         "wrap-lic-given-lat",
-        hasQr && display.givenNames_lat
+        licenseFieldIsQrChecked("lic-given-lat", display.givenNames_lat)
       );
       showLicenseCheckedBadge(
         "lic-dob",
         "badge-lic-dob",
         "wrap-lic-dob",
-        hasQr && display.dateOfBirth
+        licenseFieldIsQrChecked("lic-dob", display.dateOfBirth)
       );
       showLicenseCheckedBadge(
         "lic-personal",
         "badge-lic-personal",
         "wrap-lic-personal",
-        hasQr && display.personalNumber
+        licenseFieldIsQrChecked("lic-personal", display.personalNumber)
       );
       showLicenseCheckedBadge(
-        "lic-issue",
-        "badge-lic-issue",
-        "wrap-lic-issue",
-        hasQr && display.issueDate
+        "lic-expiry",
+        "badge-lic-expiry",
+        "wrap-lic-expiry",
+        licenseFieldIsQrChecked("lic-expiry", display.expiryDate)
       );
       showLicenseCheckedBadge(
         "lic-number",
         "badge-lic-number",
         "wrap-lic-number",
-        hasQr && display.licenseNumber
+        licenseFieldIsQrChecked("lic-number", display.licenseNumber)
       );
       showLicenseCheckedBadge(
         "lic-category",
         "badge-lic-category",
         "wrap-lic-category",
-        hasQr && display.category
+        licenseFieldIsQrChecked("lic-category", display.category)
       );
       showLicenseCheckedBadge(
         "lic-residence-lat",
         "badge-lic-residence-lat",
         "wrap-lic-residence-lat",
-        hasQr && display.residence_lat
+        licenseFieldIsQrChecked("lic-residence-lat", display.residence_lat)
       );
 
       setLicenseImageSlot("lic-photo-slot", data.holder_photo_data_url, "Holder photo");
