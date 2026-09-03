@@ -13,6 +13,7 @@ from id_verifier import ocr_image
 
 BASE_DIR = Path(__file__).resolve().parent
 SCAN_SCRIPT = BASE_DIR / "scripts" / "scan-license.ts"
+VALIDATE_SIDE_SCRIPT = BASE_DIR / "scripts" / "validate-license-side.ts"
 TSX_CLI = BASE_DIR / "node_modules" / "tsx" / "dist" / "cli.mjs"
 
 _DISPLAY_KEYS = (
@@ -24,13 +25,17 @@ _DISPLAY_KEYS = (
 )
 
 
-def _scan_cmd() -> list[str]:
+def _node_tsx_cmd(script: Path) -> list[str]:
     node = shutil.which("node") or shutil.which("node.exe")
     if not node:
         raise RuntimeError("node not found - run npm install for driver license scanning")
     if not TSX_CLI.is_file():
         raise RuntimeError("tsx not found - run npm install in the project root")
-    return [node, str(TSX_CLI), str(SCAN_SCRIPT)]
+    return [node, str(TSX_CLI), str(script)]
+
+
+def _scan_cmd() -> list[str]:
+    return _node_tsx_cmd(SCAN_SCRIPT)
 
 
 def _parse_json_stdout(stdout: str) -> dict:
@@ -126,6 +131,42 @@ def _run_node_scan(
         "holder_signature_data_url": data.get("holderSignatureDataUrl"),
         "qr_code_data_url": data.get("qrCodeDataUrl"),
     }
+
+
+def validate_license_side(image_bytes: bytes, side: str) -> dict:
+    """Reject front uploads with QR (back side) and back uploads without QR."""
+    side_norm = (side or "").strip().lower()
+    if side_norm not in ("front", "back"):
+        return {"ok": False, "error": "side must be front or back", "side": side_norm}
+
+    with tempfile.TemporaryDirectory() as tmp:
+        image_path = Path(tmp) / "capture.jpg"
+        image_path.write_bytes(image_bytes)
+
+        proc = subprocess.run(
+            _node_tsx_cmd(VALIDATE_SIDE_SCRIPT) + [side_norm, str(image_path)],
+            cwd=str(BASE_DIR),
+            capture_output=True,
+            text=True,
+            encoding="utf-8",
+            errors="replace",
+            timeout=90,
+            env=_scan_env(),
+        )
+
+        stdout = (proc.stdout or "").strip()
+        if not stdout:
+            detail = (proc.stderr or "").strip() or f"validate exited with code {proc.returncode}"
+            return {"ok": False, "error": detail, "side": side_norm}
+
+        try:
+            data = _parse_json_stdout(stdout)
+        except json.JSONDecodeError:
+            detail = (proc.stderr or stdout[:500] or "Invalid validate output").strip()
+            return {"ok": False, "error": detail, "side": side_norm}
+
+        data.setdefault("side", side_norm)
+        return data
 
 
 def extract_license_info(front_bytes: bytes, back_bytes: bytes) -> dict:

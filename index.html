@@ -224,6 +224,10 @@
       margin-top: 12px;
     }
     .license-ocr-status.visible { display: block; }
+    .license-ocr-status.is-error {
+      color: #991b1b;
+      font-weight: 600;
+    }
 
     .license-results {
       display: none;
@@ -1603,10 +1607,12 @@
     }
 
     function openLicenseCamera(side) {
+      clearLicenseSideError();
       openCamera(licenseSlotId(side));
     }
 
     function triggerLicenseUpload(side) {
+      clearLicenseSideError();
       triggerUpload(licenseSlotId(side));
     }
 
@@ -1616,6 +1622,178 @@
       "lic-authority", "lic-personal", "lic-number", "lic-residence-geo",
       "lic-residence-lat", "lic-category",
     ];
+
+    /** Fields validated for the extract status banner (label shown in error list). */
+    const LICENSE_FIELD_CHECKS = [
+      { label: "Surname", requiredIds: ["lic-surname-geo", "lic-surname-lat"], geoId: "lic-surname-geo", englishId: "lic-surname-lat", qrEnglishId: "lic-surname-lat" },
+      { label: "Given names", requiredIds: ["lic-given-geo", "lic-given-lat"], geoId: "lic-given-geo", englishId: "lic-given-lat", qrEnglishId: "lic-given-lat" },
+      { label: "Date of birth", requiredIds: ["lic-dob"], englishId: "lic-dob", qrEnglishId: "lic-dob" },
+      { label: "Place of birth", requiredIds: ["lic-pob-geo", "lic-pob-lat"], geoId: "lic-pob-geo", englishId: "lic-pob-lat" },
+      { label: "Date of issue", requiredIds: ["lic-issue"], englishId: "lic-issue" },
+      { label: "Date of expiry", requiredIds: ["lic-expiry"], englishId: "lic-expiry", qrEnglishId: "lic-expiry" },
+      { label: "Issuing authority", requiredIds: ["lic-authority"], englishId: "lic-authority" },
+      { label: "Personal number", requiredIds: ["lic-personal"], englishId: "lic-personal", qrEnglishId: "lic-personal" },
+      { label: "License number", requiredIds: ["lic-number"], englishId: "lic-number", qrEnglishId: "lic-number" },
+      { label: "Holder photo", requiredIds: ["lic-photo-slot"], imageSlot: true },
+      { label: "Holder signature", requiredIds: ["lic-signature-slot"], imageSlot: true },
+      { label: "Place of residence", requiredIds: ["lic-residence-geo", "lic-residence-lat"], geoId: "lic-residence-geo", englishId: "lic-residence-lat", qrEnglishId: "lic-residence-lat" },
+      { label: "Category", requiredIds: ["lic-category"], englishId: "lic-category", qrEnglishId: "lic-category" },
+    ];
+
+    let licenseFieldListenersBound = false;
+    /** OCR snapshot — any edit from these values flags the field in the banner. */
+    let licenseExtractOriginals = {};
+    let licenseImageOriginals = {};
+
+    function rememberLicenseExtractOriginals() {
+      licenseExtractOriginals = {};
+      licenseImageOriginals = {};
+      LICENSE_TEXT_IDS.forEach((id) => {
+        licenseExtractOriginals[id] = licenseFieldValue(id);
+      });
+      ["lic-photo-slot", "lic-signature-slot"].forEach((id) => {
+        licenseImageOriginals[id] =
+          document.getElementById(id)?.classList.contains("has-image") ?? false;
+      });
+    }
+
+    function licenseFieldEditedFromOriginal(id, imageSlot = false) {
+      if (imageSlot) {
+        const hasNow =
+          document.getElementById(id)?.classList.contains("has-image") ?? false;
+        if (!(id in licenseImageOriginals)) return false;
+        return hasNow !== licenseImageOriginals[id];
+      }
+      const orig = licenseExtractOriginals[id];
+      if (!orig) return false;
+      return licenseFieldValue(id) !== orig;
+    }
+
+    function licenseFieldIsEmpty(id, imageSlot = false) {
+      if (imageSlot) {
+        const slot = document.getElementById(id);
+        return !slot?.classList.contains("has-image");
+      }
+      return !licenseFieldValue(id);
+    }
+
+    /** DL Latin often uses P/F for ფ while transliteration yields PH. */
+    function licenseLatinNormForName(s) {
+      return latinNormCmp(s)
+        .replace(/PH/g, "P")
+        .replace(/KH/g, "H")
+        .replace(/TS/g, "S")
+        .replace(/DZ/g, "Z");
+    }
+
+    function licenseNameGeoLatMatch(geo, lat) {
+      const g = String(geo || "").trim();
+      const l = String(lat || "").trim();
+      if (!g || !l) return false;
+
+      const latNorm = licenseLatinNormForName(l);
+      if (!latNorm) return true;
+
+      const geoWords = g.split(/\s+/).filter(Boolean);
+      for (const word of geoWords) {
+        const tw = licenseLatinNormForName(transliterateKa(word));
+        if (!tw) continue;
+        if (latNorm.includes(tw) || tw.includes(latNorm)) continue;
+        if (tw.length >= 4 && latNorm.includes(tw.slice(0, 4))) continue;
+        if (latNorm.length >= 4 && tw.includes(latNorm.slice(0, 4))) continue;
+        return false;
+      }
+      return true;
+    }
+
+    function licenseResidenceGeoLatMatch(geo, lat) {
+      const g = String(geo || "").trim();
+      const l = String(lat || "").trim();
+      if (!g || !l) return false;
+
+      const geoCity = g
+        .replace(/^საქართველო\s*[,.\s]*/i, "")
+        .replace(/^georgia\s*[,.\s]*/i, "")
+        .trim();
+      const { city: latCity } = licenseQrResidenceCountryCity(l);
+      const fromGeo = latinNormCmp(transliterateKa(geoCity || g));
+      const fromLat = latinNormCmp(latCity || l);
+      if (!fromGeo || !fromLat) return true;
+      return (
+        fromGeo === fromLat
+        || fromGeo.includes(fromLat)
+        || fromLat.includes(fromGeo)
+      );
+    }
+
+    function licenseGeoLatMatch(geo, lat, kind = "name") {
+      if (kind === "residence") return licenseResidenceGeoLatMatch(geo, lat);
+      return licenseNameGeoLatMatch(geo, lat);
+    }
+
+    function collectLicenseValidationErrors() {
+      const errors = [];
+      const hasQr = Boolean(licenseQrPayload);
+
+      for (const field of LICENSE_FIELD_CHECKS) {
+        let fieldError = false;
+
+        for (const id of field.requiredIds) {
+          if (licenseFieldIsEmpty(id, field.imageSlot)) {
+            fieldError = true;
+            break;
+          }
+          if (licenseFieldEditedFromOriginal(id, field.imageSlot)) {
+            fieldError = true;
+            break;
+          }
+        }
+
+        // QR payload is English-only — compare the Latin side, never Georgian
+        let qrLatinOk = false;
+        if (!fieldError && hasQr && field.qrEnglishId) {
+          const englishVal = licenseFieldValue(field.qrEnglishId);
+          qrLatinOk = Boolean(englishVal && licenseFieldIsQrChecked(field.qrEnglishId, englishVal));
+          if (englishVal && !qrLatinOk) fieldError = true;
+        }
+
+        // Georgian ↔ English — skip when QR already confirms Latin (avoids PH vs P false positives)
+        if (!fieldError && field.geoId && field.englishId && !qrLatinOk) {
+          const geo = licenseFieldValue(field.geoId);
+          const english = licenseFieldValue(field.englishId);
+          const kind = field.label === "Place of residence" ? "residence" : "name";
+          if (!licenseGeoLatMatch(geo, english, kind)) fieldError = true;
+        }
+
+        if (fieldError) errors.push(field.label);
+      }
+
+      return errors;
+    }
+
+    function updateLicenseExtractBanner() {
+      const banner = document.getElementById("license-extract-banner");
+      if (!banner) return;
+
+      const errors = collectLicenseValidationErrors();
+      if (!errors.length) {
+        banner.textContent = "Every extracted information is correct and ready to process";
+        banner.classList.add("is-ok");
+        banner.classList.remove("is-error");
+      } else {
+        banner.textContent = `Check out ${errors.join(", ")}`;
+        banner.classList.add("is-error");
+        banner.classList.remove("is-ok");
+      }
+    }
+
+    function setupLicenseFieldListeners() {
+      if (licenseFieldListenersBound) return;
+      licenseFieldListenersBound = true;
+      LICENSE_TEXT_IDS.forEach((id) => {
+        document.getElementById(id)?.addEventListener("input", updateLicenseExtractBanner);
+      });
+    }
 
     function clearLicenseResults() {
       LICENSE_TEXT_IDS.forEach((id) => {
@@ -1643,13 +1821,15 @@
         slot.innerHTML = slot.textContent;
         slot.classList.remove("has-image");
       });
+      licenseExtractOriginals = {};
+      licenseImageOriginals = {};
       const banner = document.getElementById("license-extract-banner");
       if (banner) {
         banner.textContent = "";
         banner.classList.remove("is-ok", "is-error");
       }
       document.getElementById("license-results")?.classList.remove("visible");
-      document.getElementById("license-ocr-status")?.classList.remove("visible");
+      hideLicenseOcrStatus();
       clearLicenseQrPanel();
     }
 
@@ -1904,13 +2084,25 @@
           licenseQrFindInsensitive(qr, city.replace(/\s+/g, ""), false);
         if (!cityHit) return null;
 
-        const hits = [];
+        const hits = [cityHit];
         if (country) {
           const countryHit = licenseQrFindInsensitive(qr, country, false);
-          if (!countryHit) return null;
-          hits.push(countryHit);
+          if (countryHit) hits.push(countryHit);
         }
-        hits.push(cityHit);
+        hits.sort((a, b) => a.start - b.start);
+        return hits;
+      }
+
+      if (fieldKey === "givenNames") {
+        const primary = needles[0] || "";
+        const words = primary.split(/\s+/).map((w) => w.trim()).filter((w) => w.length >= 2);
+        if (!words.length) return null;
+        const hits = [];
+        for (const word of words) {
+          const hit = licenseQrFindInsensitive(qr, word, false);
+          if (!hit) return null;
+          hits.push(hit);
+        }
         hits.sort((a, b) => a.start - b.start);
         return hits;
       }
@@ -1927,7 +2119,13 @@
     function licenseFieldIsQrChecked(inputId, value) {
       const key = LICENSE_QR_FIELD_MAP[inputId];
       if (!key || !licenseQrPayload) return false;
-      const hits = findLicenseFieldInQr(licenseQrPayload, key, value);
+      // QR is English-only — strip Georgian / use Latin side before comparing
+      let compareValue = value;
+      if (key === "surname" || key === "givenNames" || key === "residence") {
+        compareValue = licenseQrEnglishSide(value);
+        if (!compareValue) return false;
+      }
+      const hits = findLicenseFieldInQr(licenseQrPayload, key, compareValue);
       return Boolean(hits && hits.length);
     }
 
@@ -2318,27 +2516,9 @@
       setLicenseImageSlot("lic-qr-slot", data.qr_code_data_url, "QR code");
       populateLicenseQrPanel(data);
 
-      const required = [
-        display.surname_geo,
-        display.givenNames_geo,
-        display.dateOfBirth,
-        display.licenseNumber,
-      ];
-      const filled = required.filter(Boolean).length;
-      const banner = document.getElementById("license-extract-banner");
-      if (banner) {
-        if (filled >= 3) {
-          banner.textContent =
-            "Every extracted information is correct and ready to process";
-          banner.classList.add("is-ok");
-          banner.classList.remove("is-error");
-        } else {
-          banner.textContent =
-            "Some fields could not be read. Try clearer photos of both sides.";
-          banner.classList.add("is-error");
-          banner.classList.remove("is-ok");
-        }
-      }
+      rememberLicenseExtractOriginals();
+      setupLicenseFieldListeners();
+      updateLicenseExtractBanner();
 
       document.getElementById("license-results")?.classList.add("visible");
       updateLicenseActionButtons();
@@ -4585,6 +4765,7 @@
 
     function newClient() {
       closeCamera();
+      resetLicenseCapture();
       activeSlot = null;
       frontBlob = null;
       backBlob = null;
@@ -4884,7 +5065,7 @@
       const sharpness = laplacianVariance(gray, cropW, cropH);
       const q = assessDocumentQuality(gray, cropW, cropH);
 
-      // Back (MRZ) / passport: much easier to enable Capture
+      // Back (MRZ) / passport / license: much easier to enable Capture
       const softSlot =
         activeSlot === "back" ||
         activeSlot === "passport" ||
@@ -4898,6 +5079,37 @@
         : q.hasDoc && brightOk && sharpOk && q.ocrReady;
       const needStreak = softSlot ? 1 : 2;
       const graceMs = softSlot ? 4000 : 2500;
+
+      const guide =
+        activeSlot === "license-front"
+          ? {
+              place: "Place the front side in the frame",
+              hold: "Hold steady — keep the full document in the frame",
+              ready: "Front side looks good — ready to capture!",
+            }
+          : activeSlot === "license-back"
+            ? {
+                place: "Place the back side in the frame (QR code visible)",
+                hold: "Hold steady — keep the QR code in the frame",
+                ready: "Back side looks good — ready to capture!",
+              }
+            : activeSlot === "back"
+              ? {
+                  place: "Place the back side in the frame (MRZ visible)",
+                  hold: "Hold steady — keep the MRZ strip in the frame",
+                  ready: "MRZ looks good — ready to capture!",
+                }
+              : activeSlot === "passport"
+                ? {
+                    place: "Place the passport data page in the frame (MRZ visible)",
+                    hold: "Hold steady — keep the MRZ strip in the frame",
+                    ready: "MRZ looks good — ready to capture!",
+                  }
+                : {
+                    place: "Place the document in the frame",
+                    hold: "Hold steady — keep the full document in the frame",
+                    ready: "Document looks good — ready to capture!",
+                  };
 
       const setNotReady = (msg) => {
         // Keep Capture tappable briefly so a flicker doesn't eat the tap
@@ -4918,19 +5130,11 @@
       };
 
       if (!q.hasDoc) {
-        setNotReady(
-          softSlot
-            ? "Place the back side in the frame (MRZ visible)"
-            : "Place the document in the frame"
-        );
+        setNotReady(guide.place);
       } else if (!brightOk) {
         setNotReady("Lighting is poor — move closer or adjust light");
       } else if (!qualityOk) {
-        setNotReady(
-          softSlot
-            ? "Hold steady — keep the MRZ strip in the frame"
-            : "Hold steady — keep the full document in the frame"
-        );
+        setNotReady(guide.hold);
       } else {
         readyStreak += 1;
         if (readyStreak < needStreak) {
@@ -4940,9 +5144,7 @@
           if (captureBtn && Date.now() >= readyGraceUntil) captureBtn.disabled = true;
         } else {
           readyGraceUntil = Date.now() + graceMs;
-          readinessStatus.textContent = softSlot
-            ? "MRZ looks good — ready to capture!"
-            : "Document looks good — ready to capture!";
+          readinessStatus.textContent = guide.ready;
           readinessStatus.className = "status-badge status-ready";
           idFrame.classList.add("ready");
           if (captureBtn) captureBtn.disabled = false;
@@ -4963,9 +5165,44 @@
       return await res.json();
     }
 
+    async function fetchLicenseSideCheck(blob, side) {
+      const formData = new FormData();
+      formData.append("image", blob, "capture.jpg");
+      formData.append("side", side);
+      const res = await fetch(`${window.location.origin}/check-license-side`, {
+        method: "POST",
+        body: formData,
+      });
+      if (!res.ok) {
+        throw new Error(`check-license-side failed: ${res.status}`);
+      }
+      return await res.json();
+    }
+
     async function validateCapturedSide(slot, blob) {
       if (isLicenseSlot(slot)) {
-        return true;
+        const side = slot === "license-back" ? "back" : "front";
+        try {
+          const data = await fetchLicenseSideCheck(blob, side);
+          if (data && data.ok) {
+            clearLicenseSideError();
+            return true;
+          }
+          const msg =
+            side === "front"
+              ? LICENSE_FRONT_SIDE_ERROR
+              : LICENSE_BACK_SIDE_ERROR;
+          showLicenseSideError(msg);
+          if (cameraModal.classList.contains("open")) {
+            readinessStatus.textContent = msg;
+            readinessStatus.className = "status-badge";
+          }
+          inlineDocErrorShown = true;
+          return false;
+        } catch (e) {
+          console.warn("License side check skipped:", e);
+          return true;
+        }
       }
       // If backend is down, do not block the user.
       try {
@@ -5942,6 +6179,10 @@
       "Please upload an ID card's front side";
     const ID_BACK_SIDE_ERROR =
       "Please upload an ID card's back side";
+    const LICENSE_FRONT_SIDE_ERROR =
+      "Please upload front side of driver license.";
+    const LICENSE_BACK_SIDE_ERROR =
+      "Please upload back side of driver license.";
 
     // The inline red banner replaces the generic rejection alert
     let inlineDocErrorShown = false;
@@ -5977,6 +6218,33 @@
       if (!el) return;
       el.textContent = "";
       el.classList.remove("visible");
+      inlineDocErrorShown = false;
+    }
+
+    function hideLicenseOcrStatus() {
+      const el = document.getElementById("license-ocr-status");
+      if (!el) return;
+      el.textContent = "";
+      el.classList.remove("visible", "is-error");
+      inlineDocErrorShown = false;
+    }
+
+    function showLicenseSideError(message = LICENSE_FRONT_SIDE_ERROR) {
+      const el = document.getElementById("license-ocr-status");
+      if (!el) return;
+      el.textContent = message;
+      el.classList.add("visible", "is-error");
+      inlineDocErrorShown = true;
+      el.scrollIntoView({ behavior: "smooth", block: "center" });
+    }
+
+    function clearLicenseSideError() {
+      const el = document.getElementById("license-ocr-status");
+      if (!el) return;
+      if (el.classList.contains("is-error")) {
+        hideLicenseOcrStatus();
+        return;
+      }
       inlineDocErrorShown = false;
     }
 

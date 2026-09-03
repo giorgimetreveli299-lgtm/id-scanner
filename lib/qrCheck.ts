@@ -201,7 +201,7 @@ export function findFieldInQr(
     return hits.length ? hits : null;
   }
 
-  // Residence: require BOTH country and city; highlight both
+  // Residence: city must appear in QR; country is optional
   if (fieldKey === "residence") {
     const { country, city } = residenceCountryCity(fieldValue);
     if (!city) return null;
@@ -211,13 +211,26 @@ export function findFieldInQr(
       findInsensitive(qr, city.replace(/\s+/g, ""), false);
     if (!cityHit) return null;
 
-    const hits: QrHighlight[] = [];
+    const hits: QrHighlight[] = [cityHit];
     if (country) {
       const countryHit = findInsensitive(qr, country, false);
-      if (!countryHit) return null;
-      hits.push(countryHit);
+      if (countryHit) hits.push(countryHit);
     }
-    hits.push(cityHit);
+    hits.sort((a, b) => a.start - b.start);
+    return hits;
+  }
+
+  // Given names: every name token must appear in QR
+  if (fieldKey === "givenNames") {
+    const primary = needles[0] || "";
+    const words = primary.split(/\s+/).map((w) => w.trim()).filter((w) => w.length >= 2);
+    if (!words.length) return null;
+    const hits: QrHighlight[] = [];
+    for (const word of words) {
+      const hit = findInsensitive(qr, word, false);
+      if (!hit) return null;
+      hits.push(hit);
+    }
     hits.sort((a, b) => a.start - b.start);
     return hits;
   }

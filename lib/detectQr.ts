@@ -15,6 +15,16 @@ export type QrDetectResult = {
   source: "decoded" | "plate" | "layout";
 };
 
+/** True when QR was decoded or a white plate was found in the left column. */
+export function qrIsOnLicenseBackLeft(result: {
+  box: FaceBox | null;
+  source: QrDetectResult["source"];
+}): boolean {
+  if (result.source === "layout" || !result.box) return false;
+  const centerX = result.box.left + result.box.width / 2;
+  return centerX <= 0.55;
+}
+
 type PixelBox = { minX: number; maxX: number; minY: number; maxY: number };
 
 /** Georgian DL back: QR sits on a white plate in the left column. */

@@ -150,6 +150,85 @@ function firstFlexDate(fragment: string): string | null {
   return null;
 }
 
+/** First date token on a line (flex OCR spacing or compact DD/MM/YYYY). */
+function firstDateOnLine(
+  line: string
+): { raw: string; normalized: string; index: number; length: number } | null {
+  const flexRe = new RegExp(FLEX_DATE_RE.source, "g");
+  let m: RegExpExecArray | null;
+  while ((m = flexRe.exec(line)) !== null) {
+    const normalized = normalizeFlexDate(m[0]);
+    if (normalized) {
+      return {
+        raw: m[0],
+        normalized,
+        index: m.index,
+        length: m[0].length,
+      };
+    }
+  }
+  const compact = line.match(DATE_RE);
+  if (compact?.index != null && compact[1]) {
+    return {
+      raw: compact[0],
+      normalized: normalizeFlexDate(compact[1]) || compact[1],
+      index: compact.index,
+      length: compact[0].length,
+    };
+  }
+  return null;
+}
+
+function lineHasDate(line: string): boolean {
+  return Boolean(firstDateOnLine(line));
+}
+
+function stripDatesFromFragment(fragment: string): string {
+  return fragment
+    .replace(new RegExp(FLEX_DATE_RE.source, "g"), " ")
+    .replace(new RegExp(DATE_RE.source, "g"), " ")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+function isPlaceCandidateLine(line: string): boolean {
+  const body = line.replace(/^3[\.\)]\s*/, "").trim();
+  if (!body || /^4[a-d]?[\.\)]/i.test(body)) return false;
+  if (/^(გაცემის|date\s*of\s*issue|issued)\b/i.test(body)) return false;
+  const withoutDates = stripDatesFromFragment(body);
+  if (!withoutDates || withoutDates.length < 2) return false;
+  return /[\u10A0-\u10FF]|[A-Za-z]{2,}/.test(withoutDates);
+}
+
+function placeFromCandidateLine(line: string): string | null {
+  const body = line.replace(/^3[\.\)]\s*/, "").trim();
+  return sanitizePlaceOfBirth(
+    body
+      .replace(new RegExp(FLEX_DATE_RE.source, "g"), " ")
+      .replace(new RegExp(DATE_RE.source, "g"), " ")
+      .replace(/დაბადების\s*(თარიღი|ადგილი)?/gi, " ")
+      .replace(/date\s*of\s*birth|place\s*of\s*birth|\bDOB\b/gi, " ")
+      .replace(/[:：]/g, " ")
+      .replace(/\s+/g, " ")
+      .trim()
+  );
+}
+
+function findPlaceOnFollowingLines(
+  lines: string[],
+  startIndex: number,
+  maxLines = 3
+): string | null {
+  for (let j = startIndex + 1; j < lines.length && j <= startIndex + maxLines; j++) {
+    const line = lines[j];
+    if (/^4[a-d]?[\.\)]/i.test(line)) break;
+    if (!isPlaceCandidateLine(line)) continue;
+    const place = placeFromCandidateLine(line);
+    if (place) return place;
+  }
+  return null;
+}
+
 function lineValue(lines: string[], patterns: RegExp[]): string | null {
   for (let i = 0; i < lines.length; i++) {
     const line = lines[i];
@@ -783,23 +862,66 @@ function findGivenNamesFromField2(text: string, lines: string[]): string | null 
   return null;
 }
 
+/** On every Georgian DL, field 3 = DOB and place of birth on the same line. */
+function extractPlaceAfterDateOnLine(line: string): string | null {
+  const dateHit = firstDateOnLine(line);
+  if (!dateHit) return null;
+  const after = line.slice(dateHit.index + dateHit.length);
+  return sanitizePlaceOfBirth(
+    after
+      .replace(/^3[\.\)]\s*/, "")
+      .replace(/დაბადების\s*(თარიღი|ადგილი)?/gi, " ")
+      .replace(/date\s*of\s*birth|place\s*of\s*birth|\bDOB\b/gi, " ")
+      .replace(/[:：]/g, " ")
+      .replace(/\s+/g, " ")
+      .trim()
+  );
+}
+
+function datesEquivalent(a: string | null, b: string | null): boolean {
+  if (!a || !b) return false;
+  const na = normalizeFlexDate(a) || a.replace(/\./g, "/").trim();
+  const nb = normalizeFlexDate(b) || b.replace(/\./g, "/").trim();
+  return na === nb;
+}
+
+function findPlaceBesideKnownDob(
+  lines: string[],
+  dateOfBirth: string
+): string | null {
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i];
+    const dateHit = firstDateOnLine(line);
+    if (!dateHit) continue;
+    if (!datesEquivalent(dateHit.normalized, dateOfBirth)) continue;
+
+    const place =
+      extractPlaceAfterDateOnLine(line) ||
+      findPlaceOnFollowingLines(lines, i);
+    if (place) return place;
+  }
+  return null;
+}
+
 function findField3DateAndPlace(
   text: string,
   lines: string[]
 ): { date: string | null; place: string | null } {
-  const extractFromLine = (line: string) => {
+  const extractFromLine = (line: string, lineIndex = -1) => {
     const body = line.replace(/^3[\.\)]\s*/, "").trim();
-    const dateMatch = body.match(DATE_RE);
-    const date = dateMatch?.[1] ?? null;
-    const place = sanitizePlaceOfBirth(
-      body
-        .replace(DATE_RE, " ")
-        .replace(/დაბადების\s*(თარიღი|ადგილი)?/gi, " ")
-        .replace(/date\s*of\s*birth|place\s*of\s*birth|\bDOB\b/gi, " ")
-        .replace(/[:：]/g, " ")
-        .replace(/\s+/g, " ")
-        .trim()
-    );
+    const dateHit = firstDateOnLine(body) || firstDateOnLine(line);
+    const date = dateHit?.normalized ?? null;
+    const place =
+      extractPlaceAfterDateOnLine(line) ||
+      sanitizePlaceOfBirth(
+        stripDatesFromFragment(body)
+          .replace(/დაბადების\s*(თარიღი|ადგილი)?/gi, " ")
+          .replace(/date\s*of\s*birth|place\s*of\s*birth|\bDOB\b/gi, " ")
+          .replace(/[:：]/g, " ")
+          .replace(/\s+/g, " ")
+          .trim()
+      ) ||
+      (lineIndex >= 0 ? findPlaceOnFollowingLines(lines, lineIndex) : null);
     return { date, place };
   };
 
@@ -815,15 +937,39 @@ function findField3DateAndPlace(
   for (let i = 0; i < lines.length; i++) {
     const line = lines[i];
     if (/^3[\.\)]\s+\S/.test(line)) {
-      const from = extractFromLine(line);
+      const from = extractFromLine(line, i);
       if (from.date || from.place) return from;
     }
     if (/^3[\.\)]\s*$/.test(line)) {
       const next = lines[i + 1]?.trim() ?? "";
       if (next && !/^4[a-d]?[\.\)]/i.test(next)) {
-        const from = extractFromLine(`3. ${next}`);
+        const from = extractFromLine(`3. ${next}`, i + 1);
         if (from.date || from.place) return from;
       }
+    }
+  }
+
+  // Field 3 band: after "2." and before "4a" — DOB and birthplace share one line
+  let pastField2 = false;
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i];
+    if (/^2[\.\)]/i.test(line)) pastField2 = true;
+    if (/^4[a-d]?[\.\)]/i.test(line)) break;
+    if (!pastField2) continue;
+
+    if (!lineHasDate(line)) continue;
+    const from = extractFromLine(line, i);
+    if (from.date || from.place) return from;
+  }
+
+  // Label row: "დაბადების ადგილი / PLACE OF BIRTH" with city on next line(s)
+  for (let i = 0; i < lines.length; i++) {
+    if (!/დაბადების\s*ადგილი|place\s*of\s*birth/i.test(lines[i])) continue;
+    for (let j = i + 1; j < lines.length && j <= i + 4; j++) {
+      if (/^4[a-d]?[\.\)]/i.test(lines[j])) break;
+      if (lineHasDate(lines[j]) && !isPlaceCandidateLine(lines[j])) continue;
+      const place = placeFromCandidateLine(lines[j]);
+      if (place) return { date: null, place };
     }
   }
 
@@ -1138,6 +1284,12 @@ export function parseLicenseText(raw: string): LicenseFields {
 
   fields.placeOfBirth =
     field3.place ||
+    (fields.dateOfBirth
+      ? tryField(
+          () => findPlaceBesideKnownDob(lines, fields.dateOfBirth!),
+          null
+        )
+      : null) ||
     tryField(
       () =>
         sanitizePlaceOfBirth(

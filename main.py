@@ -4,7 +4,7 @@ import re
 import traceback
 from pathlib import Path
 
-from fastapi import FastAPI, File, Request, UploadFile
+from fastapi import FastAPI, File, Form, Request, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import HTMLResponse, JSONResponse, Response
 
@@ -18,7 +18,7 @@ from passport_verifier import (
     has_passport_mrz,
 )
 
-from license_verifier import extract_license_info
+from license_verifier import extract_license_info, validate_license_side
 
 BASE_DIR = Path(__file__).resolve().parent
 
@@ -322,6 +322,25 @@ async def verify_license(
                 "is_valid": False,
             }
         )
+
+
+@app.post("/check-license-side")
+async def check_license_side(
+    image: UploadFile = File(...),
+    side: str = Form(...),
+):
+    """
+    Capture/upload helper for driver license:
+    - front: reject when QR is detected (back side photo)
+    - back: reject when QR is missing and image looks like the front
+    """
+    try:
+        image_bytes = await image.read()
+        return validate_license_side(image_bytes, side)
+    except Exception as e:
+        print("check-license-side error:", ascii(str(e)))
+        traceback.print_exc()
+        return {"ok": False, "error": str(e), "side": (side or "").strip().lower()}
 
 
 @app.post("/check-mrz")

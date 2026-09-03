@@ -5,10 +5,10 @@ export type FaceBox = {
   height: number;
 };
 
-/** Shown when the back upload looks like a front (face / front text, no QR). */
+/** Shown when the back upload looks like a front (face / signature). */
 export const BACK_SIDE_REQUIRED_ERROR =
-  "Please upload the back side of the driving license.";
+  "Please upload back side of driver license.";
 
 /** Shown when the front upload looks like a back (QR / back text, no face). */
 export const FRONT_SIDE_REQUIRED_ERROR =
-  "Please upload the front side of the driving license.";
+  "Please upload front side of driver license.";

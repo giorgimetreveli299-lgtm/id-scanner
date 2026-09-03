@@ -11,7 +11,7 @@ import {
   parseLicenseText,
   type LicenseFields,
 } from "./parseLicense";
-import { detectQrOnLicenseBack } from "./detectQr";
+import { detectQrOnLicenseBack, qrIsOnLicenseBackLeft } from "./detectQr";
 import { formatBilingualPlace, applyQrLatinToName, applyQrLatinToResidence, extractLatinIdentityFromQr } from "./georgianTranslit";
 import {
   BACK_SIDE_REQUIRED_ERROR,
@@ -685,27 +685,109 @@ async function readDocumentTextRobust(imageBuffer: Buffer): Promise<string> {
   }
 }
 
+/** True when OCR/layout suggests the holder signature field (front side). */
+function textSuggestsFrontSignature(text: string): boolean {
+  if (!text) return false;
+  if (!/ხელმოწერა|holder'?s?\s*signature|\bsignature\b/i.test(text)) {
+    return false;
+  }
+  return (
+    /(?:^|\n)\s*[57][\.\)]/.test(text) ||
+    /[A-Za-z]{2}\d{7}/.test(text) ||
+    /მართვის\s*მოწმობა|driving\s*licen[cs]e/i.test(text)
+  );
+}
+
+async function signatureBoxHasInk(
+  imageBuffer: Buffer,
+  box: FaceBox
+): Promise<boolean> {
+  try {
+    const meta = await sharp(imageBuffer).rotate().metadata();
+    const W = meta.width ?? 1;
+    const H = meta.height ?? 1;
+    const left = Math.max(0, Math.min(W - 1, Math.round(box.left * W)));
+    const top = Math.max(0, Math.min(H - 1, Math.round(box.top * H)));
+    const width = Math.max(1, Math.min(W - left, Math.round(box.width * W)));
+    const height = Math.max(1, Math.min(H - top, Math.round(box.height * H)));
+    if (width < 8 || height < 8) return false;
+
+    const { data } = await sharp(imageBuffer)
+      .rotate()
+      .extract({ left, top, width, height })
+      .greyscale()
+      .raw()
+      .toBuffer({ resolveWithObject: true });
+
+    let dark = 0;
+    for (let i = 0; i < data.length; i++) {
+      if (data[i] < 185) dark++;
+    }
+    return dark / data.length >= 0.018;
+  } catch {
+    return false;
+  }
+}
+
+/** Front-side holder signature stroke under field 5 / at field 7. */
+async function imageHasVisibleSignature(imageBuffer: Buffer): Promise<boolean> {
+  const vision = getClient();
+  const dims =
+    readImageDimensions(imageBuffer) ?? { width: 1600, height: 1000 };
+  const [docResult] = await vision.documentTextDetection({
+    image: { content: imageBuffer.toString("base64") },
+  });
+  const text =
+    docResult.fullTextAnnotation?.text?.trim() ||
+    docResult.textAnnotations?.[0]?.description?.trim() ||
+    "";
+  if (textSuggestsFrontSignature(text)) return true;
+
+  const parsed = text ? parseLicenseText(text) : parseLicenseText("");
+  const sigBox = detectSignatureBoxFromAnnotations(
+    docResult.textAnnotations ?? [],
+    dims,
+    parsed.licenseNumber
+  );
+  if (!sigBox) return false;
+  return signatureBoxHasInk(imageBuffer, sigBox);
+}
+
 /** Reject a front/back upload that is clearly the other side of the card. */
 export async function validateLicenseSide(
   imageBuffer: Buffer,
   side: "front" | "back"
 ): Promise<void> {
-  const [text, qr, hasFace] = await Promise.all([
-    readDocumentText(imageBuffer),
-    detectQrOnBack(imageBuffer).catch(() => ({
+  const prepared = await prepareLicenseImage(imageBuffer);
+
+  if (side === "back") {
+    const qr = await detectQrOnBack(prepared).catch(() => ({
       box: null,
       value: null,
       source: "layout" as const,
-    })),
-    imageHasFace(imageBuffer).catch(() => false),
-  ]);
-  const qrFound = qrWasDecoded(qr);
-  if (side === "back") {
-    if (!qrFound && (hasFace || looksLikeLicenseFrontText(text))) {
+    }));
+    if (qrIsOnLicenseBackLeft(qr)) return;
+
+    const [hasFace, hasSignature] = await Promise.all([
+      imageHasFace(prepared).catch(() => false),
+      imageHasVisibleSignature(prepared).catch(() => false),
+    ]);
+    if (hasFace || hasSignature) {
       throw new Error(BACK_SIDE_REQUIRED_ERROR);
     }
     return;
   }
+
+  const [text, qr, hasFace] = await Promise.all([
+    readDocumentText(prepared),
+    detectQrOnBack(prepared).catch(() => ({
+      box: null,
+      value: null,
+      source: "layout" as const,
+    })),
+    imageHasFace(prepared).catch(() => false),
+  ]);
+  const qrFound = qrWasDecoded(qr);
   if (qrFound || (!hasFace && looksLikeLicenseBackText(text))) {
     throw new Error(FRONT_SIDE_REQUIRED_ERROR);
   }
@@ -756,7 +838,7 @@ export async function scanLicenseSides(
   const suppliedFront = options?.frontText?.trim() || "";
   const suppliedBack = options?.backText?.trim() || "";
 
-  const [frontAnalysis, backAnalysis, backQr, frontQr, backHasFace, frontHasFace] =
+  const [frontAnalysis, backAnalysis, backQr, frontQr, backHasFace, frontHasFace, backHasSignature] =
     await Promise.all([
       suppliedFront
         ? (async () => {
@@ -797,6 +879,7 @@ export async function scanLicenseSides(
       })),
       imageHasFace(backBuffer).catch(() => false),
       imageHasFace(frontBuffer).catch(() => false),
+      imageHasVisibleSignature(backBuffer).catch(() => false),
     ]);
 
   const frontText = frontAnalysis.text;
@@ -807,8 +890,7 @@ export async function scanLicenseSides(
     qrWasDecoded(frontQr) ||
     (!frontHasFace && looksLikeLicenseBackText(frontText));
   const backLooksWrong =
-    !qrWasDecoded(backQr) &&
-    (backHasFace || looksLikeLicenseFrontText(backText));
+    !qrIsOnLicenseBackLeft(backQr) && (backHasFace || backHasSignature);
 
   if (strictSides) {
     if (frontLooksWrong) {
@@ -873,20 +955,14 @@ export async function scanLicenseSides(
     qrLatin.givenNames
   );
 
-  // Field 3 place of birth sits beside the DOB on the front
+  // Field 3: place of birth is always on the front, beside date of birth
   const placeOfBirth = (() => {
     try {
       return formatBilingualPlace(
-        frontFields.placeOfBirth ||
-          combinedFields.placeOfBirth ||
-          backFields.placeOfBirth
+        frontFields.placeOfBirth || combinedFields.placeOfBirth
       );
     } catch {
-      return (
-        frontFields.placeOfBirth ||
-        combinedFields.placeOfBirth ||
-        backFields.placeOfBirth
-      );
+      return frontFields.placeOfBirth || combinedFields.placeOfBirth;
     }
   })();
 
