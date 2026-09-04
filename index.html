@@ -632,7 +632,8 @@
     }
     #ocr-status.visible { display: block; }
     .passport-upload-error,
-    .id-upload-error {
+    .id-upload-error,
+    .license-upload-error {
       display: none;
       margin: 12px 0 16px;
       padding: 12px 14px;
@@ -645,7 +646,8 @@
       text-align: center;
     }
     .passport-upload-error.visible,
-    .id-upload-error.visible { display: block; }
+    .id-upload-error.visible,
+    .license-upload-error.visible { display: block; }
 
     /* Camera overlay */
     #camera-modal {
@@ -753,6 +755,12 @@
     body:not(.allow-file-upload) .btn-upload { display: none !important; }
     .btn-close { background: var(--danger); font-size: 16px; }
     .btn-close:hover { background: #9b2c22; }
+    .btn-cancel {
+      background: var(--danger);
+      display: none;
+    }
+    .btn-cancel:hover { background: #9b2c22; }
+    .slot-box.done .btn-cancel { display: inline-block; }
     .slot-actions {
       display: flex;
       gap: 8px;
@@ -1138,6 +1146,7 @@
             <div class="slot-actions">
               <button type="button" class="btn" id="btn-front" onclick="openCamera('front')">Capture</button>
               <button type="button" class="btn btn-upload" id="btn-front-upload" onclick="triggerUpload('front')">Upload</button>
+              <button type="button" class="btn btn-cancel" id="btn-front-cancel" onclick="cancelSlotPhoto('front')">Cancel</button>
             </div>
             <img id="img-front" class="license-zoomable" alt="Front side">
           </div>
@@ -1146,6 +1155,7 @@
             <div class="slot-actions">
               <button type="button" class="btn" id="btn-back" onclick="openCamera('back')" disabled>Capture</button>
               <button type="button" class="btn btn-upload" id="btn-back-upload" onclick="triggerUpload('back')" disabled>Upload</button>
+              <button type="button" class="btn btn-cancel" id="btn-back-cancel" onclick="cancelSlotPhoto('back')">Cancel</button>
             </div>
             <img id="img-back" class="license-zoomable" alt="Back side">
           </div>
@@ -1173,6 +1183,7 @@
             <div class="slot-actions">
               <button type="button" class="btn" id="btn-passport" onclick="openCamera('passport')">Capture</button>
               <button type="button" class="btn btn-upload" id="btn-passport-upload" onclick="triggerUpload('passport')">Upload</button>
+              <button type="button" class="btn btn-cancel" id="btn-passport-cancel" onclick="cancelSlotPhoto('passport')">Cancel</button>
             </div>
             <img id="img-passport" class="license-zoomable" alt="Passport">
           </div>
@@ -1187,12 +1198,19 @@
         <p class="step-hint" id="license-step-hint">
           Capture the front side first.
         </p>
+        <div
+          class="license-upload-error"
+          id="license-upload-error"
+          role="alert"
+          aria-live="assertive"
+        ></div>
         <div class="photo-slots">
           <div class="slot-box" id="slot-license-front">
             <h4>Front Side</h4>
             <div class="slot-actions">
               <button type="button" class="btn" id="btn-license-front" onclick="openLicenseCamera('front')">Capture</button>
               <button type="button" class="btn btn-upload" id="btn-license-front-upload" onclick="triggerLicenseUpload('front')">Upload</button>
+              <button type="button" class="btn btn-cancel" id="btn-license-front-cancel" onclick="cancelSlotPhoto('license-front')">Cancel</button>
             </div>
             <img id="img-license-front" class="license-zoomable" alt="Front side">
           </div>
@@ -1201,6 +1219,7 @@
             <div class="slot-actions">
               <button type="button" class="btn" id="btn-license-back" onclick="openLicenseCamera('back')" disabled>Capture</button>
               <button type="button" class="btn btn-upload" id="btn-license-back-upload" onclick="triggerLicenseUpload('back')" disabled>Upload</button>
+              <button type="button" class="btn btn-cancel" id="btn-license-back-cancel" onclick="cancelSlotPhoto('license-back')">Cancel</button>
             </div>
             <img id="img-license-back" class="license-zoomable" alt="Back side">
           </div>
@@ -1604,6 +1623,7 @@
       if (frontUpload) frontUpload.disabled = false;
       if (backBtn) backBtn.disabled = true;
       if (backUpload) backUpload.disabled = true;
+      clearLicenseUploadError();
       updateLicenseStepHint();
     }
 
@@ -1629,11 +1649,13 @@
 
     function openLicenseCamera(side) {
       clearLicenseSideError();
+      clearLicenseUploadError();
       openCamera(licenseSlotId(side));
     }
 
     function triggerLicenseUpload(side) {
       clearLicenseSideError();
+      clearLicenseUploadError();
       triggerUpload(licenseSlotId(side));
     }
 
@@ -1965,36 +1987,126 @@
     }
 
     function licenseQrDateNeedles(raw) {
+      const parts = licenseParseDateParts(raw);
+      if (!parts) {
+        const compact = String(raw || "").replace(/\s+/g, "");
+        return compact.length >= 6 ? [compact] : [];
+      }
+      const { day, month, year } = parts;
+      const d = String(parseInt(day, 10));
+      const m = String(parseInt(month, 10));
+      const yy = year.slice(-2);
+      return [
+        `${day}/${month}/${year}`,
+        `${day}.${month}.${year}`,
+        `${day}-${month}-${year}`,
+        `${d}/${m}/${year}`,
+        `${d}.${m}.${year}`,
+        `${d}-${m}-${year}`,
+        `${day}/${month}/${yy}`,
+        `${day}.${month}.${yy}`,
+        `${day}-${month}-${yy}`,
+        `${d}/${m}/${yy}`,
+        `${d}.${m}.${yy}`,
+        `${year}${month}${day}`,
+        `${day}${month}${year}`,
+        `${year}-${month}-${day}`,
+        `${yy}${month}${day}`,
+        `${day}${month}${yy}`,
+      ];
+    }
+
+    /** Parse a date string into zero-padded day/month/year parts. */
+    function licenseParseDateParts(raw) {
       const compact = String(raw || "").replace(/\s+/g, "");
-      const m =
+      if (!compact) return null;
+      let m =
         compact.match(/^(\d{1,2})[./\-](\d{1,2})[./\-](\d{4}|\d{2})$/) ||
         compact.match(/^(\d{4})[./\-](\d{1,2})[./\-](\d{1,2})$/);
-      if (!m) return compact.length >= 6 ? [compact] : [];
+      if (!m && /^\d{8}$/.test(compact)) {
+        // Prefer DDMMYYYY (Georgian licences); also accept YYYYMMDD
+        const dmy = {
+          day: compact.slice(0, 2),
+          month: compact.slice(2, 4),
+          year: compact.slice(4, 8),
+        };
+        const ymd = {
+          day: compact.slice(6, 8),
+          month: compact.slice(4, 6),
+          year: compact.slice(0, 4),
+        };
+        const dmyOk =
+          +dmy.day >= 1 && +dmy.day <= 31 && +dmy.month >= 1 && +dmy.month <= 12;
+        const ymdOk =
+          +ymd.day >= 1 && +ymd.day <= 31 && +ymd.month >= 1 && +ymd.month <= 12 &&
+          +ymd.year >= 1900 && +ymd.year <= 2100;
+        if (dmyOk && !ymdOk) m = ["", dmy.day, dmy.month, dmy.year];
+        else if (ymdOk && !dmyOk) m = ["", ymd.year, ymd.month, ymd.day];
+        else if (dmyOk) m = ["", dmy.day, dmy.month, dmy.year];
+      }
+      if (!m && /^\d{6}$/.test(compact)) {
+        // DDMMYY
+        m = ["", compact.slice(0, 2), compact.slice(2, 4), compact.slice(4, 6)];
+      }
+      if (!m) return null;
 
       let day;
       let month;
       let year;
-      if (m[0].startsWith(m[1]) && m[1].length === 4) {
+      if (m[1].length === 4) {
         year = m[1];
         month = m[2].padStart(2, "0");
         day = m[3].padStart(2, "0");
       } else {
         day = m[1].padStart(2, "0");
         month = m[2].padStart(2, "0");
-        year = m[3].length === 2 ? (parseInt(m[3], 10) >= 70 ? `19${m[3]}` : `20${m[3]}`) : m[3];
+        year =
+          m[3].length === 2
+            ? parseInt(m[3], 10) >= 70
+              ? `19${m[3]}`
+              : `20${m[3]}`
+            : m[3];
       }
-      const yy = year.slice(-2);
-      return [
-        `${day}/${month}/${year}`,
-        `${day}.${month}.${year}`,
-        `${day}-${month}-${year}`,
-        `${day}/${month}/${yy}`,
-        `${day}.${month}.${yy}`,
-        `${day}-${month}-${yy}`,
-        `${year}${month}${day}`,
-        `${day}${month}${year}`,
-        `${year}-${month}-${day}`,
+      if (+day < 1 || +day > 31 || +month < 1 || +month > 12) return null;
+      return { day, month, year };
+    }
+
+    function licenseDateKey(parts) {
+      if (!parts) return "";
+      return `${parts.year}-${parts.month}-${parts.day}`;
+    }
+
+    /**
+     * Locate a date inside the QR payload (handles missing zeros / separators).
+     * Prefer spans that match the field date exactly after normalization.
+     */
+    function licenseQrFindDate(qrPayload, fieldValue) {
+      const qr = String(qrPayload || "");
+      const target = licenseParseDateParts(fieldValue);
+      if (!target) return null;
+      const targetKey = licenseDateKey(target);
+
+      const patterns = [
+        /\d{1,2}\s*[./\-]\s*\d{1,2}\s*[./\-]\s*\d{2,4}/g,
+        /\d{4}\s*[./\-]\s*\d{1,2}\s*[./\-]\s*\d{1,2}/g,
+        /\d{8}/g,
+        /\d{6}/g,
       ];
+      const hits = [];
+      for (const re of patterns) {
+        re.lastIndex = 0;
+        let m;
+        while ((m = re.exec(qr)) !== null) {
+          const parts = licenseParseDateParts(m[0]);
+          if (!parts) continue;
+          if (licenseDateKey(parts) !== targetKey) continue;
+          hits.push({ start: m.index, end: m.index + m[0].length, len: m[0].length });
+        }
+      }
+      if (!hits.length) return null;
+      // Prefer longer / more specific matches
+      hits.sort((a, b) => b.len - a.len || a.start - b.start);
+      return [{ start: hits[0].start, end: hits[0].end }];
     }
 
     function licenseQrNeedlesForField(key, value) {
@@ -2128,6 +2240,19 @@
         return hits;
       }
 
+      // Dates (DOB / expiry): normalize formats so QR "3.5.2030" matches field "03/05/2030"
+      if (fieldKey === "dateOfBirth" || fieldKey === "expiryDate") {
+        const dateHits = licenseQrFindDate(qr, fieldValue);
+        if (dateHits) return dateHits;
+        // Fallback: literal needles
+        const orderedDates = [...needles].sort((a, b) => b.length - a.length);
+        for (const needle of orderedDates) {
+          const hit = licenseQrFindInsensitive(qr, needle, false);
+          if (hit) return [hit];
+        }
+        return null;
+      }
+
       const wholeWord = fieldKey === "licenseNumber";
       const ordered = [...needles].sort((a, b) => b.length - a.length);
       for (const needle of ordered) {
@@ -2179,7 +2304,12 @@
       if (!fieldKey || !licenseQrPayload) return;
 
       const input = document.getElementById(inputId);
-      const value = input ? input.value : "";
+      let value = input ? String(input.value || "").trim() : "";
+      // Dates: normalize spaced OCR like "30 / 03 / 2030" before QR lookup
+      if ((fieldKey === "dateOfBirth" || fieldKey === "expiryDate") && value) {
+        const parts = licenseParseDateParts(value);
+        if (parts) value = `${parts.day}/${parts.month}/${parts.year}`;
+      }
       const hits = findLicenseFieldInQr(licenseQrPayload, fieldKey, value);
       if (!hits || !hits.length) return;
 
@@ -2652,6 +2782,17 @@
         const data = await response.json();
         if (data.error) {
           if (status) status.textContent = "Error: " + data.error;
+          const errText = String(data.error);
+          if (
+            data.error_code === "wrong_document_for_license" ||
+            errText.includes("Please upload driver license")
+          ) {
+            showLicenseUploadError(LICENSE_WRONG_DOC_ERROR);
+          } else if (/front side of driver license/i.test(errText)) {
+            showLicenseUploadError(LICENSE_FRONT_SIDE_ERROR);
+          } else if (/back side of driver license/i.test(errText)) {
+            showLicenseUploadError(LICENSE_BACK_SIDE_ERROR);
+          }
           populateLicenseResults(data);
           const banner = document.getElementById("license-extract-banner");
           if (banner) {
@@ -4819,6 +4960,120 @@
       }
     }
 
+    function clearIdOrPassportResultsUi() {
+      [
+        "first_name", "first_name_lat", "last_name", "last_name_lat",
+        "birth_date", "birth_place", "birth_place_lat",
+        "citizenship", "gender", "personal_id", "card_number", "expiry_date", "issue_date", "mrz_strip",
+      ].forEach((id) => {
+        const el = document.getElementById(id);
+        if (el) el.value = "";
+      });
+      clearBadges();
+      const results = document.getElementById("results-card");
+      const pdfBtn = document.getElementById("btn-pdf");
+      const newBtn = document.getElementById("btn-new");
+      const actionBar = document.querySelector(".bottom-actions");
+      const status = document.getElementById("ocr-status");
+      if (results) results.classList.remove("visible");
+      if (pdfBtn) pdfBtn.classList.remove("visible");
+      if (newBtn) newBtn.classList.remove("visible");
+      if (actionBar) actionBar.classList.remove("visible");
+      if (status) {
+        status.classList.remove("visible");
+        status.textContent = "";
+      }
+    }
+
+    function cancelSlotPhoto(slot) {
+      if (!slot) return;
+
+      if (slot === "passport") {
+        passportBlob = null;
+        passportDataUrl = null;
+        passportStages = null;
+        const img = document.getElementById("img-passport");
+        if (img) {
+          img.src = "";
+          img.style.display = "none";
+        }
+        document.getElementById("slot-passport")?.classList.remove("done");
+        const pdfFront = document.getElementById("pdf-img-front");
+        const pdfBack = document.getElementById("pdf-img-back");
+        if (pdfFront) pdfFront.src = "";
+        if (pdfBack) pdfBack.src = "";
+        clearPassportUploadError();
+        clearIdOrPassportResultsUi();
+        const hint = document.getElementById("passport-step-hint");
+        if (hint) {
+          hint.textContent = "Capture the passport data page (photo + MRZ strip).";
+        }
+        return;
+      }
+
+      if (slot === "license-front" || slot === "license-back") {
+        const side = slot.replace("license-", "");
+        if (side === "front") {
+          licenseFrontBlob = null;
+          licenseFrontDataUrl = null;
+        } else {
+          licenseBackBlob = null;
+          licenseBackDataUrl = null;
+        }
+        const img = document.getElementById(`img-${slot}`);
+        if (img) {
+          img.src = "";
+          img.style.display = "none";
+        }
+        document.getElementById(`slot-${slot}`)?.classList.remove("done");
+        if (!licenseFrontDataUrl) {
+          const backBtn = document.getElementById("btn-license-back");
+          const backUpload = document.getElementById("btn-license-back-upload");
+          if (backBtn) backBtn.disabled = true;
+          if (backUpload) backUpload.disabled = true;
+        }
+        clearLicenseUploadError();
+        clearLicenseSideError();
+        clearLicenseResults();
+        updateLicenseStepHint();
+        updateLicenseActionButtons();
+        return;
+      }
+
+      if (slot === "front") {
+        frontBlob = null;
+        frontDataUrl = null;
+        frontStages = null;
+        const img = document.getElementById("img-front");
+        if (img) {
+          img.src = "";
+          img.style.display = "none";
+        }
+        document.getElementById("slot-front")?.classList.remove("done");
+        document.getElementById("pdf-img-front").src = "";
+        document.getElementById("btn-back").disabled = true;
+        document.getElementById("btn-back-upload").disabled = true;
+      } else if (slot === "back") {
+        backBlob = null;
+        backDataUrl = null;
+        backStages = null;
+        const img = document.getElementById("img-back");
+        if (img) {
+          img.src = "";
+          img.style.display = "none";
+        }
+        document.getElementById("slot-back")?.classList.remove("done");
+        document.getElementById("pdf-img-back").src = "";
+      } else {
+        return;
+      }
+
+      clearIdUploadError();
+      clearIdOrPassportResultsUi();
+      refreshPdfPhotosFromStage();
+      updateStepHint();
+    }
+
     function newClient() {
       closeCamera();
       resetLicenseCapture();
@@ -5238,10 +5493,29 @@
       return await res.json();
     }
 
+    async function fetchIdSideCheck(blob, side) {
+      const formData = new FormData();
+      formData.append("image", blob, "capture.jpg");
+      formData.append("side", side);
+      const res = await fetch(`${window.location.origin}/check-id-side`, {
+        method: "POST",
+        body: formData,
+      });
+      if (!res.ok) {
+        throw new Error(`check-id-side failed: ${res.status}`);
+      }
+      return await res.json();
+    }
+
     async function validateCapturedSide(slot, blob) {
-      // License / unrestricted quality gates stay off — only block wrong doc type.
-      if (isLicenseSlot(slot)) return true;
-      if (slot !== "front" && slot !== "back" && slot !== "passport") return true;
+      const expected = isLicenseSlot(slot)
+        ? "license"
+        : slot === "passport"
+          ? "passport"
+          : (slot === "front" || slot === "back")
+            ? "id"
+            : null;
+      if (!expected) return true;
 
       try {
         const data = await fetchMrzCheck(blob);
@@ -5255,7 +5529,7 @@
           /^P</.test(passportStrip.replace(/\s+/g, "")) ||
           /P<[A-Z0-9]{3}/.test(stripHint.replace(/\s+/g, ""))
         );
-        const docType = String((data && data.doc_type) || "unknown");
+        let docType = String((data && data.doc_type) || "unknown");
         const idMrzStartsWithId = /^ID/.test(
           String((data && data.mrz_strip) || "")
             .split(/\r?\n/, 1)[0]
@@ -5268,29 +5542,87 @@
           .split(/\r?\n/, 1)[0]
           .replace(/\s+/g, "")
           .toUpperCase();
-        // Passport TD3 rows start with P. TD1 (ID) strip wins over passport guess.
         const mrzStartsWithP =
           !hasMrz &&
           (/^P/.test(passportMrzFirst) ||
             /^P(?:<|P)?GE[O0]/.test(stripHint.replace(/\s+/g, "").toUpperCase()));
-        const looksPassport =
-          (docType === "passport" && !hasMrz) || (hasTd3 && !hasMrz);
 
-        if ((slot === "front" || slot === "back") && (mrzStartsWithP || looksPassport)) {
-          readinessStatus.textContent = ID_PASSPORT_ERROR;
-          readinessStatus.className = "status-badge is-visible";
-          showIdUploadError(ID_PASSPORT_ERROR);
-          return false;
-        }
-        if (slot === "passport" && (idMrzStartsWithId || docType === "id")) {
-          readinessStatus.textContent = PASSPORT_ID_ERROR;
-          readinessStatus.className = "status-badge is-visible";
-          showPassportUploadError(PASSPORT_ID_ERROR);
-          return false;
+        // Strengthen classification from MRZ cues when doc_type is weak
+        if (docType === "unknown") {
+          if (mrzStartsWithP || (hasTd3 && !hasMrz)) docType = "passport";
+          else if (idMrzStartsWithId || hasMrz) docType = "id";
+        } else if (expected === "id" && (mrzStartsWithP || (hasTd3 && !hasMrz && docType !== "id"))) {
+          docType = "passport";
+        } else if (expected === "passport" && (idMrzStartsWithId || (hasMrz && docType !== "passport"))) {
+          docType = "id";
         }
 
-        if (slot === "passport") clearPassportUploadError();
-        if (slot === "front" || slot === "back") clearIdUploadError();
+        if (docType !== "unknown" && docType !== expected) {
+          if (expected === "id") {
+            readinessStatus.textContent = ID_WRONG_DOC_ERROR;
+            readinessStatus.className = "status-badge is-visible";
+            showIdUploadError(ID_WRONG_DOC_ERROR);
+            return false;
+          }
+          if (expected === "passport") {
+            readinessStatus.textContent = PASSPORT_WRONG_DOC_ERROR;
+            readinessStatus.className = "status-badge is-visible";
+            showPassportUploadError(PASSPORT_WRONG_DOC_ERROR);
+            return false;
+          }
+          if (expected === "license") {
+            readinessStatus.textContent = LICENSE_WRONG_DOC_ERROR;
+            readinessStatus.className = "status-badge is-visible";
+            showLicenseUploadError(LICENSE_WRONG_DOC_ERROR);
+            return false;
+          }
+          return true;
+        }
+
+        if (expected === "passport") clearPassportUploadError();
+        if (expected === "id") clearIdUploadError();
+        if (expected === "license") clearLicenseUploadError();
+
+        // Wrong side: ID front must not show MRZ; ID back must not show a face
+        if (expected === "id") {
+          const idSide = slot === "front" ? "front" : "back";
+          // Front: reuse MRZ from check-mrz to avoid a second OCR call
+          if (idSide === "front" && hasMrz) {
+            readinessStatus.textContent = ID_FRONT_SIDE_ERROR;
+            readinessStatus.className = "status-badge is-visible";
+            showIdUploadError(ID_FRONT_SIDE_ERROR);
+            return false;
+          }
+          if (idSide === "back") {
+            const sideData = await fetchIdSideCheck(blob, "back");
+            if (sideData && sideData.ok === false) {
+              const msg = String(sideData.error || ID_BACK_SIDE_ERROR);
+              readinessStatus.textContent = msg;
+              readinessStatus.className = "status-badge is-visible";
+              showIdUploadError(msg);
+              return false;
+            }
+          }
+        }
+
+        // Wrong side: license front must not show QR; back must not show face/signature
+        if (expected === "license") {
+          const licSide = slot === "license-front" ? "front" : "back";
+          const sideData = await fetchLicenseSideCheck(blob, licSide);
+          if (sideData && sideData.ok === false) {
+            const raw = String(sideData.error || "");
+            const msg = /front side/i.test(raw)
+              ? LICENSE_FRONT_SIDE_ERROR
+              : /back side/i.test(raw)
+                ? LICENSE_BACK_SIDE_ERROR
+                : (raw || LICENSE_FRONT_SIDE_ERROR);
+            readinessStatus.textContent = msg;
+            readinessStatus.className = "status-badge is-visible";
+            showLicenseUploadError(msg);
+            return false;
+          }
+        }
+
         return true;
       } catch (e) {
         console.warn("Wrong-document check skipped:", e);
@@ -5635,7 +5967,9 @@
         out.ranges.personal_id = { line: 0, start: 15, end: 26 };
       }
 
-      // Line 2: birth YYMMDD (chars 1–6), sex (8th), expiry YYMMDD (chars 9–14)
+      // Line 2: birth YYMMDD (chars 1–6), sex (8th), expiry YYMMDD (chars 9–14),
+      // optional check digits, then nationality (ICAO 3-letter).
+      // OCR often drops one check digit (…301023GEO… instead of …3010237GEO…).
       if (line2.length >= 6) {
         const birth6 = line2.slice(0, 6);
         if (/^\d{6}$/.test(birth6)) out.birthYymmdd = birth6;
@@ -5651,14 +5985,15 @@
         if (/^\d{6}$/.test(exp6)) out.expiryYymmdd = exp6;
         out.ranges.expiry_date = { line: 1, start: 8, end: 14 };
       }
-      const ds = line2.match(/^(\d{6})\d([MF])(\d{6})\d([A-Z0-9]{3})/);
+      // Optional check digits between birth/sex/expiry/nationality
+      const ds = line2.match(/^(\d{6})\d?([MF])(\d{6})\d?([A-Z]{3})/);
       if (ds) {
         if (!out.birthYymmdd) out.birthYymmdd = ds[1];
         if (!out.sex) out.sex = ds[2];
         if (!out.expiryYymmdd) out.expiryYymmdd = ds[3];
         out.citizenship = ds[4].replace(/0/g, "O");
         if (out.citizenship === "GFO") out.citizenship = "GEO";
-        const natIdx = line2.indexOf(ds[4]);
+        const natIdx = line2.indexOf(ds[4], 10);
         if (natIdx >= 0) {
           out.ranges.citizenship = { line: 1, start: natIdx, end: natIdx + 3 };
         }
@@ -5669,12 +6004,20 @@
           if (!out.sex) out.sex = soft[2];
           if (!out.expiryYymmdd) out.expiryYymmdd = soft[3];
         }
-        // TD1 nationality is chars 16–18 (0-based 15–18)
+        // Standard TD1 nationality is chars 16–18 (0-based 15–18)
         if (line2.length >= 18) {
           const nat = line2.slice(15, 18).replace(/0/g, "O");
           if (/^[A-Z]{3}$/.test(nat)) {
             out.citizenship = nat === "GFO" ? "GEO" : nat;
             out.ranges.citizenship = { line: 1, start: 15, end: 18 };
+          }
+        }
+        // Shifted OCR (missing check digit): nationality starts at index 14
+        if (!out.citizenship && line2.length >= 17) {
+          const nat = line2.slice(14, 17).replace(/0/g, "O");
+          if (/^[A-Z]{3}$/.test(nat)) {
+            out.citizenship = nat === "GFO" ? "GEO" : nat;
+            out.ranges.citizenship = { line: 1, start: 14, end: 17 };
           }
         }
       }
@@ -6171,23 +6514,25 @@
       }
     }
 
-    const PASSPORT_ID_ERROR =
-      "Please upload a passport, not an ID card";
-    const ID_PASSPORT_ERROR =
-      "Please upload an ID card, not a passport";
+    const PASSPORT_WRONG_DOC_ERROR = "Please upload passport";
+    const ID_WRONG_DOC_ERROR = "Please upload ID card";
+    const LICENSE_WRONG_DOC_ERROR = "Please upload driver license";
+    // Keep aliases used by older call sites
+    const PASSPORT_ID_ERROR = PASSPORT_WRONG_DOC_ERROR;
+    const ID_PASSPORT_ERROR = ID_WRONG_DOC_ERROR;
     const ID_FRONT_SIDE_ERROR =
-      "Please upload an ID card's front side";
+      "Please upload front side of ID card";
     const ID_BACK_SIDE_ERROR =
-      "Please upload an ID card's back side";
+      "Please upload back side of ID card";
     const LICENSE_FRONT_SIDE_ERROR =
-      "Please upload front side of driver license.";
+      "Please upload front side of driver license";
     const LICENSE_BACK_SIDE_ERROR =
-      "Please upload back side of driver license.";
+      "Please upload back side of driver license";
 
     // The inline red banner replaces the generic rejection alert
     let inlineDocErrorShown = false;
 
-    function showPassportUploadError(message = PASSPORT_ID_ERROR) {
+    function showPassportUploadError(message = PASSPORT_WRONG_DOC_ERROR) {
       const el = document.getElementById("passport-upload-error");
       if (!el) return;
       el.textContent = message;
@@ -6204,7 +6549,7 @@
       inlineDocErrorShown = false;
     }
 
-    function showIdUploadError(message = ID_PASSPORT_ERROR) {
+    function showIdUploadError(message = ID_WRONG_DOC_ERROR) {
       const el = document.getElementById("id-upload-error");
       if (!el) return;
       el.textContent = message;
@@ -6215,6 +6560,23 @@
 
     function clearIdUploadError() {
       const el = document.getElementById("id-upload-error");
+      if (!el) return;
+      el.textContent = "";
+      el.classList.remove("visible");
+      inlineDocErrorShown = false;
+    }
+
+    function showLicenseUploadError(message = LICENSE_WRONG_DOC_ERROR) {
+      const el = document.getElementById("license-upload-error");
+      if (!el) return;
+      el.textContent = message;
+      el.classList.add("visible");
+      inlineDocErrorShown = true;
+      el.scrollIntoView({ behavior: "smooth", block: "center" });
+    }
+
+    function clearLicenseUploadError() {
+      const el = document.getElementById("license-upload-error");
       if (!el) return;
       el.textContent = "";
       el.classList.remove("visible");
@@ -6369,10 +6731,12 @@
         if (data.error) {
           status.textContent = "Error: " + data.error;
           if (
+            data.error_code === "wrong_document_for_passport" ||
             data.error_code === "id_mrz_in_passport" ||
+            String(data.error).includes("Please upload passport") ||
             String(data.error).includes("not an ID card")
           ) {
-            showPassportUploadError(PASSPORT_ID_ERROR);
+            showPassportUploadError(PASSPORT_WRONG_DOC_ERROR);
           }
           results.classList.add("visible");
           pdfBtn.classList.add("visible");
@@ -6477,10 +6841,12 @@
         if (data.error) {
           status.textContent = "Error: " + data.error;
           if (
+            data.error_code === "wrong_document_for_id" ||
             data.error_code === "passport_mrz_in_id" ||
+            String(data.error).includes("Please upload ID card") ||
             String(data.error).includes("not a passport")
           ) {
-            showIdUploadError(ID_PASSPORT_ERROR);
+            showIdUploadError(ID_WRONG_DOC_ERROR);
           }
           results.classList.add("visible");
           pdfBtn.classList.add("visible");

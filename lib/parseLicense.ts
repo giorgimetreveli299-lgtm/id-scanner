@@ -1040,6 +1040,107 @@ function findIssueDateFromField4a(text: string, lines: string[]): string | null 
   return null;
 }
 
+/**
+ * Field **4b.** = date of expiry / cancellation (გაუქმების თარიღი).
+ * Take only the date after `4b` and before `4c` / `4d` / `5.`.
+ * Also handles run-on lines: `4a … 4b 07/03/2027`.
+ */
+function findExpiryDateFromField4b(text: string, lines: string[]): string | null {
+  const stripLabels = (raw: string) =>
+    raw
+      .replace(/^4\s*[bB\u0432\u0412][\.\),:]?\s*/i, "")
+      .replace(/გაუქმების\s*თარიღი/gi, " ")
+      .replace(/მოქმედების\s*ვადა/gi, " ")
+      .replace(/date\s*of\s*expiry/gi, " ")
+      .replace(/expir(?:y|es|ation)\b/gi, " ")
+      .replace(/valid\s*(?:until|thru|to)\b/gi, " ")
+      .replace(/\s+/g, " ")
+      .trim();
+
+  // 1) Same line / run-on: capture after 4b until 4c/4d/5
+  const sameChunk = text.match(
+    /(?:^|\n|[^\n])\s*4\s*[bB\u0432\u0412][\.\),:]?\s*([^\n]*?)(?=\s+4\s*[cC\u0441\u0421dD]|\s+5[\.\)]|$)/im
+  );
+  if (sameChunk?.[1]) {
+    const hit = firstFlexDate(stripLabels(sameChunk[1]));
+    if (hit) return hit;
+  }
+
+  // 2) After 4a block on the same run-on line: "4a DATE 4b DATE"
+  const after4a = text.match(
+    /4\s*[aA\u0430\u0410][\.\),:]?[^\n]{0,40}?4\s*[bB\u0432\u0412][\.\),:]?\s*([^\n]*?)(?=\s+4\s*[cC\u0441\u0421dD]|\s+5[\.\)]|$)/im
+  );
+  if (after4a?.[1]) {
+    const hit = firstFlexDate(stripLabels(after4a[1]));
+    if (hit) return hit;
+  }
+
+  // 3) Dedicated line containing 4b
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i];
+    if (!/4\s*[bB\u0432\u0412][\.\),:]?/i.test(line)) continue;
+    // Skip pure 4a / 4c / 4d
+    if (/^4\s*[aA\u0430\u0410cC\u0441\u0421dD]/i.test(line.trim()) &&
+        !/4\s*[bB\u0432\u0412]/i.test(line)) {
+      continue;
+    }
+
+    // Prefer the segment after 4b on this line
+    const bMatch = line.match(/4\s*[bB\u0432\u0412][\.\),:]?/i);
+    if (bMatch && bMatch.index != null) {
+      const after = line.slice(bMatch.index + bMatch[0].length);
+      const cut =
+        after.split(/\s*(?=4\s*[cC\u0441\u0421dD]|5[\.\)])/i)[0] ?? after;
+      const fromAfter = firstFlexDate(stripLabels(cut));
+      if (fromAfter) return fromAfter;
+    }
+
+    const cut =
+      line.split(/\s*(?=4\s*[cC\u0441\u0421dD]|5[\.\)])/i)[0] ?? line;
+    // If line also has 4a, take the date after 4b only
+    if (/4\s*[aA\u0430\u0410]/i.test(cut) && /4\s*[bB\u0432\u0412]/i.test(cut)) {
+      const part = cut.split(/4\s*[bB\u0432\u0412][\.\),:]?/i)[1] ?? "";
+      const fromPart = firstFlexDate(stripLabels(part));
+      if (fromPart) return fromPart;
+    } else if (!/^4\s*[aA\u0430\u0410]/i.test(cut.trim())) {
+      const fromLine = firstFlexDate(stripLabels(cut));
+      if (fromLine) return fromLine;
+    }
+
+    for (let j = 1; j <= 3 && i + j < lines.length; j++) {
+      const next = lines[i + j]?.trim() ?? "";
+      if (!next) continue;
+      if (/^4\s*[cC\u0441\u0421dD]/i.test(next)) break;
+      if (/^5[\.\)]/.test(next)) break;
+      if (/^[1-9][\.\)]\s/.test(next) && !/4\s*[bB\u0432\u0412]/i.test(next)) break;
+      const fromNext = firstFlexDate(stripLabels(next));
+      if (fromNext) return fromNext;
+    }
+  }
+
+  // 4) Georgian / English labels
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i];
+    if (
+      !/გაუქმების\s*თარიღი|მოქმედების\s*ვადა|date\s*of\s*expiry|expir(?:y|es|ation)|valid\s*(?:until|thru|to)/i.test(
+        line
+      )
+    ) {
+      continue;
+    }
+    const fromLine = firstFlexDate(stripLabels(line));
+    if (fromLine) return fromLine;
+    for (let j = 1; j <= 2 && i + j < lines.length; j++) {
+      const next = lines[i + j]?.trim() ?? "";
+      if (/^4\s*[cC\u0441\u0421dD]/i.test(next) || /^5[\.\)]/.test(next)) break;
+      const fromNext = firstFlexDate(next);
+      if (fromNext) return fromNext;
+    }
+  }
+
+  return null;
+}
+
 function findDateFromFieldLabel(
   text: string,
   lines: string[],
@@ -1316,15 +1417,29 @@ export function parseLicenseText(raw: string): LicenseFields {
 
   fields.expiryDate = tryField(
     () =>
-      findDateFromFieldLabel(text, lines, /4b[\.\)]?/i) ||
+      findExpiryDateFromField4b(text, lines) ||
+      findDateFromFieldLabel(text, lines, /4\s*[bB\u0432\u0412][\.\)]?/i) ||
       findDateNear(lines, [
         /გაუქმების\s*თარიღი/i,
         /მოქმედების\s*ვადა/i,
         /date\s*of\s*expiry/i,
+        /expir(?:y|es|ation)/i,
+        /valid\s*(?:until|thru|to)/i,
       ]) ||
       null,
     null
   );
+  if (fields.expiryDate) {
+    fields.expiryDate = normalizeFlexDate(fields.expiryDate) || fields.expiryDate;
+  }
+  // Never copy DOB or issue into expiry
+  if (
+    fields.expiryDate &&
+    (fields.expiryDate === fields.dateOfBirth ||
+      fields.expiryDate === fields.issueDate)
+  ) {
+    fields.expiryDate = null;
+  }
 
   fields.issuingAuthority = ISSUING_AUTHORITY;
 

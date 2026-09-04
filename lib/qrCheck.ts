@@ -81,37 +81,189 @@ function needlesForField(
   return [raw];
 }
 
-function dateNeedles(raw: string): string[] {
+function parseDateParts(raw: string): { day: string; month: string; year: string } | null {
   const compact = raw.replace(/\s+/g, "");
-  const m =
+  if (!compact) return null;
+  let m: RegExpMatchArray | null =
     compact.match(/^(\d{1,2})[./\-](\d{1,2})[./\-](\d{4}|\d{2})$/) ||
     compact.match(/^(\d{4})[./\-](\d{1,2})[./\-](\d{1,2})$/);
-  if (!m) return compact.length >= 6 ? [compact] : [];
+  if (!m && /^\d{8}$/.test(compact)) {
+    const dmy = {
+      day: compact.slice(0, 2),
+      month: compact.slice(2, 4),
+      year: compact.slice(4, 8),
+    };
+    const ymd = {
+      day: compact.slice(6, 8),
+      month: compact.slice(4, 6),
+      year: compact.slice(0, 4),
+    };
+    const dmyOk =
+      +dmy.day >= 1 && +dmy.day <= 31 && +dmy.month >= 1 && +dmy.month <= 12;
+    const ymdOk =
+      +ymd.day >= 1 &&
+      +ymd.day <= 31 &&
+      +ymd.month >= 1 &&
+      +ymd.month <= 12 &&
+      +ymd.year >= 1900 &&
+      +ymd.year <= 2100;
+    if (dmyOk && !ymdOk) m = ["", dmy.day, dmy.month, dmy.year];
+    else if (ymdOk && !dmyOk) m = ["", ymd.year, ymd.month, ymd.day];
+    else if (dmyOk) m = ["", dmy.day, dmy.month, dmy.year];
+  }
+  if (!m && /^\d{6}$/.test(compact)) {
+    m = ["", compact.slice(0, 2), compact.slice(2, 4), compact.slice(4, 6)];
+  }
+  if (!m) return null;
 
   let day: string;
   let month: string;
   let year: string;
-  if (m[0].startsWith(m[1]) && m[1].length === 4) {
+  if (m[1].length === 4) {
     year = m[1];
     month = m[2].padStart(2, "0");
     day = m[3].padStart(2, "0");
   } else {
     day = m[1].padStart(2, "0");
     month = m[2].padStart(2, "0");
-    year = m[3].length === 2 ? (parseInt(m[3], 10) >= 70 ? `19${m[3]}` : `20${m[3]}`) : m[3];
+    year =
+      m[3].length === 2
+        ? parseInt(m[3], 10) >= 70
+          ? `19${m[3]}`
+          : `20${m[3]}`
+        : m[3];
   }
+  if (+day < 1 || +day > 31 || +month < 1 || +month > 12) return null;
+  return { day, month, year };
+}
+
+function dateKey(parts: { day: string; month: string; year: string } | null): string {
+  if (!parts) return "";
+  return `${parts.year}-${parts.month}-${parts.day}`;
+}
+
+function dateNeedles(raw: string): string[] {
+  const parts = parseDateParts(raw);
+  if (!parts) {
+    const compact = raw.replace(/\s+/g, "");
+    return compact.length >= 6 ? [compact] : [];
+  }
+  const { day, month, year } = parts;
+  const d = String(parseInt(day, 10));
+  const mo = String(parseInt(month, 10));
   const yy = year.slice(-2);
   return [
     `${day}/${month}/${year}`,
     `${day}.${month}.${year}`,
     `${day}-${month}-${year}`,
+    `${d}/${mo}/${year}`,
+    `${d}.${mo}.${year}`,
+    `${d}-${mo}-${year}`,
     `${day}/${month}/${yy}`,
     `${day}.${month}.${yy}`,
     `${day}-${month}-${yy}`,
+    `${d}/${mo}/${yy}`,
+    `${d}.${mo}.${yy}`,
     `${year}${month}${day}`,
     `${day}${month}${year}`,
     `${year}-${month}-${day}`,
+    `${yy}${month}${day}`,
+    `${day}${month}${yy}`,
   ];
+}
+
+function findDateInQr(qr: string, fieldValue: string): QrHighlight[] | null {
+  const target = parseDateParts(fieldValue);
+  if (!target) return null;
+  const targetKey = dateKey(target);
+  const patterns = [
+    /\d{1,2}\s*[./\-]\s*\d{1,2}\s*[./\-]\s*\d{2,4}/g,
+    /\d{4}\s*[./\-]\s*\d{1,2}\s*[./\-]\s*\d{1,2}/g,
+    /\d{8}/g,
+    /\d{6}/g,
+  ];
+  const hits: Array<QrHighlight & { len: number }> = [];
+  for (const re of patterns) {
+    re.lastIndex = 0;
+    let m: RegExpExecArray | null;
+    while ((m = re.exec(qr)) !== null) {
+      const parts = parseDateParts(m[0]);
+      if (!parts || dateKey(parts) !== targetKey) continue;
+      hits.push({
+        start: m.index,
+        end: m.index + m[0].length,
+        len: m[0].length,
+      });
+    }
+  }
+  if (!hits.length) return null;
+  hits.sort((a, b) => b.len - a.len || a.start - b.start);
+  return [{ start: hits[0].start, end: hits[0].end }];
+}
+
+/** Collect unique normalized DD/MM/YYYY dates found in a QR payload. */
+export function extractDatesFromQr(
+  qrPayload: string | null | undefined
+): string[] {
+  const qr = (qrPayload || "").trim();
+  if (!qr) return [];
+  const patterns = [
+    /\d{1,2}\s*[./\-]\s*\d{1,2}\s*[./\-]\s*\d{2,4}/g,
+    /\d{4}\s*[./\-]\s*\d{1,2}\s*[./\-]\s*\d{1,2}/g,
+    /\d{8}/g,
+  ];
+  const out: string[] = [];
+  const seen = new Set<string>();
+  for (const re of patterns) {
+    re.lastIndex = 0;
+    let m: RegExpExecArray | null;
+    while ((m = re.exec(qr)) !== null) {
+      const parts = parseDateParts(m[0]);
+      if (!parts) continue;
+      const key = dateKey(parts);
+      if (seen.has(key)) continue;
+      seen.add(key);
+      out.push(`${parts.day}/${parts.month}/${parts.year}`);
+    }
+  }
+  return out;
+}
+
+/**
+ * When OCR misses 4b, pick expiry from QR dates:
+ * exclude DOB / issue, prefer a date on or after the issue date.
+ */
+export function findExpiryDateFromQr(
+  qrPayload: string | null | undefined,
+  dateOfBirth?: string | null,
+  issueDate?: string | null
+): string | null {
+  const dates = extractDatesFromQr(qrPayload);
+  if (!dates.length) return null;
+
+  const dobKey = dateKey(parseDateParts(dateOfBirth || ""));
+  const issueKey = dateKey(parseDateParts(issueDate || ""));
+  const candidates = dates.filter((d) => {
+    const k = dateKey(parseDateParts(d));
+    if (!k) return false;
+    if (dobKey && k === dobKey) return false;
+    if (issueKey && k === issueKey) return false;
+    return true;
+  });
+
+  if (!candidates.length) return null;
+  if (candidates.length === 1) return candidates[0];
+
+  const sorted = [...candidates].sort((a, b) =>
+    dateKey(parseDateParts(a)).localeCompare(dateKey(parseDateParts(b)))
+  );
+  if (issueKey) {
+    const afterIssue = sorted.filter(
+      (d) => dateKey(parseDateParts(d)) >= issueKey
+    );
+    if (afterIssue.length) return afterIssue[afterIssue.length - 1];
+  }
+  return sorted[sorted.length - 1];
 }
 
 function findInsensitive(
@@ -233,6 +385,18 @@ export function findFieldInQr(
     }
     hits.sort((a, b) => a.start - b.start);
     return hits;
+  }
+
+  // Dates (DOB / expiry): normalize so QR "3.5.2030" matches "03/05/2030"
+  if (fieldKey === "dateOfBirth" || fieldKey === "expiryDate") {
+    const dateHits = findDateInQr(qr, fieldValue);
+    if (dateHits) return dateHits;
+    const orderedDates = [...needles].sort((a, b) => b.length - a.length);
+    for (const needle of orderedDates) {
+      const hit = findInsensitive(qr, needle, false);
+      if (hit) return [hit];
+    }
+    return null;
   }
 
   const wholeWord = fieldKey === "licenseNumber";

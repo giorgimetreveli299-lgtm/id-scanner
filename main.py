@@ -9,7 +9,14 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import HTMLResponse, JSONResponse, Response
 
 # ID path — only id_verifier
-from id_verifier import extract_id_info, extract_mrz_ids, extract_mrz_strip, ocr_image
+from id_verifier import (
+    _get_vision_client,
+    extract_id_info,
+    extract_mrz_ids,
+    extract_mrz_strip,
+    ocr_image,
+)
+from google.cloud import vision
 
 # Passport path — only passport_verifier (does not change ID logic)
 from passport_verifier import (
@@ -95,8 +102,9 @@ async def serve_index():
 
 
 def _detect_doc_type(full_text: str) -> dict:
-    """Classify Georgian ID vs passport from OCR text."""
-    blob = (full_text or "").upper().replace(" ", "")
+    """Classify Georgian ID / passport / driver license from OCR text."""
+    text = full_text or ""
+    blob = text.upper().replace(" ", "")
     # Legacy Georgian passports use P<GEO; the new document code is PP and its
     # MRZ starts PPGEO. Keep both as explicit, strong passport signals.
     raw_passport_prefix = bool(
@@ -132,34 +140,71 @@ def _detect_doc_type(full_text: str) -> dict:
 
     id_label = bool(
         re.search(
-            r"პირადობ|მოწმობ|IDGEO|TRGEO|ID\s*CARD|IDENTITY\s*CARD|"
+            r"პირადობ|IDGEO|TRGEO|ID\s*CARD|IDENTITY\s*CARD|"
             r"ბარათის\s*№|CARD\s*NO|PERSONAL\s*N",
-            full_text or "",
+            text,
             re.I,
         )
     ) or ("IDGE" in blob or "TRGE" in blob)
+    # Avoid matching driving-licence "მოწმობა" as an ID cue
+    if re.search(r"პირადობის\s*მოწმობ", text, re.I):
+        id_label = True
 
     passport_label = bool(
         re.search(
             r"პასპორტის?\s|PASSPORT|REMARKS|შენიშვნებ|"
             r"TYPE\s*/?\s*P\b|DOCUMENT\s*TYPE\s*P\b",
-            full_text or "",
+            text,
             re.I,
         )
     )
 
-    # Explicit P<GEO / PPGEO wins; TD1 still wins over weak passport cues.
+    license_label = bool(
+        re.search(
+            r"მართვის\s*მოწმობა|driving\s*licen[cs]e|driver'?s?\s*licen[cs]e",
+            text,
+            re.I,
+        )
+    )
+    # Typical GEO license field markers (1…9) + categories / residence
+    license_fields = bool(
+        re.search(r"(?:^|\n)\s*1[\.\)]", text)
+        and (
+            re.search(r"(?:^|\n)\s*5[\.\)]", text)
+            or re.search(r"(?:^|\n)\s*8[\.\)]", text)
+            or re.search(r"(?:^|\n)\s*9[\.\)]", text)
+        )
+        and re.search(
+            r"კატეგორი|categor(?:y|ies)|საცხოვრებელი|place\s*of\s*residence|"
+            r"4a|4b|4c",
+            text,
+            re.I,
+        )
+    )
+    license_number = bool(re.search(r"\b[A-Z]{2}\d{7}\b", blob))
+    looks_license = bool(
+        license_label
+        or (license_fields and not has_mrz and not strong_passport)
+        or (license_number and license_label)
+    )
+
+    # Explicit P<GEO / PPGEO wins; TD1 still wins over weak passport cues;
+    # license labels win over weak ID/passport labels when no MRZ is present.
     doc_type = "unknown"
     if strong_passport:
         doc_type = "passport"
     elif has_mrz:
         doc_type = "id"
+    elif looks_license and not (has_td3 and raw_passport_prefix):
+        doc_type = "license"
     elif has_td3:
         doc_type = "passport"
-    elif passport_label and not id_label:
+    elif passport_label and not id_label and not license_label:
         doc_type = "passport"
-    elif id_label and not passport_label:
+    elif id_label and not passport_label and not license_label:
         doc_type = "id"
+    elif looks_license:
+        doc_type = "license"
 
     return {
         "has_mrz": has_mrz,
@@ -179,7 +224,7 @@ async def verify_id(
     try:
         front_bytes = await front.read()
         back_bytes = await back.read()
-        # Reject passport MRZ (starts with P / P</PPGEO) uploaded in ID mode
+        # Reject passport / driver license uploaded in ID mode
         for label, raw in (("front", front_bytes), ("back", back_bytes)):
             text, _lines, _words = ocr_image(raw)
             hint = _detect_doc_type(text)
@@ -198,12 +243,13 @@ async def verify_id(
                 passport_first.startswith("P")
                 or re.search(r"(?:^|[^A-Z0-9])P(?:<|P)?GE[O0]", blob)
             )
-            if not hint["has_mrz"] and (
-                mrz_starts_with_p or hint["doc_type"] == "passport"
-            ):
+            wrong = hint.get("doc_type") in ("passport", "license") or (
+                not hint["has_mrz"] and mrz_starts_with_p
+            )
+            if wrong:
                 return {
-                    "error": "Please upload an ID card, not a passport",
-                    "error_code": "passport_mrz_in_id",
+                    "error": "Please upload ID card",
+                    "error_code": "wrong_document_for_id",
                     "extracted_data": {},
                     "is_valid": False,
                 }
@@ -241,23 +287,16 @@ async def verify_passport(image: UploadFile = File(...)):
         image_bytes = await image.read()
         text, _lines, _words = ocr_image(image_bytes)
         hint = _detect_doc_type(text)
-        # Explicit rule requested for passport verification: an MRZ whose first
-        # two characters are ID belongs to an identity card, not a passport.
+        # Explicit rule: MRZ starting with ID belongs to an identity card.
         id_mrz = (hint.get("mrz_strip") or extract_mrz_strip(text) or "")
         id_mrz_first_line = id_mrz.splitlines()[0].replace(" ", "").upper() if id_mrz else ""
-        if id_mrz_first_line.startswith("ID"):
+        if (
+            id_mrz_first_line.startswith("ID")
+            or hint["doc_type"] in ("id", "license")
+        ):
             return {
-                "error": "Please upload a passport, not an ID card",
-                "error_code": "id_mrz_in_passport",
-                "extracted_data": {},
-                "is_valid": False,
-            }
-        # doc_type "id" means a TD1 / ID label won classification — reject even
-        # if a stray TD3-like cue set has_td3 (ID MRZ is definitive).
-        if hint["doc_type"] == "id":
-            return {
-                "error": "Please upload a passport, not an ID card",
-                "error_code": "id_mrz_in_passport",
+                "error": "Please upload passport",
+                "error_code": "wrong_document_for_passport",
                 "extracted_data": {},
                 "is_valid": False,
             }
@@ -289,6 +328,19 @@ async def verify_license(
     try:
         front_bytes = await front.read()
         back_bytes = await back.read()
+        for raw in (front_bytes, back_bytes):
+            text, _lines, _words = ocr_image(raw)
+            hint = _detect_doc_type(text)
+            if hint.get("doc_type") in ("id", "passport"):
+                return _license_json_response(
+                    {
+                        "error": "Please upload driver license",
+                        "error_code": "wrong_document_for_license",
+                        "extracted_data": {},
+                        "display": {},
+                        "is_valid": False,
+                    }
+                )
         result = extract_license_info(front_bytes, back_bytes)
         if not result.get("ok"):
             print("License OCR failed:", ascii(result.get("error") or ""))
@@ -324,6 +376,79 @@ async def verify_license(
         )
 
 
+ID_FRONT_SIDE_ERROR = "Please upload front side of ID card"
+ID_BACK_SIDE_ERROR = "Please upload back side of ID card"
+
+
+def _image_has_face(image_bytes: bytes, min_confidence: float = 0.35) -> bool:
+    """True when Vision detects a person face (typical of ID front photo)."""
+    try:
+        client = _get_vision_client()
+        image = vision.Image(content=image_bytes)
+        response = client.face_detection(image=image)
+        if response.error.message:
+            return False
+        for face in response.face_annotations or []:
+            conf = float(getattr(face, "detection_confidence", 0) or 0)
+            if conf >= min_confidence:
+                return True
+    except Exception as e:
+        print("face detection error:", ascii(str(e)))
+    return False
+
+
+def validate_id_side(image_bytes: bytes, side: str) -> dict:
+    """
+    Capture/upload helper for ID card:
+    - front: reject when TD1 MRZ is present (back side photo)
+    - back: reject when a person face is present (front side photo)
+    """
+    side_norm = (side or "").strip().lower()
+    if side_norm not in ("front", "back"):
+        return {"ok": False, "error": "side must be front or back", "side": side_norm}
+
+    if side_norm == "front":
+        full_text, _lines, _words = ocr_image(image_bytes)
+        hint = _detect_doc_type(full_text)
+        if hint.get("has_mrz"):
+            return {
+                "ok": False,
+                "error": ID_FRONT_SIDE_ERROR,
+                "side": side_norm,
+                "has_mrz": True,
+            }
+        return {"ok": True, "side": side_norm, "has_mrz": False}
+
+    has_face = _image_has_face(image_bytes)
+    if has_face:
+        return {
+            "ok": False,
+            "error": ID_BACK_SIDE_ERROR,
+            "side": side_norm,
+            "has_face": True,
+        }
+    return {"ok": True, "side": side_norm, "has_face": False}
+
+
+@app.post("/check-id-side")
+async def check_id_side(
+    image: UploadFile = File(...),
+    side: str = Form(...),
+):
+    """
+    Capture/upload helper for ID card:
+    - front: reject when MRZ strip is detected
+    - back: reject when a person face/head is detected
+    """
+    try:
+        image_bytes = await image.read()
+        return validate_id_side(image_bytes, side)
+    except Exception as e:
+        print("check-id-side error:", ascii(str(e)))
+        traceback.print_exc()
+        return {"ok": False, "error": str(e), "side": (side or "").strip().lower()}
+
+
 @app.post("/check-license-side")
 async def check_license_side(
     image: UploadFile = File(...),
@@ -347,9 +472,9 @@ async def check_license_side(
 async def check_mrz(image: UploadFile = File(...)):
     """
     Capture helper:
-    - ID front/back: has_mrz = TD1 (IDGEO… or TRGEO…)
+    - ID: has_mrz = TD1 (IDGEO… or TRGEO…)
     - Passport: has_td3 = TD3 (P<…)
-    - doc_type: "id" | "passport" | "unknown"
+    - doc_type: "id" | "passport" | "license" | "unknown"
     """
     try:
         image_bytes = await image.read()

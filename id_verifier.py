@@ -619,8 +619,10 @@ def extract_mrz_strip(text: str) -> str:
             line1 = _fix_mrz_line(chunk, 30)
 
     # --- Line 2: birth + sex + expiry + nationality (GEO, BLR, …) ---
+    # Check digits after birth/expiry are optional — OCR often drops one and
+    # shifts nationality (…301023GEO… instead of …3010237GEO…).
     line2_re = re.compile(
-        r"(\d{6})(\d)([MF<])(\d{6})(\d)([A-Z]{3})([A-Z0-9<]{0,12})"
+        r"(\d{6})(\d?)([MF<])(\d{6})(\d?)([A-Z]{3})([A-Z0-9<]{0,12})"
     )
     for src in lines + [blob]:
         m = line2_re.search(src)
@@ -628,8 +630,13 @@ def extract_mrz_strip(text: str) -> str:
             nat = m.group(6).replace("0", "O")
             if nat == "GFO":
                 nat = "GEO"
+            birth_chk = m.group(2) or "0"
+            expiry_chk = m.group(5) or "0"
             fillers = re.sub(r"[^A-Z0-9<]", "", m.group(7))
-            body = f"{m.group(1)}{m.group(2)}{m.group(3)}{m.group(4)}{m.group(5)}{nat}{fillers}"
+            body = (
+                f"{m.group(1)}{birth_chk}{m.group(3)}{m.group(4)}"
+                f"{expiry_chk}{nat}{fillers}"
+            )
             line2 = _fix_mrz_line(body, 30)
             break
 

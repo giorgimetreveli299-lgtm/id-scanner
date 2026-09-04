@@ -13,6 +13,7 @@ import {
 } from "./parseLicense";
 import { detectQrOnLicenseBack, qrIsOnLicenseBackLeft } from "./detectQr";
 import { formatBilingualPlace, applyQrLatinToName, applyQrLatinToResidence, extractLatinIdentityFromQr } from "./georgianTranslit";
+import { findExpiryDateFromQr } from "./qrCheck";
 import {
   BACK_SIDE_REQUIRED_ERROR,
   FRONT_SIDE_REQUIRED_ERROR,
@@ -978,13 +979,21 @@ export async function scanLicenseSides(
     combinedFields.dateOfBirth ||
     backFields.dateOfBirth;
 
-  // 4a = issue, 4b = expiry — always; prefer front OCR
+  // 4a = issue, 4b = expiry — always; prefer front OCR, then QR fallback for 4b
   const issueDate =
     frontFields.issueDate || combinedFields.issueDate || backFields.issueDate;
-  const expiryDate =
+  let expiryDate =
     frontFields.expiryDate ||
     combinedFields.expiryDate ||
     backFields.expiryDate;
+  if (
+    !expiryDate ||
+    expiryDate === dateOfBirth ||
+    expiryDate === issueDate
+  ) {
+    const fromQr = findExpiryDateFromQr(qr.value, dateOfBirth, issueDate);
+    if (fromQr) expiryDate = fromQr;
+  }
 
   const photoFallback: FaceBox = {
     left: 0.66,
