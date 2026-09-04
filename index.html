@@ -513,9 +513,12 @@
       cursor: not-allowed;
     }
 
-    /* License image zoom */
+    /* Document image zoom (license, ID, passport) */
     #license-view .slot-box img.license-zoomable,
-    #license-view .license-image-slot img.license-zoomable {
+    #license-view .license-image-slot img.license-zoomable,
+    #scanner-view .slot-box img.license-zoomable,
+    #passport-view .slot-box img.license-zoomable,
+    #results-card .pdf-photos img.license-zoomable {
       cursor: zoom-in;
     }
     #license-view .slot-box img {
@@ -694,9 +697,9 @@
       transform: translate(-50%, -50%);
       width: 82%;
       height: 78%;
-      border: 3px dashed var(--warn);
+      border: 3px solid var(--ok);
       border-radius: 10px;
-      box-shadow: 0 0 0 9999px rgba(0, 0, 0, 0.55);
+      box-shadow: 0 0 18px rgba(31, 138, 76, 0.45), 0 0 0 9999px rgba(0, 0, 0, 0.55);
       pointer-events: none;
       box-sizing: border-box;
       transition: border-color 0.3s, box-shadow 0.3s;
@@ -706,6 +709,7 @@
       box-shadow: 0 0 18px rgba(31, 138, 76, 0.55), 0 0 0 9999px rgba(0, 0, 0, 0.55);
     }
     .status-badge {
+      display: none;
       margin-top: 14px;
       padding: 8px 18px;
       border-radius: 20px;
@@ -714,6 +718,9 @@
       background: var(--warn);
       color: #1a1500;
       transition: background 0.3s, color 0.3s;
+    }
+    .status-badge.is-visible {
+      display: inline-block;
     }
     .status-badge.status-ready {
       background: var(--ok);
@@ -742,6 +749,8 @@
     .btn-capture:disabled { opacity: 0.55; }
     .btn-upload { background: var(--lilac-deep); font-size: 16px; }
     .btn-upload:hover { background: #6d28d9; }
+    /* File Upload is local-test only — hidden on the live site */
+    body:not(.allow-file-upload) .btn-upload { display: none !important; }
     .btn-close { background: var(--danger); font-size: 16px; }
     .btn-close:hover { background: #9b2c22; }
     .slot-actions {
@@ -1130,7 +1139,7 @@
               <button type="button" class="btn" id="btn-front" onclick="openCamera('front')">Capture</button>
               <button type="button" class="btn btn-upload" id="btn-front-upload" onclick="triggerUpload('front')">Upload</button>
             </div>
-            <img id="img-front" alt="Front side">
+            <img id="img-front" class="license-zoomable" alt="Front side">
           </div>
           <div class="slot-box" id="slot-back">
             <h4>2. Back side</h4>
@@ -1138,7 +1147,7 @@
               <button type="button" class="btn" id="btn-back" onclick="openCamera('back')" disabled>Capture</button>
               <button type="button" class="btn btn-upload" id="btn-back-upload" onclick="triggerUpload('back')" disabled>Upload</button>
             </div>
-            <img id="img-back" alt="Back side">
+            <img id="img-back" class="license-zoomable" alt="Back side">
           </div>
         </div>
       </div>
@@ -1165,7 +1174,7 @@
               <button type="button" class="btn" id="btn-passport" onclick="openCamera('passport')">Capture</button>
               <button type="button" class="btn btn-upload" id="btn-passport-upload" onclick="triggerUpload('passport')">Upload</button>
             </div>
-            <img id="img-passport" alt="Passport">
+            <img id="img-passport" class="license-zoomable" alt="Passport">
           </div>
         </div>
       </div>
@@ -1176,7 +1185,7 @@
         <button type="button" class="view-back" onclick="licenseBackToChoice()">← Back</button>
         <h2>Driver License</h2>
         <p class="step-hint" id="license-step-hint">
-          Capture or upload the front side first.
+          Capture the front side first.
         </p>
         <div class="photo-slots">
           <div class="slot-box" id="slot-license-front">
@@ -1367,11 +1376,11 @@
         <div class="pdf-photos" id="pdf-photos">
           <figure id="pdf-figure-front">
             <figcaption id="pdf-caption-front">Front side</figcaption>
-            <img id="pdf-img-front" alt="Front">
+            <img id="pdf-img-front" class="license-zoomable" alt="Front">
           </figure>
           <figure id="pdf-figure-back">
             <figcaption>Back side</figcaption>
-            <img id="pdf-img-back" alt="Back">
+            <img id="pdf-img-back" class="license-zoomable" alt="Back">
           </figure>
         </div>
         <div class="portrait-slot" id="portrait-slot">
@@ -1499,7 +1508,7 @@
       <video id="video" autoplay playsinline webkit-playsinline muted></video>
       <div id="id-frame" class="id-frame"></div>
     </div>
-    <div id="readiness-status" class="status-badge">Place the document in the frame…</div>
+    <div id="readiness-status" class="status-badge" aria-live="polite"></div>
     <div class="camera-actions">
       <button id="capture-btn" type="button" class="btn btn-capture" onclick="capturePhoto()">Capture</button>
       <button type="button" class="btn btn-upload" onclick="triggerUpload(activeSlot)">Upload</button>
@@ -1555,6 +1564,14 @@
     let capturingNow = false;
     let selectedMethod = null;
 
+    /** Upload buttons: localhost only. Live / LAN deploys are camera-only. */
+    function isLocalTestHost() {
+      const host = (window.location.hostname || "").toLowerCase();
+      return host === "localhost" || host === "127.0.0.1" || host === "[::1]" || host === "::1";
+    }
+    const ALLOW_FILE_UPLOAD = isLocalTestHost();
+    if (ALLOW_FILE_UPLOAD) document.body.classList.add("allow-file-upload");
+
     function isLicenseSlot(slot) {
       return slot === "license-front" || slot === "license-back";
     }
@@ -1594,9 +1611,13 @@
       const hint = document.getElementById("license-step-hint");
       if (!hint) return;
       if (!licenseFrontDataUrl) {
-        hint.textContent = "Capture or upload the front side first.";
+        hint.textContent = ALLOW_FILE_UPLOAD
+          ? "Capture or upload the front side first."
+          : "Capture the front side first.";
       } else if (!licenseBackDataUrl) {
-        hint.textContent = "Now capture or upload the back side.";
+        hint.textContent = ALLOW_FILE_UPLOAD
+          ? "Now capture or upload the back side."
+          : "Now capture the back side.";
       } else {
         hint.textContent = "Both sides are ready.";
       }
@@ -2305,8 +2326,8 @@
       const cap = document.getElementById("license-zoom-caption");
       if (!modal || !img) return;
       img.src = src;
-      img.alt = caption || "License photo";
-      if (cap) cap.textContent = caption || "License photo";
+      img.alt = caption || "Photo";
+      if (cap) cap.textContent = caption || "Photo";
       resetLicenseZoomView();
       modal.classList.add("open");
       document.body.style.overflow = "hidden";
@@ -2325,24 +2346,24 @@
     function initLicenseImageZoom() {
       const modal = document.getElementById("license-zoom-modal");
       const stage = document.getElementById("license-zoom-stage");
-      const licenseView = document.getElementById("license-view");
-      if (!modal || !stage || !licenseView) return;
+      if (!modal || !stage) return;
 
-      licenseView.addEventListener("click", (e) => {
-        const slot = e.target.closest(".license-image-slot.has-image");
+      document.addEventListener("click", (e) => {
+        const licenseSlot = e.target.closest("#license-view .license-image-slot.has-image");
         const img = e.target.closest("img.license-zoomable");
-        if (slot && !img) {
-          const inner = slot.querySelector("img.license-zoomable");
-          if (inner?.src) {
+        if (licenseSlot && !img) {
+          const inner = licenseSlot.querySelector("img.license-zoomable");
+          if (inner?.getAttribute("src")) {
             openLicenseImageZoom(inner.src, inner.alt || "Extracted photo");
           }
           return;
         }
-        if (img?.src && img.style.display !== "none") {
-          const captureSlot = img.closest(".slot-box");
-          if (captureSlot && !captureSlot.classList.contains("done")) return;
-          openLicenseImageZoom(img.src, img.alt || "License photo");
-        }
+        if (!img || img.style.display === "none") return;
+        const srcAttr = img.getAttribute("src") || "";
+        if (!srcAttr) return;
+        const captureSlot = img.closest(".slot-box");
+        if (captureSlot && !captureSlot.classList.contains("done")) return;
+        openLicenseImageZoom(img.currentSrc || img.src, img.alt || "Photo");
       });
 
       document.getElementById("license-zoom-close")?.addEventListener("click", closeLicenseImageZoom);
@@ -2830,6 +2851,45 @@
       };
     }
 
+    /**
+     * Capture region for Crop+Straighten: guide frame + margin (like an upload
+     * photo on a desk). Tight frame-only crops starve edge detection.
+     */
+    function getCaptureProcessRect(mapped, padRatio = 0.22) {
+      const v = mapped.visible;
+      const f = mapped.frame;
+      const padX = f.w * padRatio;
+      const padY = f.h * padRatio;
+      let x = f.x - padX;
+      let y = f.y - padY;
+      let w = f.w + 2 * padX;
+      let h = f.h + 2 * padY;
+      const x2 = Math.min(v.x + v.w, x + w);
+      const y2 = Math.min(v.y + v.h, y + h);
+      x = Math.max(v.x, x);
+      y = Math.max(v.y, y);
+      return { x, y, w: Math.max(2, x2 - x), h: Math.max(2, y2 - y) };
+    }
+
+    /** Shared Crop+Straighten pipeline for Upload and Capture. */
+    async function processSlotForGenerate(slot, bitmap) {
+      let stages = null;
+      let final;
+      if (isLicenseSlot(slot)) {
+        stages = await processLicenseForGenerate(bitmap);
+        final = stages.final;
+      } else if (slot === "passport") {
+        // Results photo: biodata only (REMARKS cut). Original stays in top slot.
+        final = await processPassportImage(bitmap);
+      } else {
+        stages = await processDocumentForGenerate(bitmap, 85.6 / 54, {
+          protectMrz: slot === "back",
+        });
+        final = stages.final;
+      }
+      return { stages, final };
+    }
+
     async function openCameraStream() {
       if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
         throw new Error("getUserMedia unsupported");
@@ -2861,15 +2921,20 @@
     function updateStepHint() {
       const hint = document.getElementById("step-hint");
       if (!frontDataUrl) {
-        hint.textContent = "Capture or upload the front side first.";
+        hint.textContent = ALLOW_FILE_UPLOAD
+          ? "Capture or upload the front side first."
+          : "Capture the front side first.";
       } else if (!backDataUrl) {
-        hint.textContent = "Now capture or upload the back side (MRZ strip).";
+        hint.textContent = ALLOW_FILE_UPLOAD
+          ? "Now capture or upload the back side (MRZ strip)."
+          : "Now capture the back side (MRZ strip).";
       } else {
         hint.textContent = "Both sides are ready. Review the data and download the PDF.";
       }
     }
 
     function triggerUpload(slot) {
+      if (!ALLOW_FILE_UPLOAD) return;
       if (!slot) return;
       if (slot === "passport") clearPassportUploadError();
       if (slot === "front" || slot === "back") clearIdUploadError();
@@ -2907,18 +2972,9 @@
         let final = { blob: originalBlob, dataUrl: originalUrl };
         const bitmap = await toDrawableBitmap(file);
         try {
-          if (isLicenseSlot(activeSlot)) {
-            stages = await processLicenseForGenerate(bitmap);
-            final = stages.final;
-          } else if (activeSlot === "passport") {
-            // Results photo: biodata only (REMARKS cut). Original stays in top slot.
-            final = await processPassportImage(bitmap);
-          } else {
-            stages = await processDocumentForGenerate(bitmap, 85.6 / 54, {
-              protectMrz: activeSlot === "back",
-            });
-            final = stages.final;
-          }
+          const processed = await processSlotForGenerate(activeSlot, bitmap);
+          stages = processed.stages;
+          final = processed.final;
         } catch (procErr) {
           console.warn("Processing failed, using original upload:", procErr);
           final = { blob: originalBlob, dataUrl: originalUrl };
@@ -4879,16 +4935,19 @@
         cameraModal.classList.add("open");
         idFrame.classList.remove("ready");
         readinessStatus.className = "status-badge";
-        readinessStatus.textContent = "Place the document in the frame… or upload a photo";
+        readinessStatus.textContent = "";
         const captureBtn = document.getElementById("capture-btn");
-        if (captureBtn) captureBtn.disabled = true;
+        // No quality / MRZ gate — capture whenever the user wants
+        if (captureBtn) captureBtn.disabled = false;
         readyStreak = 0;
-        if (checkInterval) clearInterval(checkInterval);
-        checkInterval = setInterval(checkClarity, 250);
+        if (checkInterval) {
+          clearInterval(checkInterval);
+          checkInterval = null;
+        }
       } catch (err) {
         console.error(err);
         cameraModal.classList.add("open");
-        readinessStatus.className = "status-badge";
+        readinessStatus.className = "status-badge is-visible";
         readinessStatus.textContent = "Camera unavailable — use Upload";
         const captureBtn = document.getElementById("capture-btn");
         if (captureBtn) captureBtn.disabled = true;
@@ -5180,31 +5239,10 @@
     }
 
     async function validateCapturedSide(slot, blob) {
-      if (isLicenseSlot(slot)) {
-        const side = slot === "license-back" ? "back" : "front";
-        try {
-          const data = await fetchLicenseSideCheck(blob, side);
-          if (data && data.ok) {
-            clearLicenseSideError();
-            return true;
-          }
-          const msg =
-            side === "front"
-              ? LICENSE_FRONT_SIDE_ERROR
-              : LICENSE_BACK_SIDE_ERROR;
-          showLicenseSideError(msg);
-          if (cameraModal.classList.contains("open")) {
-            readinessStatus.textContent = msg;
-            readinessStatus.className = "status-badge";
-          }
-          inlineDocErrorShown = true;
-          return false;
-        } catch (e) {
-          console.warn("License side check skipped:", e);
-          return true;
-        }
-      }
-      // If backend is down, do not block the user.
+      // License / unrestricted quality gates stay off — only block wrong doc type.
+      if (isLicenseSlot(slot)) return true;
+      if (slot !== "front" && slot !== "back" && slot !== "passport") return true;
+
       try {
         const data = await fetchMrzCheck(blob);
         const hasMrz = Boolean(data && data.has_mrz);
@@ -5230,62 +5268,32 @@
           .split(/\r?\n/, 1)[0]
           .replace(/\s+/g, "")
           .toUpperCase();
-        // Passport TD3 rows start with P (P<GEO / PPGEO / PGEO…). A confirmed
-        // TD1 strip always wins, so an ID back is never read as a passport.
+        // Passport TD3 rows start with P. TD1 (ID) strip wins over passport guess.
         const mrzStartsWithP =
           !hasMrz &&
           (/^P/.test(passportMrzFirst) ||
             /^P(?:<|P)?GE[O0]/.test(stripHint.replace(/\s+/g, "").toUpperCase()));
-        // Strong signals only — never block ID back (TD1) as a passport
         const looksPassport =
           (docType === "passport" && !hasMrz) || (hasTd3 && !hasMrz);
 
-        // Wrong document for the selected method — hard reject
         if ((slot === "front" || slot === "back") && (mrzStartsWithP || looksPassport)) {
           readinessStatus.textContent = ID_PASSPORT_ERROR;
-          readinessStatus.className = "status-badge";
-          idFrame.classList.remove("ready");
+          readinessStatus.className = "status-badge is-visible";
           showIdUploadError(ID_PASSPORT_ERROR);
           return false;
         }
         if (slot === "passport" && (idMrzStartsWithId || docType === "id")) {
           readinessStatus.textContent = PASSPORT_ID_ERROR;
-          readinessStatus.className = "status-badge";
-          idFrame.classList.remove("ready");
+          readinessStatus.className = "status-badge is-visible";
           showPassportUploadError(PASSPORT_ID_ERROR);
           return false;
         }
 
         if (slot === "passport") clearPassportUploadError();
         if (slot === "front" || slot === "back") clearIdUploadError();
-
-        if (slot === "front" && hasMrz) {
-          readinessStatus.textContent = ID_FRONT_SIDE_ERROR;
-          readinessStatus.className = "status-badge";
-          idFrame.classList.remove("ready");
-          showIdUploadError(ID_FRONT_SIDE_ERROR);
-          return false;
-        }
-
-        if (slot === "back" && !hasMrz) {
-          readinessStatus.textContent = ID_BACK_SIDE_ERROR;
-          readinessStatus.className = "status-badge";
-          idFrame.classList.remove("ready");
-          showIdUploadError(ID_BACK_SIDE_ERROR);
-          return false;
-        }
-
-        // Passport: soft-warn if TD3 MRZ missing (after wrong-doc check above)
-        if (slot === "passport" && !hasTd3) {
-          readinessStatus.textContent =
-            "Note: MRZ looks weak — continuing anyway. For better results, keep the full page in the frame.";
-          readinessStatus.className = "status-badge";
-        }
-
         return true;
       } catch (e) {
-        console.warn("MRZ check skipped:", e);
-        // fallback: do not block.
+        console.warn("Wrong-document check skipped:", e);
         return true;
       }
     }
@@ -5300,24 +5308,26 @@
       const mapped = getVisibleVideoRect(video, vc);
       if (!mapped || !video.videoWidth) {
         readinessStatus.textContent = "Camera not ready — wait a moment and try again";
-        readinessStatus.className = "status-badge";
+        readinessStatus.className = "status-badge is-visible";
         return;
       }
 
       capturingNow = true;
       if (captureBtn) captureBtn.disabled = true;
       readinessStatus.textContent = "Capturing…";
-      readinessStatus.className = "status-badge status-ready";
+      readinessStatus.className = "status-badge is-visible status-ready";
 
-      const cropW = Math.max(2, Math.round(mapped.frame.w));
-      const cropH = Math.max(2, Math.round(mapped.frame.h));
+      // Same input style as Upload: card + surrounding margin for edge detect
+      const src = getCaptureProcessRect(mapped);
+      const cropW = Math.max(2, Math.round(src.w));
+      const cropH = Math.max(2, Math.round(src.h));
       const cropCanvas = document.createElement("canvas");
       cropCanvas.width = cropW;
       cropCanvas.height = cropH;
       const cropCtx = cropCanvas.getContext("2d");
       cropCtx.drawImage(
         video,
-        mapped.frame.x, mapped.frame.y, mapped.frame.w, mapped.frame.h,
+        src.x, src.y, src.w, src.h,
         0, 0, cropW, cropH
       );
 
@@ -5328,22 +5338,14 @@
         let final = { blob: originalBlob, dataUrl: originalDataUrl };
 
         readinessStatus.textContent = "Processing photo…";
+        readinessStatus.className = "status-badge is-visible status-ready";
         let bitmap = null;
         try {
           bitmap = await toDrawableBitmap(cropCanvas);
-          if (slot === "passport") {
-            // Results photo: biodata only (REMARKS cut). Original stays in top slot.
-            final = await processPassportImage(bitmap);
-          } else if (isLicenseSlot(slot)) {
-            stages = await processLicenseForGenerate(bitmap);
-            final = stages.final;
-          } else {
-            // Front: full-bleed ID-1. Back: same, but protect MRZ bottom strip.
-            stages = await processFrameCaptureForGenerate(bitmap, {
-              protectMrz: slot === "back",
-            });
-            final = stages.final;
-          }
+          // Identical Crop + Straighten path as Upload
+          const processed = await processSlotForGenerate(slot, bitmap);
+          stages = processed.stages;
+          final = processed.final;
         } catch (procErr) {
           console.warn("Processing failed, using original frame:", procErr);
           final = { blob: originalBlob, dataUrl: originalDataUrl };
@@ -5359,7 +5361,6 @@
           }
         }
 
-        // Passport: validate on the same image OCR will use
         const validateBlob =
           slot === "passport"
             ? (final.cropped ? final.blob : originalBlob)
@@ -5367,7 +5368,6 @@
         const ok = await validateCapturedSide(slot, validateBlob);
         if (!ok) {
           capturingNow = false;
-          readyGraceUntil = Date.now() + 2500;
           if (captureBtn) captureBtn.disabled = false;
           return;
         }
@@ -5386,7 +5386,7 @@
         console.error(err);
         readinessStatus.textContent =
           "Capture failed on this device — try Upload, or retake.";
-        readinessStatus.className = "status-badge";
+        readinessStatus.className = "status-badge is-visible";
         capturingNow = false;
         readyGraceUntil = Date.now() + 2500;
         if (captureBtn) captureBtn.disabled = false;
