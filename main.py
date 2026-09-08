@@ -14,6 +14,7 @@ from id_verifier import (
     extract_id_info,
     extract_mrz_ids,
     extract_mrz_strip,
+    image_has_face,
     ocr_image,
 )
 from google.cloud import vision
@@ -26,6 +27,7 @@ from passport_verifier import (
 )
 
 from license_verifier import extract_license_info, validate_license_side
+from tech_passport_verifier import extract_tech_passport_info, validate_tech_passport_side
 
 BASE_DIR = Path(__file__).resolve().parent
 
@@ -141,7 +143,7 @@ def _detect_doc_type(full_text: str) -> dict:
     id_label = bool(
         re.search(
             r"პირადობ|IDGEO|TRGEO|ID\s*CARD|IDENTITY\s*CARD|"
-            r"ბარათის\s*№|CARD\s*NO|PERSONAL\s*N",
+            r"ბარათის\s*№|CARD\s*NO\.?",
             text,
             re.I,
         )
@@ -376,25 +378,73 @@ async def verify_license(
         )
 
 
+@app.post("/verify-tech-passport")
+async def verify_tech_passport(
+    front: UploadFile = File(...),
+    back: UploadFile = File(...),
+):
+    """Tech passport (vehicle registration) — front + back → tech_passport_verifier."""
+    try:
+        front_bytes = await front.read()
+        back_bytes = await back.read()
+        # Persist last uploads for OCR debugging
+        try:
+            dump_dir = Path(__file__).resolve().parent / "debug_uploads"
+            dump_dir.mkdir(exist_ok=True)
+            (dump_dir / "tech_front.jpg").write_bytes(front_bytes)
+            (dump_dir / "tech_back.jpg").write_bytes(back_bytes)
+        except Exception:
+            pass
+        result = extract_tech_passport_info(front_bytes, back_bytes)
+        extracted = result.get("extracted_data") or {}
+        # Avoid Windows cp1252 console crashes on Georgian OCR text
+        try:
+            print(
+                "Tech passport OCR filled=",
+                result.get("filled_count"),
+                "keys=",
+                sorted(k for k, v in extracted.items() if str(v or "").strip()),
+            )
+            print(
+                "Tech passport values=",
+                {k: ascii(str(v)) for k, v in extracted.items() if str(v or "").strip()},
+            )
+            print(
+                "Tech passport codes=",
+                {
+                    side: {k: ascii(str(v)) for k, v in (codes or {}).items()}
+                    for side, codes in (result.get("debug_codes") or {}).items()
+                },
+            )
+        except Exception:
+            pass
+        return {
+            "extracted_data": extracted,
+            "filled_count": result.get("filled_count", 0),
+            "debug_codes": result.get("debug_codes") or {},
+            "qr_code_value": result.get("qr_code_value") or "",
+            "qr_code_data_url": result.get("qr_code_data_url") or "",
+            "is_valid": True,
+        }
+    except Exception as e:
+        print("Tech passport error:", ascii(str(e)))
+        return {
+            "error": "Tech passport scan failed.",
+            "extracted_data": {},
+            "filled_count": 0,
+            "qr_code_value": "",
+            "qr_code_data_url": "",
+            "is_valid": False,
+        }
+
+
 ID_FRONT_SIDE_ERROR = "Please upload front side of ID card"
 ID_BACK_SIDE_ERROR = "Please upload back side of ID card"
 
 
-def _image_has_face(image_bytes: bytes, min_confidence: float = 0.35) -> bool:
+def _image_has_face(image_bytes: bytes, min_confidence: float = 0.25) -> bool:
     """True when Vision detects a person face (typical of ID front photo)."""
-    try:
-        client = _get_vision_client()
-        image = vision.Image(content=image_bytes)
-        response = client.face_detection(image=image)
-        if response.error.message:
-            return False
-        for face in response.face_annotations or []:
-            conf = float(getattr(face, "detection_confidence", 0) or 0)
-            if conf >= min_confidence:
-                return True
-    except Exception as e:
-        print("face detection error:", ascii(str(e)))
-    return False
+    return image_has_face(image_bytes, min_confidence=min_confidence)
 
 
 def validate_id_side(image_bytes: bytes, side: str) -> dict:
@@ -464,6 +514,26 @@ async def check_license_side(
         return validate_license_side(image_bytes, side)
     except Exception as e:
         print("check-license-side error:", ascii(str(e)))
+        traceback.print_exc()
+        return {"ok": False, "error": str(e), "side": (side or "").strip().lower()}
+
+
+@app.post("/check-tech-passport-side")
+async def check_tech_passport_side(
+    image: UploadFile = File(...),
+    side: str = Form(...),
+):
+    """
+    Capture/upload helper for tech passport only:
+    - any side: reject when MRZ is visible
+    - front: also reject when a person face/head is visible
+    - back: also reject when QR is on the left side
+    """
+    try:
+        image_bytes = await image.read()
+        return validate_tech_passport_side(image_bytes, side)
+    except Exception as e:
+        print("check-tech-passport-side error:", ascii(str(e)))
         traceback.print_exc()
         return {"ok": False, "error": str(e), "side": (side or "").strip().lower()}
 

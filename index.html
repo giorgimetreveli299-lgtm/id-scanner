@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>ID Verification</title>
+  <title>Document Verification</title>
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link
@@ -142,6 +142,8 @@
     #passport-view.visible { display: block; }
     #license-view { display: none; }
     #license-view.visible { display: block; }
+    #tech-passport-view { display: none; }
+    #tech-passport-view.visible { display: block; }
 
     .method-choice-card {
       text-align: center;
@@ -167,12 +169,8 @@
       margin-left: auto;
       margin-right: auto;
     }
-    .method-box-wide {
-      grid-column: 1 / -1;
-    }
     @media (max-width: 520px) {
       .method-options { grid-template-columns: 1fr; }
-      .method-box-wide { grid-column: auto; }
     }
     .method-box {
       appearance: none;
@@ -225,6 +223,19 @@
     }
     .license-ocr-status.visible { display: block; }
     .license-ocr-status.is-error {
+      color: #991b1b;
+      font-weight: 600;
+    }
+    .tech-passport-ocr-status {
+      display: none;
+      text-align: center;
+      padding: 12px;
+      color: var(--muted);
+      font-size: 14px;
+      margin-top: 12px;
+    }
+    .tech-passport-ocr-status.visible { display: block; }
+    .tech-passport-ocr-status.is-error {
       color: #991b1b;
       font-weight: 600;
     }
@@ -401,6 +412,11 @@
     .license-checked-badge:not(.hidden):hover {
       filter: brightness(0.94);
     }
+    .license-checked-badge.is-error {
+      color: #9b1c1c;
+      background: color-mix(in srgb, #fca5a5 55%, #fff);
+      border: 1px solid color-mix(in srgb, #ef4444 40%, transparent);
+    }
     .license-qr-hl {
       background: #c8f0d8;
       color: #0f5132;
@@ -482,7 +498,8 @@
       gap: 12px;
       margin-top: 22px;
     }
-    .license-actions .btn {
+    .license-actions .btn,
+    .tech-passport-actions .btn {
       flex: 1 1 160px;
       min-height: 52px;
       padding: 16px 20px;
@@ -494,23 +511,34 @@
       cursor: pointer;
       transition: background 0.2s, opacity 0.2s;
     }
-    .license-actions .btn-license-new {
+    .license-actions .btn-license-new,
+    .tech-passport-actions .btn-tech-new {
       background: #5a6268;
       color: #fff;
     }
-    .license-actions .btn-license-new:hover {
+    .license-actions .btn-license-new:hover,
+    .tech-passport-actions .btn-tech-new:hover {
       background: #434a50;
     }
-    .license-actions .btn-license-pdf {
+    .license-actions .btn-license-pdf,
+    .tech-passport-actions .btn-tech-pdf {
       background: var(--accent);
       color: #fff;
     }
-    .license-actions .btn-license-pdf:hover {
+    .license-actions .btn-license-pdf:hover,
+    .tech-passport-actions .btn-tech-pdf:hover {
       background: var(--accent-dark);
     }
-    .license-actions .btn:disabled {
+    .license-actions .btn:disabled,
+    .tech-passport-actions .btn:disabled {
       opacity: 0.45;
       cursor: not-allowed;
+    }
+    .tech-passport-actions {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 12px;
+      margin-top: 22px;
     }
 
     /* Document image zoom (license, ID, passport) */
@@ -518,13 +546,75 @@
     #license-view .license-image-slot img.license-zoomable,
     #scanner-view .slot-box img.license-zoomable,
     #passport-view .slot-box img.license-zoomable,
+    #tech-passport-view .slot-box img.license-zoomable,
     #results-card .pdf-photos img.license-zoomable {
       cursor: zoom-in;
     }
-    #license-view .slot-box img {
+    #license-view .slot-box img,
+    #tech-passport-view .slot-box img {
       background: #fff;
       aspect-ratio: 85.6 / 54;
       max-height: none;
+    }
+
+    .tech-passport-results {
+      display: none;
+      margin-top: 18px;
+      text-align: left;
+    }
+    .tech-passport-results.visible { display: block; }
+    .tech-passport-results-head h3 {
+      margin: 0 0 14px;
+      font-family: var(--font-display);
+      color: var(--lilac-deep);
+      font-size: 1.15rem;
+    }
+    .tech-passport-fields {
+      display: grid;
+      gap: 10px;
+      grid-template-columns: 1fr;
+    }
+    .tech-passport-field {
+      display: grid;
+      grid-template-columns: 1fr;
+      gap: 6px;
+      padding: 10px 12px;
+      border-radius: 10px;
+      background: rgba(247, 242, 251, 0.85);
+      border: 1px solid rgba(124, 58, 237, 0.1);
+    }
+    .tech-passport-field label {
+      color: var(--muted);
+      font-size: 0.82rem;
+      line-height: 1.25;
+    }
+    .tech-passport-field label .field-code {
+      font-family: var(--font-display);
+      font-weight: 700;
+      color: var(--lilac-deep);
+      margin-right: 0.35rem;
+    }
+    .tech-passport-field label .label-en {
+      display: block;
+      font-size: 0.76rem;
+      color: var(--muted);
+    }
+    .tech-passport-field input {
+      width: 100%;
+      border: 1px solid rgba(124, 58, 237, 0.16);
+      border-radius: 8px;
+      padding: 0.45rem 0.55rem;
+      background: #fff;
+      color: var(--text);
+      font: inherit;
+      box-sizing: border-box;
+    }
+    .tech-passport-field .license-input-wrap input {
+      width: 100%;
+      box-sizing: border-box;
+    }
+    .tech-passport-field .license-input-wrap.has-badge input {
+      padding-right: 4.2rem;
     }
     #license-view .license-image-slot.has-image {
       cursor: zoom-in;
@@ -633,7 +723,8 @@
     #ocr-status.visible { display: block; }
     .passport-upload-error,
     .id-upload-error,
-    .license-upload-error {
+    .license-upload-error,
+    .tech-passport-upload-error {
       display: none;
       margin: 12px 0 16px;
       padding: 12px 14px;
@@ -647,7 +738,8 @@
     }
     .passport-upload-error.visible,
     .id-upload-error.visible,
-    .license-upload-error.visible { display: block; }
+    .license-upload-error.visible,
+    .tech-passport-upload-error.visible { display: block; }
 
     /* Camera overlay */
     #camera-modal {
@@ -1118,9 +1210,13 @@
           <span class="method-box-title">Passport</span>
           <span class="method-box-sub">Passport</span>
         </button>
-        <button type="button" class="method-box method-box-wide" onclick="selectMethod('license')">
+        <button type="button" class="method-box" onclick="selectMethod('license')">
           <span class="method-box-title">Driver License</span>
           <span class="method-box-sub">Driver license</span>
+        </button>
+        <button type="button" class="method-box" onclick="selectMethod('tech-passport')">
+          <span class="method-box-title">Tech passport</span>
+          <span class="method-box-sub">Tech passport</span>
         </button>
       </div>
     </div>
@@ -1186,6 +1282,151 @@
               <button type="button" class="btn btn-cancel" id="btn-passport-cancel" onclick="cancelSlotPhoto('passport')">Cancel</button>
             </div>
             <img id="img-passport" class="license-zoomable" alt="Passport">
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div id="tech-passport-view">
+      <div class="card">
+        <button type="button" class="view-back" onclick="newClient()">← Back</button>
+        <h2>Tech Passport</h2>
+        <p class="step-hint" id="tech-passport-step-hint">
+          Capture the front side first.
+        </p>
+        <div
+          class="tech-passport-upload-error"
+          id="tech-passport-upload-error"
+          role="alert"
+          aria-live="assertive"
+        ></div>
+        <div class="photo-slots">
+          <div class="slot-box" id="slot-tech-front">
+            <h4>Front Side</h4>
+            <div class="slot-actions">
+              <button type="button" class="btn" id="btn-tech-front" onclick="openTechPassportCamera('front')">Capture</button>
+              <button type="button" class="btn btn-upload" id="btn-tech-front-upload" onclick="triggerTechPassportUpload('front')">Upload</button>
+              <button type="button" class="btn btn-cancel" id="btn-tech-front-cancel" onclick="cancelSlotPhoto('tech-front')">Cancel</button>
+            </div>
+            <img id="img-tech-front" class="license-zoomable" alt="Front side">
+          </div>
+          <div class="slot-box" id="slot-tech-back">
+            <h4>Back Side</h4>
+            <div class="slot-actions">
+              <button type="button" class="btn" id="btn-tech-back" onclick="openTechPassportCamera('back')" disabled>Capture</button>
+              <button type="button" class="btn btn-upload" id="btn-tech-back-upload" onclick="triggerTechPassportUpload('back')" disabled>Upload</button>
+              <button type="button" class="btn btn-cancel" id="btn-tech-back-cancel" onclick="cancelSlotPhoto('tech-back')">Cancel</button>
+            </div>
+            <img id="img-tech-back" class="license-zoomable" alt="Back side">
+          </div>
+        </div>
+
+        <div id="tech-passport-ocr-status" class="tech-passport-ocr-status" aria-live="polite"></div>
+
+        <div id="tech-passport-results" class="tech-passport-results">
+          <div class="tech-passport-results-head">
+            <h3>Vehicle data</h3>
+          </div>
+          <div class="tech-passport-fields">
+            <div class="tech-passport-field">
+              <label>რეგისტრაციის ნომერი <span class="field-code">(A)</span><span class="label-en">Registration Number</span></label>
+              <div class="license-input-wrap" id="wrap-tech-reg-number">
+                <input type="text" id="tech-reg-number" placeholder="—">
+                <span class="license-checked-badge hidden" id="badge-tech-reg-number">Checked</span>
+              </div>
+            </div>
+            <div class="tech-passport-field">
+              <label>გამოშვების წელი <span class="field-code">(B)</span><span class="label-en">Production year</span></label>
+              <input type="text" id="tech-prod-year" placeholder="—">
+            </div>
+            <div class="tech-passport-field">
+              <label>რეგისტრაციის თარიღი <span class="field-code">(I / C)</span><span class="label-en">Registration date</span></label>
+              <input type="text" id="tech-reg-date" placeholder="—">
+            </div>
+            <div class="tech-passport-field">
+              <label>მფლობელის სახელი <span class="field-code">(C.1.2)</span><span class="label-en">Owner's Name</span></label>
+              <input type="text" id="tech-owner-name" placeholder="—">
+            </div>
+            <div class="tech-passport-field">
+              <label>მფლობელის გვარი <span class="field-code">(C.1.1)</span><span class="label-en">Owner's Surname</span></label>
+              <input type="text" id="tech-owner-surname" placeholder="—">
+            </div>
+            <div class="tech-passport-field">
+              <label>მფლობელის პირადი ნომერი <span class="field-code">(C.1.4)</span><span class="label-en">Owner's Personal Number</span></label>
+              <input type="text" id="tech-owner-personal" placeholder="—">
+            </div>
+            <div class="tech-passport-field">
+              <label>გაუქმების თარიღი <span class="field-code">(H)</span><span class="label-en">Expiration Date</span></label>
+              <input type="text" id="tech-expiry" placeholder="—">
+            </div>
+            <div class="tech-passport-field">
+              <label>საბუთის ნომერი<span class="label-en">Card Number</span></label>
+              <div class="license-input-wrap" id="wrap-tech-card-number">
+                <input type="text" id="tech-card-number" placeholder="—">
+                <span class="license-checked-badge hidden" id="badge-tech-card-number">Checked</span>
+              </div>
+            </div>
+            <div class="tech-passport-field">
+              <label>მარკა <span class="field-code">(D.1)</span><span class="label-en">Mark</span></label>
+              <div class="license-input-wrap" id="wrap-tech-mark">
+                <input type="text" id="tech-mark" placeholder="—">
+                <span class="license-checked-badge hidden" id="badge-tech-mark">Checked</span>
+              </div>
+            </div>
+            <div class="tech-passport-field">
+              <label>ტიპი <span class="field-code">(D.2)</span><span class="label-en">Type</span></label>
+              <input type="text" id="tech-type" placeholder="—">
+            </div>
+            <div class="tech-passport-field">
+              <label>მოდელი <span class="field-code">(D.3)</span></label>
+              <div class="license-input-wrap" id="wrap-tech-model">
+                <input type="text" id="tech-model" placeholder="—">
+                <span class="license-checked-badge hidden" id="badge-tech-model">Checked</span>
+              </div>
+            </div>
+            <div class="tech-passport-field">
+              <label>V.I.N კოდი <span class="field-code">(E)</span><span class="label-en">V.I.N Code</span></label>
+              <input type="text" id="tech-vin" placeholder="—">
+            </div>
+            <div class="tech-passport-field">
+              <label>ძრავის მოცულობა <span class="field-code">(P.1)</span><span class="label-en">Engine Capacity</span></label>
+              <input type="text" id="tech-engine" placeholder="—">
+            </div>
+            <div class="tech-passport-field">
+              <label>საწვავის ტიპი <span class="field-code">(P.3)</span><span class="label-en">Fuel Type</span></label>
+              <input type="text" id="tech-fuel" placeholder="—">
+            </div>
+            <div class="tech-passport-field">
+              <label>ფერი <span class="field-code">(R)</span><span class="label-en">Color</span></label>
+              <input type="text" id="tech-color" placeholder="—">
+            </div>
+            <div class="tech-passport-field tech-passport-field-qr">
+              <label>QR კოდი</label>
+              <div class="license-input-wrap">
+                <div class="license-qr-row">
+                  <div class="license-image-slot qr" id="tech-qr-slot">QR</div>
+                  <div class="license-qr-data">
+                    <button
+                      type="button"
+                      class="license-qr-toggle"
+                      id="tech-qr-toggle"
+                      onclick="toggleTechPassportQrData()"
+                      disabled
+                    >
+                      <span id="tech-qr-toggle-label">QR ინფორმაცია</span>
+                      <span id="tech-qr-chevron" aria-hidden="true">▼</span>
+                    </button>
+                    <div class="license-qr-panel collapsed" id="tech-qr-panel">
+                      <pre class="license-qr-raw" id="tech-qr-raw"></pre>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+          <div class="tech-passport-actions" id="tech-passport-actions">
+            <button type="button" class="btn btn-tech-new" id="btn-tech-new" onclick="techPassportNewClient()">New Client</button>
+            <button type="button" class="btn btn-tech-pdf" id="btn-tech-pdf" onclick="downloadTechPassportPDF()" disabled>Download PDF</button>
           </div>
         </div>
       </div>
@@ -1578,6 +1819,10 @@
     let licenseBackBlob = null;
     let licenseFrontDataUrl = null;
     let licenseBackDataUrl = null;
+    let techFrontBlob = null;
+    let techBackBlob = null;
+    let techFrontDataUrl = null;
+    let techBackDataUrl = null;
     let readyStreak = 0; // consecutive good frames before "ready"
     let readyGraceUntil = 0; // keep Capture enabled briefly (iOS tap vs flicker)
     let capturingNow = false;
@@ -1595,8 +1840,605 @@
       return slot === "license-front" || slot === "license-back";
     }
 
+    function isTechPassportSlot(slot) {
+      return slot === "tech-front" || slot === "tech-back";
+    }
+
     function licenseSlotId(side) {
       return side === "back" ? "license-back" : "license-front";
+    }
+
+    function techPassportSlotId(side) {
+      return side === "back" ? "tech-back" : "tech-front";
+    }
+
+    function resetTechPassportCapture() {
+      techFrontBlob = null;
+      techBackBlob = null;
+      techFrontDataUrl = null;
+      techBackDataUrl = null;
+      clearTechPassportResults();
+      ["tech-front", "tech-back"].forEach((slot) => {
+        const img = document.getElementById(`img-${slot}`);
+        if (img) {
+          img.src = "";
+          img.style.display = "none";
+        }
+        const box = document.getElementById(`slot-${slot}`);
+        if (box) box.classList.remove("done");
+      });
+      const frontBtn = document.getElementById("btn-tech-front");
+      const frontUpload = document.getElementById("btn-tech-front-upload");
+      const backBtn = document.getElementById("btn-tech-back");
+      const backUpload = document.getElementById("btn-tech-back-upload");
+      if (frontBtn) frontBtn.disabled = false;
+      if (frontUpload) frontUpload.disabled = false;
+      if (backBtn) backBtn.disabled = true;
+      if (backUpload) backUpload.disabled = true;
+      clearTechPassportUploadError();
+      updateTechPassportStepHint();
+    }
+
+    const TECH_PASSPORT_FIELD_IDS = [
+      "tech-reg-number",
+      "tech-prod-year",
+      "tech-reg-date",
+      "tech-owner-name",
+      "tech-owner-surname",
+      "tech-owner-personal",
+      "tech-expiry",
+      "tech-card-number",
+      "tech-mark",
+      "tech-type",
+      "tech-model",
+      "tech-vin",
+      "tech-engine",
+      "tech-fuel",
+      "tech-color",
+    ];
+
+    let techPassportQrPayload = "";
+    /** Exact QR substrings locked per field — Checked only on character-identical match. */
+    let techQrExactByInput = {};
+
+    const TECH_QR_CHECK_FIELDS = [
+      { inputId: "tech-reg-number", badgeId: "badge-tech-reg-number", wrapId: "wrap-tech-reg-number", kind: "plate" },
+      { inputId: "tech-card-number", badgeId: "badge-tech-card-number", wrapId: "wrap-tech-card-number", kind: "card" },
+      { inputId: "tech-mark", badgeId: "badge-tech-mark", wrapId: "wrap-tech-mark", kind: "mark" },
+      { inputId: "tech-model", badgeId: "badge-tech-model", wrapId: "wrap-tech-model", kind: "model" },
+    ];
+
+    function techQrCompact(value) {
+      return String(value || "").replace(/[\s\-]/g, "").toUpperCase();
+    }
+
+    function techQrLatinNeedle(value) {
+      let raw = String(value || "").trim();
+      if (!raw) return "";
+      if (raw.includes("/")) {
+        const parts = raw.split("/").map((p) => p.trim()).filter(Boolean);
+        const latin = parts.find((p) => /[A-Za-z]/.test(p));
+        raw = latin || parts[0];
+      }
+      return raw.replace(/\s+/g, " ").trim();
+    }
+
+    function findTechFieldInQr(qrPayload, kind, value) {
+      const qr = String(qrPayload || "");
+      const raw = String(value || "").trim();
+      if (!qr || !raw) return null;
+
+      if (kind === "plate" || kind === "card") {
+        const needle = techQrCompact(raw);
+        if (needle.length < 3) return null;
+        const re = new RegExp(needle.split("").map((ch) => {
+          if (/[A-Z0-9]/.test(ch)) return ch;
+          return "";
+        }).join("[\\s\\-]*"), "i");
+        const m = re.exec(qr);
+        if (m && m.index != null) {
+          return [{ start: m.index, end: m.index + m[0].length }];
+        }
+        return null;
+      }
+
+      if (kind === "mark" || kind === "model") {
+        const needle = techQrLatinNeedle(raw);
+        if (needle.length < 2) return null;
+        const hit =
+          (typeof licenseQrFindInsensitive === "function"
+            ? licenseQrFindInsensitive(qr, needle, true) ||
+              licenseQrFindInsensitive(qr, needle, false)
+            : null) || null;
+        if (hit) return [hit];
+        const idx = qr.toUpperCase().indexOf(needle.toUpperCase());
+        if (idx >= 0) return [{ start: idx, end: idx + needle.length }];
+        const compact = techQrCompact(needle);
+        if (compact.length >= 2) {
+          const parts = compact.split("").map((ch) => {
+            if (/[A-Z0-9]/.test(ch)) return ch;
+            return "";
+          }).filter(Boolean);
+          if (parts.length) {
+            try {
+              const re = new RegExp(parts.join("[\\s\\-]*"), "i");
+              const m = re.exec(qr);
+              if (m && m.index != null) {
+                return [{ start: m.index, end: m.index + m[0].length }];
+              }
+            } catch (_) { /* ignore */ }
+          }
+        }
+        return null;
+      }
+
+      return null;
+    }
+
+    /** Character-by-character: field text must equal the locked QR slice exactly. */
+    function techQrFieldMatchesExact(value, exactQrSlice) {
+      return String(value ?? "") === String(exactQrSlice ?? "");
+    }
+
+    function lockTechQrExactSlice(inputId, kind, fieldValue) {
+      const qr = techPassportQrPayload;
+      const raw = String(fieldValue ?? "");
+      if (!qr || !raw) return null;
+      const hits = findTechFieldInQr(qr, kind, raw.trim());
+      if (!hits || !hits.length) return null;
+      return qr.slice(hits[0].start, hits[0].end);
+    }
+
+    /**
+     * - checked: field value === exact QR substring (letter for letter)
+     * - error: QR known / field was checkable, but value no longer matches exactly
+     * - null: nothing to show
+     */
+    function getTechQrBadgeStatus(inputId, kind, value) {
+      const qr = techPassportQrPayload;
+      if (!qr) return null;
+      const raw = String(value ?? "");
+
+      let exact = techQrExactByInput[inputId];
+      if (exact == null && raw.trim()) {
+        const slice = lockTechQrExactSlice(inputId, kind, raw);
+        if (slice != null) {
+          techQrExactByInput[inputId] = slice;
+          exact = slice;
+        }
+      }
+
+      if (exact == null) {
+        if (!raw.trim()) return null;
+        return "error";
+      }
+
+      if (techQrFieldMatchesExact(raw, exact)) return "checked";
+      return "error";
+    }
+
+    function renderTechPassportQrView(qrText, highlights) {
+      const rawEl = document.getElementById("tech-qr-raw");
+      if (!rawEl) return;
+      const text = String(qrText || "");
+      if (!highlights || !highlights.length) {
+        rawEl.textContent = text;
+        return;
+      }
+      const sorted = [...highlights].sort((a, b) => a.start - b.start);
+      let html = "";
+      let pos = 0;
+      for (const h of sorted) {
+        const a = Math.max(0, h.start);
+        const b = Math.min(text.length, h.end);
+        if (a < pos || b <= a) continue;
+        html += escapeHtml(text.slice(pos, a));
+        html += '<mark class="license-qr-hl">' + escapeHtml(text.slice(a, b)) + "</mark>";
+        pos = b;
+      }
+      html += escapeHtml(text.slice(pos));
+      rawEl.innerHTML = html;
+    }
+
+    function highlightTechPassportQrForInput(inputId, kind) {
+      if (!techPassportQrPayload) return;
+      const input = document.getElementById(inputId);
+      const value = input ? String(input.value ?? "") : "";
+      const exact = techQrExactByInput[inputId];
+      let hits = null;
+      if (exact != null) {
+        const idx = techPassportQrPayload.indexOf(exact);
+        if (idx >= 0) hits = [{ start: idx, end: idx + exact.length }];
+      }
+      if (!hits) hits = findTechFieldInQr(techPassportQrPayload, kind, value.trim());
+      if (!hits || !hits.length) return;
+
+      const panel = document.getElementById("tech-qr-panel");
+      const chev = document.getElementById("tech-qr-chevron");
+      if (panel) panel.classList.remove("collapsed");
+      if (chev) chev.textContent = "▲";
+
+      renderTechPassportQrView(techPassportQrPayload, hits);
+
+      const rawEl = document.getElementById("tech-qr-raw");
+      const mark = rawEl ? rawEl.querySelector(".license-qr-hl") : null;
+      if (rawEl) rawEl.scrollIntoView({ behavior: "smooth", block: "nearest" });
+      if (mark) mark.scrollIntoView({ behavior: "smooth", block: "nearest", inline: "nearest" });
+    }
+
+    function showTechPassportQrBadge(inputId, badgeId, wrapId, kind, status) {
+      const badge = document.getElementById(badgeId);
+      const wrap = document.getElementById(wrapId);
+      if (!badge) return;
+      badge.classList.remove("is-error");
+      if (status === "checked" || status === "error") {
+        badge.classList.remove("hidden");
+        wrap?.classList.add("has-badge");
+        if (status === "checked") {
+          badge.textContent = "Checked";
+          badge.title = "Click to highlight in QR text";
+        } else {
+          badge.textContent = "Error";
+          badge.classList.add("is-error");
+          badge.title = "Does not match QR exactly — click to highlight";
+        }
+        badge.onclick = (e) => {
+          e.preventDefault();
+          e.stopPropagation();
+          highlightTechPassportQrForInput(inputId, kind);
+        };
+      } else {
+        badge.textContent = "Checked";
+        badge.classList.add("hidden");
+        wrap?.classList.remove("has-badge");
+        badge.title = "";
+        badge.onclick = null;
+      }
+    }
+
+    function clearTechPassportQrBadges() {
+      techQrExactByInput = {};
+      TECH_QR_CHECK_FIELDS.forEach(({ inputId, badgeId, wrapId, kind }) => {
+        showTechPassportQrBadge(inputId, badgeId, wrapId, kind, null);
+      });
+    }
+
+    function updateTechPassportQrBadges() {
+      TECH_QR_CHECK_FIELDS.forEach(({ inputId, badgeId, wrapId, kind }) => {
+        const el = document.getElementById(inputId);
+        if (!el) {
+          showTechPassportQrBadge(inputId, badgeId, wrapId, kind, null);
+          return;
+        }
+        let value = String(el.value ?? "");
+        // First match: lock the exact QR characters and align the field to them
+        if (techPassportQrPayload && techQrExactByInput[inputId] == null && value.trim()) {
+          const slice = lockTechQrExactSlice(inputId, kind, value);
+          if (slice != null) {
+            techQrExactByInput[inputId] = slice;
+            if (value !== slice) {
+              el.value = slice;
+              value = slice;
+            }
+          }
+        }
+        const status = getTechQrBadgeStatus(inputId, kind, value);
+        showTechPassportQrBadge(inputId, badgeId, wrapId, kind, status);
+      });
+    }
+
+    function bindTechPassportQrBadgeInputs() {
+      TECH_QR_CHECK_FIELDS.forEach(({ inputId }) => {
+        const el = document.getElementById(inputId);
+        if (!el || el.dataset.techQrBound === "1") return;
+        el.dataset.techQrBound = "1";
+        el.addEventListener("input", () => updateTechPassportQrBadges());
+        el.addEventListener("change", () => updateTechPassportQrBadges());
+      });
+    }
+
+    function clearTechPassportQrPanel() {
+      techPassportQrPayload = "";
+      const toggle = document.getElementById("tech-qr-toggle");
+      const panel = document.getElementById("tech-qr-panel");
+      const rawEl = document.getElementById("tech-qr-raw");
+      const chev = document.getElementById("tech-qr-chevron");
+      const label = document.getElementById("tech-qr-toggle-label");
+      if (rawEl) rawEl.textContent = "";
+      if (toggle) toggle.disabled = true;
+      if (label) label.textContent = "QR ინფორმაცია";
+      if (panel) panel.classList.add("collapsed");
+      if (chev) chev.textContent = "▼";
+      setLicenseImageSlot("tech-qr-slot", "", "QR");
+      clearTechPassportQrBadges();
+    }
+
+    function toggleTechPassportQrData() {
+      const toggle = document.getElementById("tech-qr-toggle");
+      const panel = document.getElementById("tech-qr-panel");
+      const chev = document.getElementById("tech-qr-chevron");
+      if (!panel || toggle?.disabled) return;
+      panel.classList.toggle("collapsed");
+      if (chev) chev.textContent = panel.classList.contains("collapsed") ? "▼" : "▲";
+      if (panel.classList.contains("collapsed")) {
+        renderTechPassportQrView(techPassportQrPayload, null);
+      }
+    }
+
+    function populateTechPassportQrPanel(data) {
+      const toggle = document.getElementById("tech-qr-toggle");
+      const panel = document.getElementById("tech-qr-panel");
+      const rawEl = document.getElementById("tech-qr-raw");
+      const chev = document.getElementById("tech-qr-chevron");
+      const label = document.getElementById("tech-qr-toggle-label");
+      if (!toggle || !panel || !rawEl) return;
+
+      const raw = String((data && data.qr_code_value) || "").trim();
+      const cropUrl = String((data && data.qr_code_data_url) || "").trim();
+      if (!raw) {
+        clearTechPassportQrPanel();
+        return;
+      }
+
+      techPassportQrPayload = raw;
+      techQrExactByInput = {};
+      renderTechPassportQrView(raw, null);
+      toggle.disabled = false;
+      if (label) label.textContent = "QR ინფორმაცია";
+      panel.classList.remove("collapsed");
+      if (chev) chev.textContent = "▲";
+      setLicenseImageSlot("tech-qr-slot", cropUrl, "QR");
+      bindTechPassportQrBadgeInputs();
+      updateTechPassportQrBadges();
+    }
+
+    function clearTechPassportResults() {
+      TECH_PASSPORT_FIELD_IDS.forEach((id) => {
+        const el = document.getElementById(id);
+        if (el) el.value = "";
+      });
+      clearTechPassportQrPanel();
+      document.getElementById("tech-passport-results")?.classList.remove("visible");
+      const status = document.getElementById("tech-passport-ocr-status");
+      if (status) {
+        status.textContent = "";
+        status.classList.remove("visible", "is-error");
+      }
+    }
+
+    function updateTechPassportResultsVisibility() {
+      const ready = Boolean(techFrontDataUrl && techBackDataUrl);
+      const panel = document.getElementById("tech-passport-results");
+      if (!panel) return;
+      if (ready) {
+        panel.classList.add("visible");
+      } else {
+        panel.classList.remove("visible");
+      }
+      updateTechPassportActionButtons();
+    }
+
+    function updateTechPassportActionButtons() {
+      const pdfBtn = document.getElementById("btn-tech-pdf");
+      if (!pdfBtn) return;
+      pdfBtn.disabled = !(techFrontDataUrl && techBackDataUrl);
+    }
+
+    function techPassportFieldValue(id) {
+      return (document.getElementById(id)?.value || "").trim();
+    }
+
+    function techPassportNewClient() {
+      closeLicenseImageZoom();
+      resetTechPassportCapture();
+      showMethodChoice();
+    }
+
+    async function dataUrlForPdf(src, maxEdge = 2200, quality = 0.88) {
+      const img = await loadImage(src);
+      const scale = Math.min(1, maxEdge / Math.max(img.width || 1, img.height || 1));
+      const w = Math.max(1, Math.round((img.width || 1) * scale));
+      const h = Math.max(1, Math.round((img.height || 1) * scale));
+      const canvas = document.createElement("canvas");
+      canvas.width = w;
+      canvas.height = h;
+      const ctx = canvas.getContext("2d");
+      if (!ctx) throw new Error("Canvas unavailable");
+      ctx.fillStyle = "#ffffff";
+      ctx.fillRect(0, 0, w, h);
+      ctx.drawImage(img, 0, 0, w, h);
+      return {
+        dataUrl: canvas.toDataURL("image/jpeg", quality),
+        width: w,
+        height: h,
+      };
+    }
+
+    function placeJpegOnPdfPage(pdf, jpegDataUrl, imgW, imgH) {
+      const pageW = pdf.internal.pageSize.getWidth();
+      const pageH = pdf.internal.pageSize.getHeight();
+      const margin = 12;
+      const maxW = pageW - margin * 2;
+      const maxH = pageH - margin * 2;
+      const ratio = imgW / imgH;
+      let w = maxW;
+      let h = w / ratio;
+      if (h > maxH) {
+        h = maxH;
+        w = h * ratio;
+      }
+      const x = margin + (maxW - w) / 2;
+      const y = margin + (maxH - h) / 2;
+      pdf.addImage(jpegDataUrl, "JPEG", x, y, w, h);
+    }
+
+    async function downloadTechPassportPDF() {
+      if (!techFrontDataUrl || !techBackDataUrl) {
+        alert("Capture or upload both sides first.");
+        return;
+      }
+
+      const JsPDF = await ensureJsPDF();
+      if (!JsPDF) {
+        alert("PDF library failed to load. Check your internet and try again.");
+        return;
+      }
+
+      try {
+        const [front, back] = await Promise.all([
+          dataUrlForPdf(techFrontDataUrl),
+          dataUrlForPdf(techBackDataUrl),
+        ]);
+
+        const pdf = new JsPDF({ orientation: "portrait", unit: "mm", format: "a4" });
+        placeJpegOnPdfPage(pdf, front.dataUrl, front.width, front.height);
+        pdf.addPage();
+        placeJpegOnPdfPage(pdf, back.dataUrl, back.width, back.height);
+
+        const plate = techPassportFieldValue("tech-reg-number") || "tech_passport";
+        const safeName = plate.replace(/[^\w\-]+/g, "_").slice(0, 40) || "tech_passport";
+        pdf.save(`tech_passport_${safeName}.pdf`);
+      } catch (err) {
+        console.error("Tech passport PDF failed:", err);
+        alert("Could not build PDF from the captured photos. Try capturing again.");
+      }
+    }
+
+    const TECH_PASSPORT_API_TO_INPUT = {
+      registration_number: "tech-reg-number",
+      production_year: "tech-prod-year",
+      registration_date: "tech-reg-date",
+      owner_name: "tech-owner-name",
+      owner_surname: "tech-owner-surname",
+      owner_personal_number: "tech-owner-personal",
+      expiration_date: "tech-expiry",
+      card_number: "tech-card-number",
+      mark: "tech-mark",
+      type: "tech-type",
+      model: "tech-model",
+      vin: "tech-vin",
+      engine_capacity: "tech-engine",
+      fuel_type: "tech-fuel",
+      color: "tech-color",
+    };
+
+    function populateTechPassportResults(data) {
+      const ext = (data && data.extracted_data) || {};
+      Object.entries(TECH_PASSPORT_API_TO_INPUT).forEach(([apiKey, inputId]) => {
+        const el = document.getElementById(inputId);
+        if (!el) return;
+        el.value = String(ext[apiKey] || "").trim();
+      });
+      populateTechPassportQrPanel(data || {});
+      updateTechPassportQrBadges();
+      updateTechPassportResultsVisibility();
+    }
+
+    async function runTechPassportVerification() {
+      if (selectedMethod !== "tech-passport" || !techFrontBlob || !techBackBlob) return;
+
+      const status = document.getElementById("tech-passport-ocr-status");
+      TECH_PASSPORT_FIELD_IDS.forEach((id) => {
+        const el = document.getElementById(id);
+        if (el) el.value = "";
+      });
+      clearTechPassportQrPanel();
+      updateTechPassportResultsVisibility();
+      status?.classList.add("visible");
+      status?.classList.remove("is-error");
+
+      const startedAt = performance.now();
+      const tickTimer = setInterval(() => {
+        const sec = ((performance.now() - startedAt) / 1000).toFixed(1);
+        if (status) status.textContent = `Reading tech passport with Google Vision… ${sec}s`;
+      }, 200);
+      if (status) status.textContent = "Reading tech passport with Google Vision… 0.0s";
+
+      const formData = new FormData();
+      formData.append("front", techFrontBlob, "tech-front.jpg");
+      formData.append("back", techBackBlob, "tech-back.jpg");
+
+      try {
+        const response = await fetch(`${window.location.origin}/verify-tech-passport`, {
+          method: "POST",
+          body: formData,
+        });
+        clearInterval(tickTimer);
+
+        const contentType = response.headers.get("content-type") || "";
+        if (!response.ok || !contentType.includes("application/json")) {
+          const preview = await response.text();
+          console.error("verify-tech-passport failed:", response.status, preview.slice(0, 300));
+          if (status) {
+            status.classList.add("is-error");
+            status.textContent =
+              response.status === 404
+                ? "Tech passport API not found — restart the server."
+                : `Tech passport scan failed (${response.status}). Check server logs.`;
+          }
+          updateTechPassportResultsVisibility();
+          return;
+        }
+
+        const data = await response.json();
+        console.log("Tech passport extracted_data", data.extracted_data);
+        console.log("Tech passport codes", data.debug_codes);
+        console.log("Tech passport QR", data.qr_code_value);
+        if (data.error) {
+          if (status) {
+            status.classList.add("is-error");
+            status.textContent = "Error: " + data.error;
+          }
+          populateTechPassportResults(data);
+          return;
+        }
+
+        populateTechPassportResults(data);
+        const filled = Number(data.filled_count) || 0;
+        const qrOk = Boolean(String(data.qr_code_value || "").trim());
+        const totalSec = ((performance.now() - startedAt) / 1000).toFixed(1);
+        if (status) {
+          status.classList.remove("is-error");
+          status.textContent =
+            filled > 0 || qrOk
+              ? `Extracted ${filled} fields${qrOk ? " + QR" : ""} in ${totalSec}s`
+              : `No fields detected (${totalSec}s) — check photo quality or edit manually.`;
+        }
+      } catch (err) {
+        clearInterval(tickTimer);
+        console.error(err);
+        if (status) {
+          status.classList.add("is-error");
+          status.textContent =
+            "Could not reach the scanner. Keep the server running and try again.";
+        }
+        updateTechPassportResultsVisibility();
+      }
+    }
+
+    function updateTechPassportStepHint() {
+      const hint = document.getElementById("tech-passport-step-hint");
+      if (!hint) return;
+      if (!techFrontDataUrl) {
+        hint.textContent = ALLOW_FILE_UPLOAD
+          ? "Capture or upload the front side first."
+          : "Capture the front side first.";
+      } else if (!techBackDataUrl) {
+        hint.textContent = ALLOW_FILE_UPLOAD
+          ? "Now capture or upload the back side."
+          : "Now capture the back side.";
+      } else {
+        hint.textContent = "Both sides are ready.";
+      }
+      updateTechPassportResultsVisibility();
+    }
+
+    function openTechPassportCamera(side) {
+      openCamera(techPassportSlotId(side));
+    }
+
+    function triggerTechPassportUpload(side) {
+      triggerUpload(techPassportSlotId(side));
     }
 
     function resetLicenseCapture() {
@@ -2853,6 +3695,7 @@
       document.getElementById("scanner-view").classList.remove("visible");
       document.getElementById("passport-view").classList.remove("visible");
       document.getElementById("license-view").classList.remove("visible");
+      document.getElementById("tech-passport-view")?.classList.remove("visible");
       window.scrollTo({ top: 0, behavior: "smooth" });
     }
 
@@ -2866,6 +3709,20 @@
         document.getElementById("scanner-view").classList.remove("visible");
         document.getElementById("passport-view").classList.remove("visible");
         document.getElementById("license-view").classList.add("visible");
+        document.getElementById("tech-passport-view")?.classList.remove("visible");
+        window.scrollTo({ top: 0, behavior: "smooth" });
+        return;
+      }
+      if (method === "tech-passport") {
+        selectedMethod = "tech-passport";
+        clearPassportUploadError();
+        clearIdUploadError();
+        resetTechPassportCapture();
+        document.getElementById("method-choice").classList.add("hidden");
+        document.getElementById("scanner-view").classList.remove("visible");
+        document.getElementById("passport-view").classList.remove("visible");
+        document.getElementById("license-view").classList.remove("visible");
+        document.getElementById("tech-passport-view")?.classList.add("visible");
         window.scrollTo({ top: 0, behavior: "smooth" });
         return;
       }
@@ -2876,6 +3733,7 @@
       document.getElementById("scanner-view").classList.remove("visible");
       document.getElementById("passport-view").classList.remove("visible");
       document.getElementById("license-view").classList.remove("visible");
+      document.getElementById("tech-passport-view")?.classList.remove("visible");
       applyDocLabels();
 
       // Strict routing: ID UI ↔ ID logic, Passport UI ↔ Passport logic
@@ -3019,6 +3877,9 @@
       if (isLicenseSlot(slot)) {
         stages = await processLicenseForGenerate(bitmap);
         final = stages.final;
+      } else if (isTechPassportSlot(slot)) {
+        stages = await processDocumentForGenerate(bitmap, 85.6 / 54);
+        final = stages.final;
       } else if (slot === "passport") {
         // Results photo: biodata only (REMARKS cut). Original stays in top slot.
         final = await processPassportImage(bitmap);
@@ -3083,6 +3944,10 @@
         alert("Capture or upload the front side first.");
         return;
       }
+      if (slot === "tech-back" && !techFrontDataUrl) {
+        alert("Capture or upload the front side first.");
+        return;
+      }
       if (slot === "back" && !frontDataUrl) {
         const status = document.getElementById("ocr-status");
         if (status) {
@@ -3132,7 +3997,9 @@
         const validateBlob =
           activeSlot === "passport"
             ? (final.cropped ? final.blob : originalBlob)
-            : final.blob;
+            : isTechPassportSlot(activeSlot)
+              ? originalBlob
+              : final.blob;
         const ok = await validateCapturedSide(activeSlot, validateBlob);
         if (!ok) {
           if (!inlineDocErrorShown && !cameraModal.classList.contains("open")) {
@@ -4930,6 +5797,37 @@
         return;
       }
 
+      if (slot === "tech-front") {
+        techFrontBlob = finalBlob;
+        techFrontDataUrl = finalUrl;
+        const img = document.getElementById("img-tech-front");
+        img.src = finalUrl;
+        img.style.display = "block";
+        document.getElementById("slot-tech-front").classList.add("done");
+        document.getElementById("btn-tech-back").disabled = false;
+        document.getElementById("btn-tech-back-upload").disabled = false;
+        updateTechPassportStepHint();
+        updateTechPassportActionButtons();
+        if (techBackBlob) runTechPassportVerification();
+        if (autoOpenNext) {
+          setTimeout(() => openTechPassportCamera("back"), 400);
+        }
+        return;
+      }
+
+      if (slot === "tech-back") {
+        techBackBlob = finalBlob;
+        techBackDataUrl = finalUrl;
+        const img = document.getElementById("img-tech-back");
+        img.src = finalUrl;
+        img.style.display = "block";
+        document.getElementById("slot-tech-back").classList.add("done");
+        updateTechPassportStepHint();
+        updateTechPassportActionButtons();
+        runTechPassportVerification();
+        return;
+      }
+
       if (slot === "front") {
         frontBlob = finalBlob;
         frontDataUrl = finalUrl;
@@ -5040,6 +5938,34 @@
         return;
       }
 
+      if (slot === "tech-front" || slot === "tech-back") {
+        const side = slot.replace("tech-", "");
+        if (side === "front") {
+          techFrontBlob = null;
+          techFrontDataUrl = null;
+        } else {
+          techBackBlob = null;
+          techBackDataUrl = null;
+        }
+        const img = document.getElementById(`img-${slot}`);
+        if (img) {
+          img.src = "";
+          img.style.display = "none";
+        }
+        document.getElementById(`slot-${slot}`)?.classList.remove("done");
+        if (!techFrontDataUrl) {
+          const backBtn = document.getElementById("btn-tech-back");
+          const backUpload = document.getElementById("btn-tech-back-upload");
+          if (backBtn) backBtn.disabled = true;
+          if (backUpload) backUpload.disabled = true;
+        }
+        if (!(techFrontDataUrl && techBackDataUrl)) {
+          clearTechPassportResults();
+        }
+        updateTechPassportStepHint();
+        return;
+      }
+
       if (slot === "front") {
         frontBlob = null;
         frontDataUrl = null;
@@ -5077,6 +6003,7 @@
     function newClient() {
       closeCamera();
       resetLicenseCapture();
+      resetTechPassportCapture();
       activeSlot = null;
       frontBlob = null;
       backBlob = null;
@@ -5143,6 +6070,10 @@
         alert("Capture or upload the front side first.");
         return;
       }
+      if (slot === "tech-back" && !techFrontDataUrl) {
+        alert("Capture or upload the front side first.");
+        return;
+      }
       if (slot === "back" && !frontDataUrl) {
         const status = document.getElementById("ocr-status");
         if (status) {
@@ -5162,6 +6093,8 @@
         passport: "Passport (data page + MRZ)",
         "license-front": "Front Side",
         "license-back": "Back Side",
+        "tech-front": "Front Side",
+        "tech-back": "Back Side",
       };
       document.getElementById("camera-title").textContent = titles[slot] || "Document";
       const vc = document.getElementById("video-container");
@@ -5383,7 +6316,8 @@
       const softSlot =
         activeSlot === "back" ||
         activeSlot === "passport" ||
-        isLicenseSlot(activeSlot);
+        isLicenseSlot(activeSlot) ||
+        isTechPassportSlot(activeSlot);
       const brightOk = softSlot
         ? meanBrightness > 28 && meanBrightness < 245
         : meanBrightness > 40 && meanBrightness < 230;
@@ -5395,7 +6329,7 @@
       const graceMs = softSlot ? 4000 : 2500;
 
       const guide =
-        activeSlot === "license-front"
+        activeSlot === "license-front" || activeSlot === "tech-front"
           ? {
               place: "Place the front side in the frame",
               hold: "Hold steady — keep the full document in the frame",
@@ -5407,23 +6341,29 @@
                 hold: "Hold steady — keep the QR code in the frame",
                 ready: "Back side looks good — ready to capture!",
               }
-            : activeSlot === "back"
+            : activeSlot === "tech-back"
               ? {
-                  place: "Place the back side in the frame (MRZ visible)",
-                  hold: "Hold steady — keep the MRZ strip in the frame",
-                  ready: "MRZ looks good — ready to capture!",
+                  place: "Place the back side in the frame",
+                  hold: "Hold steady — keep the full document in the frame",
+                  ready: "Back side looks good — ready to capture!",
                 }
-              : activeSlot === "passport"
+              : activeSlot === "back"
                 ? {
-                    place: "Place the passport data page in the frame (MRZ visible)",
+                    place: "Place the back side in the frame (MRZ visible)",
                     hold: "Hold steady — keep the MRZ strip in the frame",
                     ready: "MRZ looks good — ready to capture!",
                   }
-                : {
-                    place: "Place the document in the frame",
-                    hold: "Hold steady — keep the full document in the frame",
-                    ready: "Document looks good — ready to capture!",
-                  };
+                : activeSlot === "passport"
+                  ? {
+                      place: "Place the passport data page in the frame (MRZ visible)",
+                      hold: "Hold steady — keep the MRZ strip in the frame",
+                      ready: "MRZ looks good — ready to capture!",
+                    }
+                  : {
+                      place: "Place the document in the frame",
+                      hold: "Hold steady — keep the full document in the frame",
+                      ready: "Document looks good — ready to capture!",
+                    };
 
       const setNotReady = (msg) => {
         // Keep Capture tappable briefly so a flicker doesn't eat the tap
@@ -5507,7 +6447,69 @@
       return await res.json();
     }
 
+    async function fetchTechPassportSideCheck(blob, side) {
+      const formData = new FormData();
+      formData.append("image", blob, "capture.jpg");
+      formData.append("side", side);
+      const res = await fetch(`${window.location.origin}/check-tech-passport-side`, {
+        method: "POST",
+        body: formData,
+      });
+      if (res.status === 404) {
+        const err = new Error("check-tech-passport-side missing (restart server)");
+        err.code = "ENDPOINT_MISSING";
+        throw err;
+      }
+      if (!res.ok) {
+        throw new Error(`check-tech-passport-side failed: ${res.status}`);
+      }
+      return await res.json();
+    }
+
     async function validateCapturedSide(slot, blob) {
+      // Tech passport: dedicated checks only — do not run ID/license/passport rules
+      if (isTechPassportSlot(slot)) {
+        const techSide = slot === "tech-back" ? "back" : "front";
+        const rejectTech = (msg) => {
+          const text = String(msg || TECH_PASSPORT_SIDE_ERROR);
+          readinessStatus.textContent = text;
+          readinessStatus.className = "status-badge is-visible";
+          showTechPassportUploadError(text);
+          return false;
+        };
+        try {
+          clearTechPassportUploadError();
+          const sideData = await fetchTechPassportSideCheck(blob, techSide);
+          if (sideData && sideData.ok === false) {
+            return rejectTech(sideData.error || TECH_PASSPORT_SIDE_ERROR);
+          }
+          return true;
+        } catch (e) {
+          console.warn("tech passport side check failed, using fallback:", e);
+          // Fallback when /check-tech-passport-side is missing:
+          // any side → reject MRZ; front → also reject face.
+          try {
+            try {
+              const mrzData = await fetchMrzCheck(blob);
+              if (mrzData && (mrzData.has_mrz || mrzData.has_td3)) {
+                return rejectTech(TECH_PASSPORT_SIDE_ERROR);
+              }
+            } catch (_) { /* ignore */ }
+            if (techSide === "front") {
+              try {
+                const faceCheck = await fetchIdSideCheck(blob, "back");
+                if (faceCheck && faceCheck.ok === false) {
+                  return rejectTech(TECH_PASSPORT_SIDE_ERROR);
+                }
+              } catch (_) { /* ignore */ }
+            }
+          } catch (fallbackErr) {
+            console.warn("tech passport fallback check failed:", fallbackErr);
+          }
+          return true;
+        }
+      }
+
       const expected = isLicenseSlot(slot)
         ? "license"
         : slot === "passport"
@@ -5696,7 +6698,9 @@
         const validateBlob =
           slot === "passport"
             ? (final.cropped ? final.blob : originalBlob)
-            : final.blob;
+            : isTechPassportSlot(slot)
+              ? originalBlob
+              : final.blob;
         const ok = await validateCapturedSide(slot, validateBlob);
         if (!ok) {
           capturingNow = false;
@@ -6528,6 +7532,7 @@
       "Please upload front side of driver license";
     const LICENSE_BACK_SIDE_ERROR =
       "Please upload back side of driver license";
+    const TECH_PASSPORT_SIDE_ERROR = "Please upload tech passport";
 
     // The inline red banner replaces the generic rejection alert
     let inlineDocErrorShown = false;
@@ -6577,6 +7582,23 @@
 
     function clearLicenseUploadError() {
       const el = document.getElementById("license-upload-error");
+      if (!el) return;
+      el.textContent = "";
+      el.classList.remove("visible");
+      inlineDocErrorShown = false;
+    }
+
+    function showTechPassportUploadError(message = TECH_PASSPORT_SIDE_ERROR) {
+      const el = document.getElementById("tech-passport-upload-error");
+      if (!el) return;
+      el.textContent = message;
+      el.classList.add("visible");
+      inlineDocErrorShown = true;
+      el.scrollIntoView({ behavior: "smooth", block: "center" });
+    }
+
+    function clearTechPassportUploadError() {
+      const el = document.getElementById("tech-passport-upload-error");
       if (!el) return;
       el.textContent = "";
       el.classList.remove("visible");

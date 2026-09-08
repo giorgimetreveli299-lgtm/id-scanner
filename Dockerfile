@@ -18,7 +18,7 @@ RUN apt-get update \
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
-COPY main.py id_verifier.py passport_verifier.py license_verifier.py portrait_extract.py index.html ./
+COPY main.py id_verifier.py passport_verifier.py license_verifier.py tech_passport_verifier.py portrait_extract.py index.html ./
 COPY --from=node:20-bookworm-slim /usr/local/bin/node /usr/local/bin/node
 COPY --from=node:20-bookworm-slim /usr/local/bin/npx /usr/local/bin/npx
 COPY --from=node_deps /app/node_modules ./node_modules

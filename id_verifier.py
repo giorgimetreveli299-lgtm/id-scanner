@@ -7,6 +7,7 @@ from google.oauth2 import service_account
 
 _CREDENTIALS_PATH = Path(__file__).resolve().parent / "clientdocsocr.json"
 _vision_client = None
+_vision_face_client = None
 
 _LABEL_MAP = {
     "first_name": ["სახელი", "first name", "given name", "given names"],
@@ -65,6 +66,44 @@ def _get_vision_client() -> vision.ImageAnnotatorClient:
         else:
             _vision_client = vision.ImageAnnotatorClient(client_options=client_opts)
     return _vision_client
+
+
+def _get_vision_face_client() -> vision.ImageAnnotatorClient:
+    """
+    Face detection is not supported on eu-vision.googleapis.com.
+    Use the global Vision endpoint for FACE_DETECTION only.
+    """
+    global _vision_face_client
+    if _vision_face_client is None:
+        creds_path = os.environ.get("GOOGLE_APPLICATION_CREDENTIALS", str(_CREDENTIALS_PATH))
+        client_opts = {"api_endpoint": "vision.googleapis.com"}
+        if creds_path and Path(creds_path).is_file():
+            credentials = service_account.Credentials.from_service_account_file(creds_path)
+            _vision_face_client = vision.ImageAnnotatorClient(
+                credentials=credentials,
+                client_options=client_opts,
+            )
+        else:
+            _vision_face_client = vision.ImageAnnotatorClient(client_options=client_opts)
+    return _vision_face_client
+
+
+def image_has_face(image_bytes: bytes, min_confidence: float = 0.25) -> bool:
+    """True when Vision detects a person face/head (ID / license / passport photo)."""
+    try:
+        client = _get_vision_face_client()
+        image = vision.Image(content=image_bytes)
+        response = client.face_detection(image=image)
+        if response.error.message:
+            print("face detection API error:", ascii(response.error.message))
+            return False
+        for face in response.face_annotations or []:
+            conf = float(getattr(face, "detection_confidence", 0) or 0)
+            if conf >= min_confidence:
+                return True
+    except Exception as e:
+        print("face detection error:", ascii(str(e)))
+    return False
 
 
 def _word_bbox(word) -> tuple[float, float, float, float]:
