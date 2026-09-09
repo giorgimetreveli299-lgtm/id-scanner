@@ -88,8 +88,12 @@ def _get_vision_face_client() -> vision.ImageAnnotatorClient:
     return _vision_face_client
 
 
-def image_has_face(image_bytes: bytes, min_confidence: float = 0.25) -> bool:
-    """True when Vision detects a person face/head (ID / license / passport photo)."""
+def image_has_face(image_bytes: bytes, min_confidence: float = 0.35) -> bool:
+    """True when Vision detects a person face/head (ID / license / passport photo).
+
+    Threshold matches lib/vision.ts imageHasFace (0.35) so Python side-checks
+    (ID back, tech-passport front) are not more aggressive than the TS path.
+    """
     try:
         client = _get_vision_face_client()
         image = vision.Image(content=image_bytes)

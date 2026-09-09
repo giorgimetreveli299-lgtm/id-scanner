@@ -2175,18 +2175,25 @@
 
       const raw = String((data && data.qr_code_value) || "").trim();
       const cropUrl = String((data && data.qr_code_data_url) || "").trim();
-      if (!raw) {
+      if (!raw && !cropUrl) {
         clearTechPassportQrPanel();
         return;
       }
 
       techPassportQrPayload = raw;
       techQrExactByInput = {};
-      renderTechPassportQrView(raw, null);
-      toggle.disabled = false;
+      if (raw) {
+        renderTechPassportQrView(raw, null);
+        toggle.disabled = false;
+        panel.classList.remove("collapsed");
+        if (chev) chev.textContent = "▲";
+      } else {
+        rawEl.innerHTML = "";
+        toggle.disabled = true;
+        panel.classList.add("collapsed");
+        if (chev) chev.textContent = "▼";
+      }
       if (label) label.textContent = "QR ინფორმაცია";
-      panel.classList.remove("collapsed");
-      if (chev) chev.textContent = "▲";
       setLicenseImageSlot("tech-qr-slot", cropUrl, "QR");
       bindTechPassportQrBadgeInputs();
       updateTechPassportQrBadges();

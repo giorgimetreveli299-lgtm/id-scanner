@@ -116,7 +116,7 @@ async function buildPasses(
   srcH: number
 ): Promise<RgbaPass[]> {
   const passes: RgbaPass[] = [];
-  const scales = [1200, 900, 700];
+  const scales = [1600, 1200, 900, 700];
 
   for (const maxSide of scales) {
     const scale = Math.min(1, maxSide / Math.max(srcW, srcH));
@@ -150,7 +150,7 @@ async function buildPasses(
       });
     }
 
-    // Left 48% only — Georgian QR lives in the left column
+    // Left 48% — driver-license QR column
     const leftW = Math.max(1, Math.round(w * 0.48));
     const leftVariants = [
       sharp(imageBuffer)
@@ -172,6 +172,33 @@ async function buildPasses(
         width: info.width,
         height: info.height,
         toSrc: (x, y) => ({ x: x * inv, y: y * inv }),
+      });
+    }
+
+    // Right 48% — tech-passport QR column
+    const rightW = Math.max(1, Math.round(w * 0.48));
+    const rightLeft = Math.max(0, w - rightW);
+    const rightVariants = [
+      sharp(imageBuffer)
+        .resize(w, h, { fit: "fill" })
+        .extract({ left: rightLeft, top: 0, width: rightW, height: h }),
+      sharp(imageBuffer)
+        .resize(w, h, { fit: "fill" })
+        .extract({ left: rightLeft, top: 0, width: rightW, height: h })
+        .greyscale()
+        .normalize()
+        .sharpen(),
+    ];
+    for (const pipeline of rightVariants) {
+      const { data, info } = await pipeline
+        .ensureAlpha()
+        .raw()
+        .toBuffer({ resolveWithObject: true });
+      passes.push({
+        data,
+        width: info.width,
+        height: info.height,
+        toSrc: (x, y) => ({ x: x * inv + rightLeft * inv, y: y * inv }),
       });
     }
   }

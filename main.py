@@ -442,8 +442,11 @@ ID_FRONT_SIDE_ERROR = "Please upload front side of ID card"
 ID_BACK_SIDE_ERROR = "Please upload back side of ID card"
 
 
-def _image_has_face(image_bytes: bytes, min_confidence: float = 0.25) -> bool:
-    """True when Vision detects a person face (typical of ID front photo)."""
+def _image_has_face(image_bytes: bytes, min_confidence: float = 0.35) -> bool:
+    """True when Vision detects a person face (typical of ID front photo).
+
+    Default 0.35 matches id_verifier.image_has_face and lib/vision.ts.
+    """
     return image_has_face(image_bytes, min_confidence=min_confidence)
 
 

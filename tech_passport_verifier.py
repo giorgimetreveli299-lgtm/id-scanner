@@ -500,6 +500,54 @@ def _vehicle_text_value(value: str) -> str:
     return geo or raw
 
 
+# Multi-word / hyphenated makes — treat as one mark (never split into model).
+_MULTIWORD_MARKS: tuple[str, ...] = (
+    "MERCEDES-BENZ",
+    "LAND ROVER",
+    "ALFA ROMEO",
+    "ASTON MARTIN",
+    "ROLLS-ROYCE",
+    "RANGE ROVER",  # sometimes printed as make on older docs
+)
+
+
+def _mark_compact(value: str) -> str:
+    return re.sub(r"[\s\-]+", "", (value or "")).upper()
+
+
+def _normalize_mark(value: str) -> str:
+    """
+    Canonical make/mark. Mercedes-Benz is always one mark
+    (MERCEDES / MERCEDES BENZ / MERCEDES-BENZ → MERCEDES-BENZ).
+    """
+    raw = _vehicle_text_value(value) or _clean_value(value or "")
+    raw = re.sub(r"\s+", " ", raw).strip()
+    if not raw:
+        return ""
+    compact = _mark_compact(raw)
+    if compact in {"MERCEDES", "MERCEDESBENZ"} or compact.startswith("MERCEDESBENZ"):
+        return "MERCEDES-BENZ"
+    for known in _MULTIWORD_MARKS:
+        if _mark_compact(known) == compact:
+            return known
+    return raw
+
+
+def _resolve_mark_against_vehicle(vehicle: str, mark: str) -> str:
+    """
+    If QR/OCR vehicle text starts with a known multi-word make, use that full make
+    even when OCR only captured the first word (e.g. MERCEDES).
+    """
+    vehicle_n = re.sub(r"\s+", " ", (vehicle or "").strip())
+    veh_c = _mark_compact(vehicle_n)
+    if veh_c:
+        for known in sorted(_MULTIWORD_MARKS, key=lambda s: len(_mark_compact(s)), reverse=True):
+            kc = _mark_compact(known)
+            if kc and veh_c.startswith(kc):
+                return known
+    return _normalize_mark(mark)
+
+
 def _normalize_model(value: str, mark: str = "") -> str:
     """
     Fix common OCR errors in model codes.
@@ -1064,7 +1112,7 @@ def _parse_back_codes(
     out: dict[str, str] = {}
 
     if codes.get("D.1"):
-        out["mark"] = _vehicle_text_value(codes["D.1"])
+        out["mark"] = _normalize_mark(codes["D.1"])
     if codes.get("D.2"):
         out["type"] = _normalize_type(codes["D.2"])
     if codes.get("D.3"):
@@ -1250,6 +1298,8 @@ def _enrich_back(
     for key in ("mark", "model"):
         if data.get(key):
             data[key] = _vehicle_text_value(data[key]) or _clean_value(data[key])
+    if data.get("mark"):
+        data["mark"] = _normalize_mark(data["mark"])
     if data.get("model"):
         data["model"] = _normalize_model(data["model"], data.get("mark", ""))
 
@@ -1410,15 +1460,306 @@ def _decode_qr_node(image_bytes: bytes) -> tuple[str, str, float | None]:
         return "", "", None
 
 
-def decode_tech_passport_qr(back_bytes: bytes) -> dict:
-    """Decode QR from tech-passport back image."""
+def _tech_qr_right_crop_data_url(image_bytes: bytes) -> str:
+    """Heuristic crop of tech-passport QR (right column) for UI when decode fails."""
+    try:
+        img = Image.open(BytesIO(image_bytes)).convert("RGB")
+        w, h = img.size
+        if w < 40 or h < 40:
+            return ""
+        # Typical layout: QR sits in the right ~38% mid band
+        left = int(w * 0.58)
+        top = int(h * 0.12)
+        right = int(w * 0.99)
+        bottom = int(h * 0.88)
+        return _crop_xyxy_to_data_url(image_bytes, left, top, right, bottom, pad_frac=0.02)
+    except Exception:
+        return ""
+
+
+def _decode_qr_cv(image_bytes: bytes) -> tuple[str, str, float | None]:
+    """
+    OpenCV locate (+ optional zxing-cpp decode) for soft / right-side tech QR.
+    Returns payload when readable; otherwise crop + center_x when finder patterns found.
+    """
+    try:
+        import cv2  # type: ignore
+        import numpy as np  # type: ignore
+    except Exception:
+        return "", "", None
+
+    try:
+        arr = np.frombuffer(image_bytes, dtype=np.uint8)
+        im = cv2.imdecode(arr, cv2.IMREAD_COLOR)
+        if im is None:
+            return "", "", None
+        h, w = im.shape[:2]
+        det = cv2.QRCodeDetector()
+        zxingcpp = None
+        try:
+            import zxingcpp as _zxingcpp  # type: ignore
+
+            zxingcpp = _zxingcpp
+        except Exception:
+            pass
+
+        def _order_pts(pts: "np.ndarray") -> "np.ndarray":
+            pts = pts.reshape(4, 2).astype(np.float32)
+            s = pts.sum(axis=1)
+            d = np.diff(pts, axis=1).ravel()
+            tl, br = pts[np.argmin(s)], pts[np.argmax(s)]
+            tr, bl = pts[np.argmin(d)], pts[np.argmax(d)]
+            return np.array([tl, tr, br, bl], dtype=np.float32)
+
+        def _try_region(gray, x_off: float = 0.0) -> tuple[str, "np.ndarray | None"]:
+            data, pts, _ = det.detectAndDecode(gray)
+            if pts is None:
+                return "", None
+            pts = pts.reshape(4, 2).astype(np.float32)
+            pts[:, 0] += x_off
+            val = (data or "").strip()
+            if val:
+                return val, pts
+            if zxingcpp is not None:
+                ordered = _order_pts(pts)
+                for side in (300, 450, 650, 900):
+                    dst = np.array(
+                        [[0, 0], [side - 1, 0], [side - 1, side - 1], [0, side - 1]],
+                        dtype=np.float32,
+                    )
+                    M = cv2.getPerspectiveTransform(ordered, dst)
+                    warped = cv2.warpPerspective(im, M, (side, side))
+                    for arr2 in (
+                        warped,
+                        cv2.cvtColor(warped, cv2.COLOR_BGR2GRAY),
+                        cv2.createCLAHE(2.0, (8, 8)).apply(
+                            cv2.cvtColor(warped, cv2.COLOR_BGR2GRAY)
+                        ),
+                    ):
+                        try:
+                            hits = zxingcpp.read_barcodes(arr2)
+                        except Exception:
+                            hits = []
+                        for hit in hits or []:
+                            text = (getattr(hit, "text", None) or "").strip()
+                            if text:
+                                return text, pts
+            return "", pts
+
+        regions: list[tuple[object, float]] = [
+            (cv2.cvtColor(im, cv2.COLOR_BGR2GRAY), 0.0),
+        ]
+        ox = int(w * 0.52)
+        regions.append((cv2.cvtColor(im[:, ox:], cv2.COLOR_BGR2GRAY), float(ox)))
+
+        best_pts = None
+        for gray, x_off in regions:
+            val, pts = _try_region(gray, x_off)
+            if pts is not None and best_pts is None:
+                best_pts = pts
+            if val:
+                xs = best_pts[:, 0] if best_pts is not None else pts[:, 0]
+                ys = best_pts[:, 1] if best_pts is not None else pts[:, 1]
+                crop = _crop_xyxy_to_data_url(
+                    image_bytes, float(xs.min()), float(ys.min()), float(xs.max()), float(ys.max())
+                )
+                center_x = float((xs.min() + xs.max()) / 2.0) / float(w)
+                return val, crop, center_x
+
+        if best_pts is not None:
+            xs, ys = best_pts[:, 0], best_pts[:, 1]
+            crop = _crop_xyxy_to_data_url(
+                image_bytes, float(xs.min()), float(ys.min()), float(xs.max()), float(ys.max())
+            )
+            center_x = float((xs.min() + xs.max()) / 2.0) / float(w)
+            return "", crop, center_x
+    except Exception:
+        pass
+    return "", "", None
+
+
+def _reconstruct_tech_qr_payload(extracted: dict | None) -> str:
+    """
+    Build tech QR text from OCR when the printed code is unreadable.
+    Format: PLATE/CARD/MARK MODEL… (same as physical QR).
+    """
+    data = extracted or {}
+    plate = str(data.get("registration_number") or "").strip()
+    card = str(data.get("card_number") or "").strip()
+    mark = _normalize_mark(str(data.get("mark") or ""))
+    model = re.sub(r"\s+", " ", str(data.get("model") or "").strip())
+    if not plate or not card or not mark:
+        return ""
+    vehicle = f"{mark} {model}".strip() if model else mark
+    return f"{plate}/{card}/{vehicle}"
+
+
+def decode_tech_passport_qr(
+    back_bytes: bytes,
+    extracted: dict | None = None,
+    *,
+    allow_reconstruct: bool = True,
+) -> dict:
+    """Decode QR from tech-passport back image; optionally OCR-reconstruct payload."""
     value, crop, _cx = _decode_qr_vision(back_bytes)
     if not value:
-        value, crop, _cx = _decode_qr_node(back_bytes)
+        v2, c2, _ = _decode_qr_node(back_bytes)
+        if v2:
+            value, crop = v2, c2 or crop
+        elif c2 and not crop:
+            crop = c2
+    if not value:
+        v3, c3, _ = _decode_qr_cv(back_bytes)
+        if v3:
+            value, crop = v3, c3 or crop
+        elif c3 and not crop:
+            crop = c3
+    if not crop:
+        crop = _tech_qr_right_crop_data_url(back_bytes)
+    if not value and allow_reconstruct:
+        value = _reconstruct_tech_qr_payload(extracted)
     return {
         "qr_code_value": value or "",
         "qr_code_data_url": crop or "",
     }
+
+
+def _qr_parts(qr_value: str) -> tuple[str, str, str]:
+    """
+    Tech-passport QR is always:
+      registration_number / card_number / mark model…
+    Returns (plate, card, vehicle_segment).
+    """
+    parts = [p.strip() for p in str(qr_value or "").split("/")]
+    if not parts or not any(parts):
+        return "", "", ""
+    plate = parts[0] if parts else ""
+    card = parts[1] if len(parts) > 1 else ""
+    vehicle = "/".join(parts[2:]).strip() if len(parts) > 2 else ""
+    return plate, card, vehicle
+
+
+def _qr_vehicle_segment(qr_value: str) -> str:
+    """Third slash-segment of tech QR: 'PLATE/CARD/MARK MODEL…' → 'MARK MODEL…'."""
+    return _qr_parts(qr_value)[2]
+
+
+def _ocr_missing_or_truncated(current: str | None, qr_val: str) -> bool:
+    """True when the document field is empty or only a truncated fragment of the QR value."""
+    q = re.sub(r"[\s\-]+", "", str(qr_val or "")).upper()
+    if not q:
+        return False
+    c = re.sub(r"[\s\-]+", "", str(current or "")).upper()
+    if not c:
+        return True
+    if c == q:
+        return False
+    # Partial OCR (e.g. A9826152 vs AJA9826152)
+    if c in q and len(q) > len(c):
+        return True
+    return False
+
+
+def _mark_model_from_vehicle(vehicle: str, hint_mark: str = "") -> tuple[str, str]:
+    """Split QR vehicle segment into (mark, model); multi-word makes stay in mark."""
+    vehicle_n = re.sub(r"\s+", " ", (vehicle or "").strip())
+    if not vehicle_n:
+        return "", ""
+    hint = str(hint_mark or "").strip()
+    mark = _resolve_mark_against_vehicle(vehicle_n, hint)
+    if not mark:
+        words = vehicle_n.split()
+        mark = _normalize_mark(words[0]) or words[0]
+    model = _model_from_qr_after_mark(f"_/_/{vehicle_n}", mark)
+    return mark, model
+
+
+def _model_from_qr_after_mark(qr_value: str, mark: str) -> str:
+    """
+    Everything in the QR after the mark goes into model.
+    e.g. QR '…/FORD FUSION' + mark 'FORD' → 'FUSION'
+         QR '…/LAND ROVER RANGE ROVER' + mark 'LAND ROVER' → 'RANGE ROVER'
+         QR '…/MERCEDES-BENZ GLA 250' + mark 'MERCEDES-BENZ' → 'GLA 250'
+    """
+    vehicle = _qr_vehicle_segment(qr_value)
+    mark_raw = re.sub(r"\s+", " ", (mark or "").strip())
+    if not vehicle or not mark_raw:
+        return ""
+    vehicle_n = re.sub(r"\s+", " ", vehicle).strip()
+    # Match mark as whole tokens; hyphens in mark may be spaces in OCR/QR
+    mark_words = re.split(r"[\s\-]+", mark_raw)
+    mark_words = [w for w in mark_words if w]
+    if not mark_words:
+        return ""
+    pat = re.compile(
+        r"^" + r"[\s\-]+".join(re.escape(w) for w in mark_words) + r"(?:[\s\-]+|$)(.*)$",
+        re.I,
+    )
+    m = pat.match(vehicle_n)
+    if m:
+        return (m.group(1) or "").strip()
+    # Compact fallback: strip mark letters ignoring spaces/hyphens
+    mark_c = _mark_compact(mark_raw)
+    veh_c = _mark_compact(vehicle_n)
+    if mark_c and veh_c.startswith(mark_c) and len(veh_c) > len(mark_c):
+        idx = 0
+        need = len(mark_c)
+        seen = 0
+        while idx < len(vehicle_n) and seen < need:
+            ch = vehicle_n[idx]
+            if ch not in " \t-":
+                seen += 1
+            idx += 1
+        return vehicle_n[idx:].lstrip(" -").strip()
+    return ""
+
+
+def _apply_qr_fields(extracted: dict, qr_value: str) -> dict:
+    """
+    Tech QR order is always: registration / document (card) / mark model.
+    If OCR missed (or truncated) a cell, fill it from the matching QR segment.
+    """
+    data = dict(extracted or {})
+    plate, card, vehicle = _qr_parts(qr_value)
+    if not plate and not card and not vehicle:
+        return data
+
+    if plate and _ocr_missing_or_truncated(data.get("registration_number"), plate):
+        data["registration_number"] = _normalize_plate(plate)
+
+    if card and _ocr_missing_or_truncated(data.get("card_number"), card):
+        data["card_number"] = re.sub(r"\s+", "", card).upper()
+
+    if not vehicle:
+        return data
+
+    mark_qr, model_qr = _mark_model_from_vehicle(vehicle, str(data.get("mark") or ""))
+    cur_mark = str(data.get("mark") or "").strip()
+    if mark_qr:
+        if not cur_mark or _ocr_missing_or_truncated(cur_mark, mark_qr):
+            data["mark"] = mark_qr
+        else:
+            # Upgrade incomplete make from QR (MERCEDES → MERCEDES-BENZ)
+            resolved = _resolve_mark_against_vehicle(vehicle, cur_mark)
+            if resolved and _mark_compact(resolved) != _mark_compact(cur_mark):
+                data["mark"] = resolved
+
+    mark_final = str(data.get("mark") or mark_qr or "").strip()
+    if mark_final:
+        model_qr = _model_from_qr_after_mark(qr_value, mark_final) or model_qr
+
+    cur_model = str(data.get("model") or "").strip()
+    if model_qr:
+        if not cur_model or _ocr_missing_or_truncated(cur_model, model_qr):
+            data["model"] = _normalize_model(model_qr, mark_final)
+        elif _mark_compact(cur_model) != _mark_compact(model_qr):
+            cur_c = _mark_compact(cur_model)
+            mark_tokens = [t for t in re.split(r"[\s\-]+", mark_final) if t]
+            leaked = any(cur_c.startswith(_mark_compact(t)) for t in mark_tokens[1:])
+            if cur_c == _mark_compact(vehicle) or leaked:
+                data["model"] = _normalize_model(model_qr, mark_final)
+
+    return data
 
 
 TECH_PASSPORT_SIDE_ERROR = "Please upload tech passport"
@@ -1581,14 +1922,27 @@ def extract_tech_passport_info(front_bytes: bytes, back_bytes: bytes) -> dict:
                 back[k] = v
 
     extracted = {**front, **back}
-    filled = sum(1 for v in extracted.values() if str(v or "").strip())
 
-    qr = decode_tech_passport_qr(back_bytes)
-    # If back had no QR, try front (side swap)
+    qr = decode_tech_passport_qr(back_bytes, allow_reconstruct=False)
+    # If back had no QR payload, try front (side swap) before OCR reconstruction
     if not qr.get("qr_code_value") and front_bytes:
-        alt_qr = decode_tech_passport_qr(front_bytes)
+        alt_qr = decode_tech_passport_qr(front_bytes, allow_reconstruct=False)
         if alt_qr.get("qr_code_value"):
             qr = alt_qr
+        elif not qr.get("qr_code_data_url") and alt_qr.get("qr_code_data_url"):
+            qr = {**qr, "qr_code_data_url": alt_qr["qr_code_data_url"]}
+    if not qr.get("qr_code_value"):
+        rebuilt = _reconstruct_tech_qr_payload(extracted)
+        if rebuilt:
+            qr = {**qr, "qr_code_value": rebuilt}
+    if not qr.get("qr_code_data_url") and back_bytes:
+        crop = _tech_qr_right_crop_data_url(back_bytes)
+        if crop:
+            qr = {**qr, "qr_code_data_url": crop}
+
+    qr_value = qr.get("qr_code_value") or ""
+    extracted = _apply_qr_fields(extracted, qr_value)
+    filled = sum(1 for v in extracted.values() if str(v or "").strip())
 
     try:
         dump = {
@@ -1597,7 +1951,7 @@ def extract_tech_passport_info(front_bytes: bytes, back_bytes: bytes) -> dict:
             "back_codes": _collect_back_codes(back_text, back_lines, back_words),
             "front_lines": front_lines[:50],
             "back_lines": back_lines[:50],
-            "qr_code_value": qr.get("qr_code_value") or "",
+            "qr_code_value": qr_value,
         }
         Path(__file__).resolve().parent.joinpath("_last_tech_ocr.json").write_text(
             json.dumps(dump, ensure_ascii=False, indent=2),
@@ -1610,7 +1964,7 @@ def extract_tech_passport_info(front_bytes: bytes, back_bytes: bytes) -> dict:
         "ok": True,
         "extracted_data": extracted,
         "filled_count": filled,
-        "qr_code_value": qr.get("qr_code_value") or "",
+        "qr_code_value": qr_value,
         "qr_code_data_url": qr.get("qr_code_data_url") or "",
         "raw_text": {
             "front": front_text or "",
