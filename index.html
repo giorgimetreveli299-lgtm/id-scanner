@@ -1897,6 +1897,236 @@
       "tech-color",
     ];
 
+    /** KA/EN translation pairs in one input: "ქართული / English" */
+    const TECH_BILINGUAL_INPUT_IDS = [
+      "tech-owner-name",
+      "tech-owner-surname",
+      "tech-type",
+      "tech-fuel",
+      "tech-color",
+    ];
+
+    function techSplitBilingualPair(value) {
+      const raw = String(value || "");
+      const sep = raw.indexOf("/");
+      if (sep < 0) {
+        return { left: raw, right: "", hasSep: false };
+      }
+      return {
+        left: raw.slice(0, sep).replace(/\s+$/g, ""),
+        right: raw.slice(sep + 1).replace(/^\s+/g, ""),
+        hasSep: true,
+      };
+    }
+
+    function techJoinBilingualPair(left, right) {
+      const lt = String(left || "").trim();
+      const rt = String(right || "").trim();
+      if (lt && rt) return `${lt} / ${rt}`;
+      return lt || rt || "";
+    }
+
+    /** Inclusive [start, end] range removed from prev to get next; null if not a pure deletion. */
+    function techDeletedRange(prev, next) {
+      const p = String(prev || "");
+      const n = String(next || "");
+      if (n.length >= p.length) return null;
+      let start = 0;
+      while (start < n.length && start < p.length && p[start] === n[start]) start++;
+      let endP = p.length - 1;
+      let endN = n.length - 1;
+      while (endN >= start && endP >= start && p[endP] === n[endN]) {
+        endP--;
+        endN--;
+      }
+      if (start > endP) return null;
+      if (n.slice(start, endN + 1) !== "") return null;
+      return { start, end: endP, text: p.slice(start, endP + 1) };
+    }
+
+    /** Inclusive insert range in next relative to prev; null if not a pure insertion. */
+    function techInsertedRange(prev, next) {
+      const p = String(prev || "");
+      const n = String(next || "");
+      if (n.length <= p.length) return null;
+      let start = 0;
+      while (start < p.length && start < n.length && p[start] === n[start]) start++;
+      let endP = p.length - 1;
+      let endN = n.length - 1;
+      while (endP >= start && endN >= start && p[endP] === n[endN]) {
+        endP--;
+        endN--;
+      }
+      if (start > endN) return null;
+      if (p.slice(start, endP + 1) !== "") return null;
+      return { start, end: endN, text: n.slice(start, endN + 1) };
+    }
+
+    function techDeleteRange(str, start, end) {
+      const s = String(str || "");
+      if (!s || start >= s.length) return s;
+      const endClamped = Math.min(Math.max(end, start), s.length - 1);
+      return s.slice(0, start) + s.slice(endClamped + 1);
+    }
+
+    function techInsertAt(str, index, text) {
+      const s = String(str || "");
+      const t = String(text || "");
+      if (!t) return s;
+      const i = Math.max(0, Math.min(index, s.length));
+      return s.slice(0, i) + t + s.slice(i);
+    }
+
+    function techRememberBilingualSnapshots() {
+      TECH_BILINGUAL_INPUT_IDS.forEach((id) => {
+        const el = document.getElementById(id);
+        if (!el) return;
+        el._techBilPrev = el.value;
+        el._techBilRestore = [];
+      });
+    }
+
+    function techPushBilRestore(el, entry) {
+      if (!el._techBilRestore) el._techBilRestore = [];
+      el._techBilRestore.push(entry);
+    }
+
+    function techPopBilRestore(el, editSide, index, editText) {
+      const stack = el._techBilRestore;
+      if (!stack || !stack.length) return null;
+      for (let i = stack.length - 1; i >= 0; i--) {
+        const e = stack[i];
+        if (e.editSide !== editSide) continue;
+        if (e.index !== index) continue;
+        if (e.editText !== editText) continue;
+        stack.splice(i, 1);
+        return e;
+      }
+      return null;
+    }
+
+    function techApplyBilCaret(el, joined, lt, rt, caretSide, caretInSide) {
+      el.value = joined;
+      let pos = joined.length;
+      if (caretSide === "left") {
+        pos = Math.min(caretInSide, lt.length);
+      } else if (caretSide === "right") {
+        const prefix = lt && rt ? `${lt} / ` : "";
+        pos = prefix.length + Math.min(caretInSide, rt.length);
+      } else if (typeof el.selectionStart === "number") {
+        pos = Math.min(el.selectionStart, joined.length);
+      }
+      try {
+        el.setSelectionRange(pos, pos);
+      } catch (_) {
+        /* ignore */
+      }
+    }
+
+    /**
+     * KA and EN are translations:
+     * - delete on one side → delete same index on the other (remember for restore)
+     * - re-type the deleted letter(s) → restore the other side too
+     */
+    function techSyncBilingualPairOnInput(el) {
+      if (!el || el.dataset.techBilSkip === "1") {
+        if (el) {
+          el._techBilPrev = el.value;
+          el._techBilRestore = [];
+        }
+        return;
+      }
+      const prevRaw = el._techBilPrev != null ? String(el._techBilPrev) : "";
+      const curRaw = String(el.value || "");
+      const prev = techSplitBilingualPair(prevRaw);
+      const cur = techSplitBilingualPair(curRaw);
+
+      if (!prev.hasSep || !cur.hasSep) {
+        el._techBilPrev = curRaw;
+        return;
+      }
+
+      let left = cur.left;
+      let right = cur.right;
+      let caretSide = null;
+      let caretInSide = 0;
+      let changed = false;
+
+      const delRight = techDeletedRange(prev.right, cur.right);
+      const delLeft = techDeletedRange(prev.left, cur.left);
+      const insRight = techInsertedRange(prev.right, cur.right);
+      const insLeft = techInsertedRange(prev.left, cur.left);
+
+      if (delRight && prev.right.length > cur.right.length) {
+        const otherText = prev.left.slice(delRight.start, delRight.end + 1);
+        techPushBilRestore(el, {
+          editSide: "right",
+          index: delRight.start,
+          editText: delRight.text,
+          otherText,
+        });
+        left = techDeleteRange(prev.left, delRight.start, delRight.end);
+        right = cur.right;
+        caretSide = "right";
+        caretInSide = delRight.start;
+        changed = true;
+      } else if (delLeft && prev.left.length > cur.left.length) {
+        const otherText = prev.right.slice(delLeft.start, delLeft.end + 1);
+        techPushBilRestore(el, {
+          editSide: "left",
+          index: delLeft.start,
+          editText: delLeft.text,
+          otherText,
+        });
+        right = techDeleteRange(prev.right, delLeft.start, delLeft.end);
+        left = cur.left;
+        caretSide = "left";
+        caretInSide = delLeft.start;
+        changed = true;
+      } else if (insRight && cur.right.length > prev.right.length) {
+        const hit = techPopBilRestore(el, "right", insRight.start, insRight.text);
+        right = cur.right;
+        left = cur.left;
+        if (hit && hit.otherText) {
+          left = techInsertAt(prev.left, hit.index, hit.otherText);
+          changed = true;
+        }
+        caretSide = "right";
+        caretInSide = insRight.end + 1;
+      } else if (insLeft && cur.left.length > prev.left.length) {
+        const hit = techPopBilRestore(el, "left", insLeft.start, insLeft.text);
+        left = cur.left;
+        right = cur.right;
+        if (hit && hit.otherText) {
+          right = techInsertAt(prev.right, hit.index, hit.otherText);
+          changed = true;
+        }
+        caretSide = "left";
+        caretInSide = insLeft.end + 1;
+      }
+
+      const lt = String(left || "").trim();
+      const rt = String(right || "").trim();
+      const joined = techJoinBilingualPair(lt, rt);
+      if (changed && joined !== curRaw) {
+        techApplyBilCaret(el, joined, lt, rt, caretSide, caretInSide);
+      }
+      el._techBilPrev = el.value;
+    }
+
+    function bindTechBilingualPairInputs() {
+      TECH_BILINGUAL_INPUT_IDS.forEach((id) => {
+        const el = document.getElementById(id);
+        if (!el || el.dataset.techBilBound === "1") return;
+        el.dataset.techBilBound = "1";
+        el._techBilPrev = el.value;
+        el._techBilRestore = [];
+        el.addEventListener("input", () => techSyncBilingualPairOnInput(el));
+      });
+    }
+
+    bindTechBilingualPairInputs();
+
     let techPassportQrPayload = "";
     /** Exact QR substrings locked per field — Checked only on character-identical match. */
     let techQrExactByInput = {};
@@ -2204,6 +2434,7 @@
         const el = document.getElementById(id);
         if (el) el.value = "";
       });
+      techRememberBilingualSnapshots();
       clearTechPassportQrPanel();
       document.getElementById("tech-passport-results")?.classList.remove("visible");
       const status = document.getElementById("tech-passport-ocr-status");
@@ -2334,8 +2565,11 @@
       Object.entries(TECH_PASSPORT_API_TO_INPUT).forEach(([apiKey, inputId]) => {
         const el = document.getElementById(inputId);
         if (!el) return;
+        el.dataset.techBilSkip = "1";
         el.value = String(ext[apiKey] || "").trim();
+        el.dataset.techBilSkip = "0";
       });
+      techRememberBilingualSnapshots();
       populateTechPassportQrPanel(data || {});
       updateTechPassportQrBadges();
       updateTechPassportResultsVisibility();
@@ -2349,6 +2583,7 @@
         const el = document.getElementById(id);
         if (el) el.value = "";
       });
+      techRememberBilingualSnapshots();
       clearTechPassportQrPanel();
       updateTechPassportResultsVisibility();
       status?.classList.add("visible");

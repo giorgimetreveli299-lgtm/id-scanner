@@ -891,15 +891,17 @@ def _collect_side_codes(
                     codes[key] = val
                     continue
 
-        # OCR frequently reads letter I as digit 1: "1 20/02/2025"
+        # Printed field code is Latin letter I; OCR often reads it as digit "1".
+        # Whatever sits beside that letter is the registration date (spaces or dots OK).
         one_as_i = re.match(
-            r"^\s*1[)\]]?[.)\-:]*\s+(\d{1,2}[./\-]\d{1,2}[./\-]\d{2,4}\S*)",
+            r"^\s*(?:1|I|l|\|)[)\]]?[.)\-:]*\s+(.+)$",
             stripped,
+            re.I,
         )
         if one_as_i and (not singles or "I" in singles):
-            val = _trim_code_value(one_as_i.group(1))
-            if val and _find_dates_in_text(val) and "I" not in codes:
-                codes["I"] = val
+            dates = _find_dates_in_text(one_as_i.group(1))
+            if dates and "I" not in codes:
+                codes["I"] = dates[0]
                 continue
 
         m = _LETTER_LINE_RE.match(stripped)
@@ -1012,31 +1014,64 @@ def _collect_front_codes(
         if val and key not in codes:
             codes[key] = val
 
-    # Fallbacks when I was OCR'd as 1 / missing from codes
+    # Registration date sits beside Latin letter I (OCR may show "1" instead of "I").
+    # C is only a rare fallback when I was not found.
     if "I" not in codes:
         for line in lines or []:
+            stripped = (line or "").strip()
+            if not stripped:
+                continue
+            # Strip the letter-code token first so "1" is never parsed as the day
             m = re.match(
-                r"^\s*(?:I|1|l|\|)[)\]]?[.)\-:]*\s+(\d{1,2}[./\-]\d{1,2}[./\-]\d{2,4}\S*)",
-                (line or "").strip(),
+                r"^\s*(?:I|1|l|\|)[)\]]?[.)\-:]*\s+(.+)$",
+                stripped,
+                re.I,
             )
-            if m and _find_dates_in_text(m.group(1)):
-                codes["I"] = _trim_code_value(m.group(1))
-                break
+            if m:
+                dates = _find_dates_in_text(m.group(1))
+                if dates:
+                    codes["I"] = dates[0]
+                    break
+            # Caption on same line (date may be left of the label)
+            if re.search(
+                r"რეგისტრაციის\s+თარიღ|date\s+of\s+registration|registration\s+date",
+                stripped,
+                re.I,
+            ):
+                # Drop a leading OCR "1"/I field mark before date hunt
+                beside = re.sub(
+                    r"^\s*(?:I|1|l|\|)[)\]]?[.)\-:]*\s+",
+                    "",
+                    stripped,
+                    count=1,
+                    flags=re.I,
+                )
+                dates = _find_dates_in_text(beside) or _find_dates_in_text(stripped)
+                if dates:
+                    codes["I"] = dates[0]
+                    break
     if "I" not in codes and words:
-        # Spatial: token "1" or "I" with a date word on the same row
+        # Spatial: Latin I (or OCR "1") with the date tokens to its right on the same row
         for w in words:
             tok = (w.get("text") or "").strip()
             if tok not in {"1", "I", "i", "l", "|"}:
                 continue
             cy, x2 = float(w["cy"]), float(w["x2"])
-            for o in words:
-                if float(o["cx"]) <= x2 - 2:
-                    continue
-                if abs(float(o["cy"]) - cy) > 14:
-                    continue
+            right = [
+                o
+                for o in words
+                if float(o["cx"]) > x2 - 2 and abs(float(o["cy"]) - cy) <= 14
+            ]
+            right.sort(key=lambda o: float(o["cx"]))
+            joined = " ".join((o.get("text") or "").strip() for o in right[:10])
+            dates = _find_dates_in_text(joined)
+            if dates:
+                codes["I"] = dates[0]
+                break
+            for o in right:
                 t = (o.get("text") or "").strip()
                 if _find_dates_in_text(t):
-                    codes["I"] = _trim_code_value(t)
+                    codes["I"] = _find_dates_in_text(t)[0]
                     break
             if "I" in codes:
                 break
@@ -1146,15 +1181,16 @@ def _parse_letter_codes(
     if codes.get("B"):
         out["production_year"] = _normalize_year(codes["B"])
 
-    # 3. Registration date ← (C); Georgian prints often use I for the same value
+    # 3. Registration date ← Latin letter I (value beside the letter); C only as fallback
     reg_date_raw = ""
-    bare_c = codes.get("C", "")
-    if bare_c and _find_dates_in_text(bare_c):
-        reg_date_raw = bare_c
-    elif codes.get("I") and _find_dates_in_text(codes["I"]):
+    if codes.get("I") and _find_dates_in_text(codes["I"]):
         reg_date_raw = codes["I"]
     elif codes.get("L") and _find_dates_in_text(codes["L"]):
         reg_date_raw = codes["L"]
+    else:
+        bare_c = codes.get("C", "")
+        if bare_c and _find_dates_in_text(bare_c):
+            reg_date_raw = bare_c
     if reg_date_raw:
         out["registration_date"] = _normalize_date(reg_date_raw)
 
@@ -1240,6 +1276,20 @@ def _enrich_front(
         data["production_year"] = _normalize_year(data["production_year"])
     if data.get("registration_date"):
         data["registration_date"] = _normalize_date(data["registration_date"])
+    if not data.get("registration_date"):
+        # Last resort: date on the same OCR line as the registration-date caption
+        for line in lines or []:
+            stripped = (line or "").strip()
+            if not re.search(
+                r"რეგისტრაციის\s+თარიღ|date\s+of\s+registration|registration\s+date",
+                stripped,
+                re.I,
+            ):
+                continue
+            dates = _find_dates_in_text(stripped)
+            if dates:
+                data["registration_date"] = dates[0]
+                break
     if data.get("expiration_date") is not None and data.get("expiration_date") != "":
         data["expiration_date"] = _normalize_expiry(data["expiration_date"])
     if data.get("owner_name"):

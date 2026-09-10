@@ -1,4 +1,6 @@
 _last_tech_ocr.json
+_debug*
+_qr_*
 debug_uploads/
 venv/
 __pycache__/
