@@ -843,7 +843,7 @@
     .btn-capture:disabled { opacity: 0.55; }
     .btn-upload { background: var(--lilac-deep); font-size: 16px; }
     .btn-upload:hover { background: #6d28d9; }
-    /* File Upload is local-test only — hidden on the live site */
+    /* Upload shown with Capture */
     body:not(.allow-file-upload) .btn-upload { display: none !important; }
     .btn-close { background: var(--danger); font-size: 16px; }
     .btn-close:hover { background: #9b2c22; }
@@ -1828,12 +1828,8 @@
     let capturingNow = false;
     let selectedMethod = null;
 
-    /** Upload buttons: localhost only. Live / LAN deploys are camera-only. */
-    function isLocalTestHost() {
-      const host = (window.location.hostname || "").toLowerCase();
-      return host === "localhost" || host === "127.0.0.1" || host === "[::1]" || host === "::1";
-    }
-    const ALLOW_FILE_UPLOAD = isLocalTestHost();
+    /** Upload available alongside Capture (quality path for scanners / gallery). */
+    const ALLOW_FILE_UPLOAD = true;
     if (ALLOW_FILE_UPLOAD) document.body.classList.add("allow-file-upload");
 
     function isLicenseSlot(slot) {
@@ -4239,7 +4235,7 @@
         const validateBlob =
           activeSlot === "passport"
             ? (final.cropped ? final.blob : originalBlob)
-            : isTechPassportSlot(activeSlot)
+            : isTechPassportSlot(activeSlot) || activeSlot === "front" || activeSlot === "back"
               ? originalBlob
               : final.blob;
         const ok = await validateCapturedSide(activeSlot, validateBlob);
@@ -6940,7 +6936,7 @@
         const validateBlob =
           slot === "passport"
             ? (final.cropped ? final.blob : originalBlob)
-            : isTechPassportSlot(slot)
+            : isTechPassportSlot(slot) || slot === "front" || slot === "back"
               ? originalBlob
               : final.blob;
         const ok = await validateCapturedSide(slot, validateBlob);

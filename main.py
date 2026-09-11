@@ -454,16 +454,19 @@ def validate_id_side(image_bytes: bytes, side: str) -> dict:
     """
     Capture/upload helper for ID card:
     - front: reject when TD1 MRZ is present (back side photo)
-    - back: reject when a person face is present (front side photo)
+    - back: accept when TD1 MRZ is present (ghost portrait on reverse is normal);
+      otherwise reject when a person face is present (front side photo)
     """
     side_norm = (side or "").strip().lower()
     if side_norm not in ("front", "back"):
         return {"ok": False, "error": "side must be front or back", "side": side_norm}
 
+    full_text, _lines, _words = ocr_image(image_bytes)
+    hint = _detect_doc_type(full_text)
+    has_mrz = bool(hint.get("has_mrz"))
+
     if side_norm == "front":
-        full_text, _lines, _words = ocr_image(image_bytes)
-        hint = _detect_doc_type(full_text)
-        if hint.get("has_mrz"):
+        if has_mrz:
             return {
                 "ok": False,
                 "error": ID_FRONT_SIDE_ERROR,
@@ -472,6 +475,15 @@ def validate_id_side(image_bytes: bytes, side: str) -> dict:
             }
         return {"ok": True, "side": side_norm, "has_mrz": False}
 
+    # Georgian ID reverse often has a small secondary portrait — MRZ wins.
+    if has_mrz:
+        return {
+            "ok": True,
+            "side": side_norm,
+            "has_mrz": True,
+            "has_face": False,
+        }
+
     has_face = _image_has_face(image_bytes)
     if has_face:
         return {
@@ -479,8 +491,9 @@ def validate_id_side(image_bytes: bytes, side: str) -> dict:
             "error": ID_BACK_SIDE_ERROR,
             "side": side_norm,
             "has_face": True,
+            "has_mrz": False,
         }
-    return {"ok": True, "side": side_norm, "has_face": False}
+    return {"ok": True, "side": side_norm, "has_face": False, "has_mrz": False}
 
 
 @app.post("/check-id-side")
