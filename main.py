@@ -28,6 +28,11 @@ from passport_verifier import (
 
 from license_verifier import extract_license_info, validate_license_side
 from tech_passport_verifier import extract_tech_passport_info, validate_tech_passport_side
+from car_photo_verifier import (
+    CAR_DOCUMENT_ERROR,
+    CAR_FRONT_ERROR,
+    validate_car_photo_angle,
+)
 
 BASE_DIR = Path(__file__).resolve().parent
 
@@ -513,6 +518,32 @@ async def check_id_side(
         print("check-id-side error:", ascii(str(e)))
         traceback.print_exc()
         return {"ok": False, "error": str(e), "side": (side or "").strip().lower()}
+
+
+@app.post("/check-car-photo-angle")
+async def check_car_photo_angle(
+    image: UploadFile = File(...),
+    angle: str = Form(...),
+):
+    """
+    Car photo guide helper:
+    - all angles: reject ID / passport / license / paper documents
+    - front: must look like a frontal vehicle shot
+    - other exterior angles: require a car subject
+    - engine / front-seat / back-seat / gearbox / vin / odometer: require vehicle-detail cues
+    """
+    try:
+        image_bytes = await image.read()
+        return validate_car_photo_angle(image_bytes, angle)
+    except Exception as e:
+        print("check-car-photo-angle error:", ascii(str(e)))
+        traceback.print_exc()
+        angle_norm = (angle or "").strip().lower()
+        return {
+            "ok": False,
+            "error": CAR_FRONT_ERROR if angle_norm in {"front", "car-front"} else CAR_DOCUMENT_ERROR,
+            "angle": angle_norm,
+        }
 
 
 @app.post("/check-license-side")

@@ -56,7 +56,14 @@
       color: var(--accent-dark);
       margin-top: 0;
     }
-    .step-hint { color: var(--muted); font-size: 14px; margin: 0 0 16px; }
+    .step-hint {
+      color: var(--muted);
+      font-size: 14px;
+      margin: 0 0 16px;
+      line-height: 1.55;
+      overflow: visible;
+      padding-bottom: 0.15em;
+    }
     .photo-slots {
       display: grid;
       grid-template-columns: 1fr 1fr;
@@ -144,6 +151,8 @@
     #license-view.visible { display: block; }
     #tech-passport-view { display: none; }
     #tech-passport-view.visible { display: block; }
+    #car-photo-view { display: none; }
+    #car-photo-view.visible { display: block; }
 
     .method-choice-card {
       text-align: center;
@@ -189,6 +198,7 @@
       gap: 8px;
       min-height: 120px;
       justify-content: center;
+      overflow: visible;
     }
     .method-box:hover {
       border-color: var(--accent);
@@ -200,16 +210,20 @@
       outline: 3px solid rgba(249, 115, 22, 0.35);
       outline-offset: 2px;
     }
+    .method-box-wide {
+      grid-column: 1 / -1;
+    }
     .method-box-title {
-      font-family: var(--font-display);
+      /* Syne clips descenders (g/p) at tight line-heights — use body face here */
+      font-family: var(--font-body);
       font-size: 1.35rem;
       font-weight: 700;
       color: var(--accent-dark);
-      letter-spacing: 0.02em;
-    }
-    .method-box-sub {
-      font-size: 13px;
-      color: var(--muted);
+      letter-spacing: 0.01em;
+      line-height: 1.5;
+      display: block;
+      overflow: visible;
+      padding: 0.1em 0;
     }
 
     /* Driver license — identification data */
@@ -547,6 +561,7 @@
     #scanner-view .slot-box img.license-zoomable,
     #passport-view .slot-box img.license-zoomable,
     #tech-passport-view .slot-box img.license-zoomable,
+    #car-photo-view .slot-box img.license-zoomable,
     #results-card .pdf-photos img.license-zoomable {
       cursor: zoom-in;
     }
@@ -555,6 +570,170 @@
       background: #fff;
       aspect-ratio: 85.6 / 54;
       max-height: none;
+    }
+    #car-photo-view .slot-box img {
+      background: #0f172a;
+      aspect-ratio: 4 / 3;
+      max-height: none;
+      object-fit: contain;
+    }
+    .car-shoot-field {
+      width: 100%;
+      min-height: 340px;
+      padding: 28px 22px 24px;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      gap: 16px;
+    }
+    .car-shoot-field h4 {
+      margin: 0;
+      font-size: 1.15rem;
+      font-family: var(--font-body);
+      font-weight: 700;
+      color: var(--accent-dark);
+      line-height: 1.5;
+    }
+    .car-shoot-actions {
+      display: flex;
+      gap: 12px;
+      justify-content: center;
+      flex-wrap: wrap;
+    }
+    .car-shoot-actions .btn {
+      font-size: 17px;
+      padding: 14px 28px;
+      min-width: 148px;
+    }
+    .car-shoot-field img#img-car-active,
+    .car-shoot-field img.car-seat-img {
+      width: min(100%, 640px);
+      max-height: 360px;
+      margin-top: 4px;
+      border-radius: 10px;
+    }
+    .car-interior-grid {
+      display: none;
+      width: 100%;
+      grid-template-columns: 1fr 1fr;
+      gap: 14px;
+      margin-top: 0;
+    }
+    .car-interior-grid.visible {
+      display: grid;
+    }
+    .car-interior-heading {
+      display: none;
+      margin: 0 0 12px;
+      text-align: center;
+      font-size: 1.15rem;
+      font-family: var(--font-body);
+      font-weight: 700;
+      color: var(--accent-dark);
+      line-height: 1.5;
+    }
+    .car-interior-heading.visible {
+      display: block;
+    }
+    .car-shoot-field-half {
+      min-height: 260px;
+      padding: 20px 14px 18px;
+    }
+    .car-shoot-field-half h4 {
+      font-size: 1.02rem;
+    }
+    .car-shoot-field-half .car-shoot-actions .btn {
+      font-size: 15px;
+      padding: 12px 18px;
+      min-width: 120px;
+    }
+    .car-shoot-field-half img.car-seat-img {
+      max-height: 220px;
+    }
+    .car-thumb-pair {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 3px;
+      width: 100%;
+      height: 58px;
+    }
+    .car-thumb-pair img,
+    .car-thumb-pair .car-thumb-empty {
+      width: 100%;
+      height: 58px;
+      margin: 0;
+    }
+    @media (max-width: 640px) {
+      .car-interior-grid.visible {
+        grid-template-columns: 1fr;
+      }
+    }
+    .car-photo-thumbs {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 10px;
+      margin-top: 14px;
+      justify-content: center;
+    }
+    .car-thumb {
+      appearance: none;
+      -webkit-appearance: none;
+      width: 92px;
+      min-width: 92px;
+      flex: 0 0 auto;
+      border: 1px solid rgba(124, 58, 237, 0.22);
+      border-radius: 10px;
+      padding: 6px;
+      background: #fff;
+      text-align: center;
+      cursor: pointer;
+      font: inherit;
+      color: inherit;
+      transition: border-color 0.2s, box-shadow 0.2s, background 0.2s;
+    }
+    .car-thumb.is-active {
+      border-color: var(--accent);
+      background: #fff7ed;
+      box-shadow: 0 0 0 2px rgba(249, 115, 22, 0.22);
+    }
+    .car-thumb.is-done {
+      border-color: var(--ok);
+      background: #f0faf4;
+    }
+    .car-thumb-label {
+      display: block;
+      font-size: 11px;
+      font-weight: 600;
+      color: #555;
+      margin: 0 0 4px;
+      line-height: 1.3;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+    .car-thumb.is-active .car-thumb-label {
+      color: var(--accent-dark);
+    }
+    .car-thumb img {
+      display: block;
+      width: 100%;
+      height: 58px;
+      object-fit: cover;
+      border-radius: 6px;
+      background: #0f172a;
+      cursor: zoom-in;
+    }
+    .car-thumb-empty {
+      display: flex;
+      width: 100%;
+      height: 58px;
+      border-radius: 6px;
+      background: #f1f5f9;
+      align-items: center;
+      justify-content: center;
+      color: #94a3b8;
+      font-size: 11px;
     }
 
     .tech-passport-results {
@@ -772,6 +951,46 @@
     .video-container.passport-aspect {
       aspect-ratio: 125 / 88;
     }
+    .video-container.car-aspect {
+      aspect-ratio: 4 / 3;
+      max-width: 720px;
+    }
+    .id-frame.car-mode {
+      width: 92%;
+      height: 88%;
+      border-radius: 12px;
+      border-style: dashed;
+    }
+
+    .car-photo-actions {
+      display: flex;
+      gap: 10px;
+      justify-content: center;
+      flex-wrap: wrap;
+      margin-top: 18px;
+    }
+    .car-photo-actions .btn {
+      font-size: 15px;
+      padding: 12px 20px;
+    }
+    .car-photo-actions .btn:disabled {
+      opacity: 0.55;
+      cursor: not-allowed;
+    }
+    .car-upload-error {
+      display: none;
+      margin: 0 0 12px;
+      padding: 10px 12px;
+      border-radius: 8px;
+      background: #fef2f2;
+      border: 1px solid #fecaca;
+      color: #991b1b;
+      font-size: 14px;
+      font-weight: 600;
+      line-height: 1.4;
+      text-align: center;
+    }
+    .car-upload-error.visible { display: block; }
     .photo-slots.single {
       grid-template-columns: 1fr;
       max-width: 420px;
@@ -1204,19 +1423,18 @@
       <div class="method-options">
         <button type="button" class="method-box" onclick="selectMethod('id')">
           <span class="method-box-title">ID</span>
-          <span class="method-box-sub">ID card</span>
         </button>
         <button type="button" class="method-box" onclick="selectMethod('passport')">
           <span class="method-box-title">Passport</span>
-          <span class="method-box-sub">Passport</span>
         </button>
         <button type="button" class="method-box" onclick="selectMethod('license')">
           <span class="method-box-title">Driver License</span>
-          <span class="method-box-sub">Driver license</span>
         </button>
         <button type="button" class="method-box" onclick="selectMethod('tech-passport')">
           <span class="method-box-title">Tech passport</span>
-          <span class="method-box-sub">Tech passport</span>
+        </button>
+        <button type="button" class="method-box method-box-wide" onclick="selectMethod('car-photo')">
+          <span class="method-box-title">Car photo guide</span>
         </button>
       </div>
     </div>
@@ -1428,6 +1646,57 @@
             <button type="button" class="btn btn-tech-new" id="btn-tech-new" onclick="techPassportNewClient()">New Client</button>
             <button type="button" class="btn btn-tech-pdf" id="btn-tech-pdf" onclick="downloadTechPassportPDF()" disabled>Download PDF</button>
           </div>
+        </div>
+      </div>
+    </div>
+
+    <div id="car-photo-view">
+      <div class="card">
+        <button type="button" class="view-back" onclick="carPhotoNewClient()">← Back</button>
+        <h2>Car photo guide</h2>
+        <p class="step-hint" id="car-photo-step-hint">
+          Capture or upload the current vehicle angle.
+        </p>
+        <div
+          class="car-upload-error"
+          id="car-upload-error"
+          role="alert"
+          aria-live="assertive"
+        ></div>
+        <h3 class="car-interior-heading" id="car-interior-heading">6. Interior</h3>
+        <div class="slot-box car-shoot-field" id="slot-car-active">
+          <h4 id="car-photo-current-label">1. Front</h4>
+          <div class="slot-actions car-shoot-actions">
+            <button type="button" class="btn" id="btn-car-capture" onclick="openCarPhotoCamera()">Capture</button>
+            <button type="button" class="btn btn-upload" id="btn-car-upload" onclick="triggerCarPhotoUpload()">Upload</button>
+            <button type="button" class="btn btn-cancel" id="btn-car-cancel" onclick="cancelCurrentCarPhoto()">Cancel</button>
+          </div>
+          <img id="img-car-active" class="license-zoomable" alt="Current car photo">
+        </div>
+        <div class="car-interior-grid" id="car-interior-stage" aria-label="Interior seats">
+          <div class="slot-box car-shoot-field car-shoot-field-half" id="slot-car-front-seat">
+            <h4>Front seat</h4>
+            <div class="slot-actions car-shoot-actions">
+              <button type="button" class="btn" onclick="openCarPhotoCamera('car-front-seat')">Capture</button>
+              <button type="button" class="btn btn-upload" onclick="triggerCarPhotoUpload('car-front-seat')">Upload</button>
+              <button type="button" class="btn btn-cancel" id="btn-car-front-seat-cancel" onclick="cancelSlotPhoto('car-front-seat')">Cancel</button>
+            </div>
+            <img id="img-car-front-seat" class="license-zoomable car-seat-img" alt="Front seat">
+          </div>
+          <div class="slot-box car-shoot-field car-shoot-field-half" id="slot-car-back-seat">
+            <h4>Back seat</h4>
+            <div class="slot-actions car-shoot-actions">
+              <button type="button" class="btn" onclick="openCarPhotoCamera('car-back-seat')">Capture</button>
+              <button type="button" class="btn btn-upload" onclick="triggerCarPhotoUpload('car-back-seat')">Upload</button>
+              <button type="button" class="btn btn-cancel" id="btn-car-back-seat-cancel" onclick="cancelSlotPhoto('car-back-seat')">Cancel</button>
+            </div>
+            <img id="img-car-back-seat" class="license-zoomable car-seat-img" alt="Back seat">
+          </div>
+        </div>
+        <div class="car-photo-thumbs" id="car-photo-thumbs" aria-label="Captured car photos"></div>
+        <div class="car-photo-actions">
+          <button type="button" class="btn btn-tech-new" id="btn-car-new" onclick="carPhotoNewClient()">New client</button>
+          <button type="button" class="btn btn-tech-pdf" id="btn-car-pdf" onclick="downloadCarPhotoPDF()" disabled>Download PDF</button>
         </div>
       </div>
     </div>
@@ -1838,6 +2107,264 @@
 
     function isTechPassportSlot(slot) {
       return slot === "tech-front" || slot === "tech-back";
+    }
+
+    function isCarPhotoSlot(slot) {
+      return typeof slot === "string" && slot.startsWith("car-");
+    }
+
+    const CAR_PHOTO_SLOTS = [
+      { id: "car-front", title: "Front" },
+      { id: "car-rear", title: "Rear" },
+      { id: "car-left", title: "Left side" },
+      { id: "car-right", title: "Right side" },
+      { id: "car-engine", title: "Engine" },
+      {
+        id: "car-interior",
+        title: "Interior",
+        children: [
+          { id: "car-front-seat", title: "Front seat" },
+          { id: "car-back-seat", title: "Back seat" },
+        ],
+      },
+      { id: "car-gearbox", title: "Gearbox" },
+      { id: "car-vin", title: "VIN" },
+      { id: "car-odometer", title: "Odometer" },
+    ];
+
+    const carPhotoBlobs = {};
+    const carPhotoDataUrls = {};
+    let carPhotoStepIndex = 0;
+
+    function carPhotoLeafSlots() {
+      const out = [];
+      CAR_PHOTO_SLOTS.forEach((step) => {
+        if (step.children && step.children.length) out.push(...step.children);
+        else out.push(step);
+      });
+      return out;
+    }
+
+    function carPhotoStepFilled(step) {
+      if (!step) return false;
+      if (step.children && step.children.length) {
+        return step.children.every(({ id }) => Boolean(carPhotoDataUrls[id]));
+      }
+      return Boolean(carPhotoDataUrls[step.id]);
+    }
+
+    function carPhotoStepIndexForSlot(slot) {
+      return CAR_PHOTO_SLOTS.findIndex((step) => {
+        if (step.id === slot) return true;
+        return Boolean(step.children?.some((c) => c.id === slot));
+      });
+    }
+
+    function currentCarPhotoSlot() {
+      const step = CAR_PHOTO_SLOTS[carPhotoStepIndex] || CAR_PHOTO_SLOTS[0];
+      if (step?.children?.length) {
+        const empty = step.children.find(({ id }) => !carPhotoDataUrls[id]);
+        return (empty || step.children[0]).id;
+      }
+      return step ? step.id : "car-front";
+    }
+
+    function setCarPhotoStep(index) {
+      carPhotoStepIndex = Math.max(0, Math.min(CAR_PHOTO_SLOTS.length - 1, index));
+      refreshCarPhotoStage();
+    }
+
+    function refreshCarPhotoStage() {
+      const step = CAR_PHOTO_SLOTS[carPhotoStepIndex] || CAR_PHOTO_SLOTS[0];
+      const isInterior = Boolean(step?.children?.length);
+      const single = document.getElementById("slot-car-active");
+      const interior = document.getElementById("car-interior-stage");
+      const interiorHeading = document.getElementById("car-interior-heading");
+
+      if (single) single.style.display = isInterior ? "none" : "";
+      if (interior) interior.classList.toggle("visible", isInterior);
+      if (interiorHeading) {
+        interiorHeading.textContent = step
+          ? `${carPhotoStepIndex + 1}. ${step.title}`
+          : "Interior";
+        interiorHeading.classList.toggle("visible", isInterior);
+      }
+
+      if (!isInterior) {
+        const label = document.getElementById("car-photo-current-label");
+        if (label && step) {
+          label.textContent = `${carPhotoStepIndex + 1}. ${step.title}`;
+        }
+        const activeImg = document.getElementById("img-car-active");
+        const url = step ? carPhotoDataUrls[step.id] : "";
+        if (activeImg) {
+          if (url) {
+            activeImg.src = url;
+            activeImg.style.display = "block";
+          } else {
+            activeImg.src = "";
+            activeImg.style.display = "none";
+          }
+        }
+        if (single) single.classList.toggle("done", Boolean(url));
+        const cancelBtn = document.getElementById("btn-car-cancel");
+        if (cancelBtn) cancelBtn.style.display = url ? "inline-block" : "none";
+      } else {
+        (step.children || []).forEach(({ id }) => {
+          const url = carPhotoDataUrls[id] || "";
+          const img = document.getElementById(`img-${id}`);
+          const box = document.getElementById(`slot-${id}`);
+          const cancelBtn = document.getElementById(`btn-${id}-cancel`);
+          if (img) {
+            if (url) {
+              img.src = url;
+              img.style.display = "block";
+            } else {
+              img.src = "";
+              img.style.display = "none";
+            }
+          }
+          if (box) box.classList.toggle("done", Boolean(url));
+          if (cancelBtn) cancelBtn.style.display = url ? "inline-block" : "none";
+        });
+      }
+
+      renderCarPhotoThumbs();
+      updateCarPhotoStepHint();
+      updateCarPhotoActionButtons();
+    }
+
+    function renderCarPhotoThumbs() {
+      const host = document.getElementById("car-photo-thumbs");
+      if (!host) return;
+      host.innerHTML = CAR_PHOTO_SLOTS.map((step, idx) => {
+        const active = idx === carPhotoStepIndex ? " is-active" : "";
+        const done = carPhotoStepFilled(step) ? " is-done" : "";
+        let media = "";
+        if (step.children?.length) {
+          const cells = step.children
+            .map(({ id, title }) => {
+              const url = carPhotoDataUrls[id] || "";
+              return url
+                ? `<img class="license-zoomable" src="${url}" alt="${title}">`
+                : `<div class="car-thumb-empty">—</div>`;
+            })
+            .join("");
+          media = `<div class="car-thumb-pair">${cells}</div>`;
+        } else {
+          const url = carPhotoDataUrls[step.id] || "";
+          media = url
+            ? `<img class="license-zoomable" src="${url}" alt="${step.title}">`
+            : `<div class="car-thumb-empty">—</div>`;
+        }
+        return `<button type="button" class="car-thumb${active}${done}" onclick="setCarPhotoStep(${idx})" title="${step.title}">
+          <span class="car-thumb-label">${idx + 1}. ${step.title}</span>
+          ${media}
+        </button>`;
+      }).join("");
+    }
+
+    function resetCarPhotoGuide() {
+      carPhotoLeafSlots().forEach(({ id }) => {
+        delete carPhotoBlobs[id];
+        delete carPhotoDataUrls[id];
+      });
+      carPhotoStepIndex = 0;
+      clearCarUploadError();
+      refreshCarPhotoStage();
+    }
+
+    function updateCarPhotoStepHint() {
+      const hint = document.getElementById("car-photo-step-hint");
+      if (!hint) return;
+      const leaves = carPhotoLeafSlots();
+      const filled = leaves.filter(({ id }) => carPhotoDataUrls[id]).length;
+      const total = leaves.length;
+      const step = CAR_PHOTO_SLOTS[carPhotoStepIndex];
+      if (!step) return;
+      if (filled === total) {
+        hint.textContent = "All photos are ready. Download the PDF when finished.";
+        return;
+      }
+      if (step.children?.length) {
+        const seatFilled = step.children.filter(({ id }) => carPhotoDataUrls[id]).length;
+        if (seatFilled === step.children.length) {
+          hint.textContent = `Interior saved (${filled}/${total}). Select another angle or continue.`;
+        } else {
+          hint.textContent = ALLOW_FILE_UPLOAD
+            ? `Interior: capture or upload Front seat and Back seat (${filled}/${total}).`
+            : `Interior: capture Front seat and Back seat (${filled}/${total}).`;
+        }
+        return;
+      }
+      if (carPhotoDataUrls[step.id]) {
+        hint.textContent = `${step.title} saved (${filled}/${total}). Select another angle or continue.`;
+      } else {
+        hint.textContent = ALLOW_FILE_UPLOAD
+          ? `Now capture or upload: ${step.title} (${filled}/${total}).`
+          : `Now capture: ${step.title} (${filled}/${total}).`;
+      }
+    }
+
+    function updateCarPhotoActionButtons() {
+      const pdfBtn = document.getElementById("btn-car-pdf");
+      if (!pdfBtn) return;
+      pdfBtn.disabled = !carPhotoLeafSlots().every(({ id }) => carPhotoDataUrls[id]);
+    }
+
+    function advanceCarPhotoStep() {
+      const nextEmpty = CAR_PHOTO_SLOTS.findIndex((step) => !carPhotoStepFilled(step));
+      if (nextEmpty >= 0) carPhotoStepIndex = nextEmpty;
+      refreshCarPhotoStage();
+    }
+
+    function openCarPhotoCamera(slot) {
+      openCamera(slot || currentCarPhotoSlot());
+    }
+
+    function triggerCarPhotoUpload(slot) {
+      triggerUpload(slot || currentCarPhotoSlot());
+    }
+
+    function cancelCurrentCarPhoto() {
+      cancelSlotPhoto(currentCarPhotoSlot());
+    }
+
+    function carPhotoNewClient() {
+      resetCarPhotoGuide();
+      showMethodChoice();
+    }
+
+    async function downloadCarPhotoPDF() {
+      const leaves = carPhotoLeafSlots();
+      const missing = leaves.filter(({ id }) => !carPhotoDataUrls[id]);
+      if (missing.length) {
+        alert("Capture or upload all car photo angles first.");
+        return;
+      }
+      const JsPDF = await ensureJsPDF();
+      if (!JsPDF) {
+        alert("PDF library failed to load. Check your internet and try again.");
+        return;
+      }
+      try {
+        const pdf = new JsPDF({ orientation: "portrait", unit: "mm", format: "a4" });
+        for (let i = 0; i < leaves.length; i++) {
+          const { id, title } = leaves[i];
+          const parent = CAR_PHOTO_SLOTS.find((s) => s.children?.some((c) => c.id === id));
+          const label = parent ? `${parent.title} — ${title}` : title;
+          const prepared = await dataUrlForPdf(carPhotoDataUrls[id]);
+          if (i > 0) pdf.addPage();
+          placeJpegOnPdfPage(pdf, prepared.dataUrl, prepared.width, prepared.height);
+          pdf.setFontSize(11);
+          pdf.setTextColor(60);
+          pdf.text(label, 12, 10);
+        }
+        pdf.save("car_photo_guide.pdf");
+      } catch (err) {
+        console.error("Car photo PDF failed:", err);
+        alert("Could not build PDF from the car photos. Try again.");
+      }
     }
 
     function licenseSlotId(side) {
@@ -3934,6 +4461,7 @@
       document.getElementById("passport-view").classList.remove("visible");
       document.getElementById("license-view").classList.remove("visible");
       document.getElementById("tech-passport-view")?.classList.remove("visible");
+      document.getElementById("car-photo-view")?.classList.remove("visible");
       window.scrollTo({ top: 0, behavior: "smooth" });
     }
 
@@ -3948,6 +4476,7 @@
         document.getElementById("passport-view").classList.remove("visible");
         document.getElementById("license-view").classList.add("visible");
         document.getElementById("tech-passport-view")?.classList.remove("visible");
+        document.getElementById("car-photo-view")?.classList.remove("visible");
         window.scrollTo({ top: 0, behavior: "smooth" });
         return;
       }
@@ -3961,6 +4490,21 @@
         document.getElementById("passport-view").classList.remove("visible");
         document.getElementById("license-view").classList.remove("visible");
         document.getElementById("tech-passport-view")?.classList.add("visible");
+        document.getElementById("car-photo-view")?.classList.remove("visible");
+        window.scrollTo({ top: 0, behavior: "smooth" });
+        return;
+      }
+      if (method === "car-photo") {
+        selectedMethod = "car-photo";
+        clearPassportUploadError();
+        clearIdUploadError();
+        resetCarPhotoGuide();
+        document.getElementById("method-choice").classList.add("hidden");
+        document.getElementById("scanner-view").classList.remove("visible");
+        document.getElementById("passport-view").classList.remove("visible");
+        document.getElementById("license-view").classList.remove("visible");
+        document.getElementById("tech-passport-view")?.classList.remove("visible");
+        document.getElementById("car-photo-view")?.classList.add("visible");
         window.scrollTo({ top: 0, behavior: "smooth" });
         return;
       }
@@ -3972,6 +4516,7 @@
       document.getElementById("passport-view").classList.remove("visible");
       document.getElementById("license-view").classList.remove("visible");
       document.getElementById("tech-passport-view")?.classList.remove("visible");
+      document.getElementById("car-photo-view")?.classList.remove("visible");
       applyDocLabels();
 
       // Strict routing: ID UI ↔ ID logic, Passport UI ↔ Passport logic
@@ -4112,7 +4657,15 @@
     async function processSlotForGenerate(slot, bitmap) {
       let stages = null;
       let final;
-      if (isLicenseSlot(slot)) {
+      if (isCarPhotoSlot(slot)) {
+        const canvas = document.createElement("canvas");
+        canvas.width = bitmap.width;
+        canvas.height = bitmap.height;
+        const ctx = canvas.getContext("2d");
+        ctx.drawImage(bitmap, 0, 0);
+        final = await canvasToJpeg(canvas, 0, 0, canvas.width, canvas.height, 0.92);
+        stages = { final };
+      } else if (isLicenseSlot(slot)) {
         stages = await processLicenseForGenerate(bitmap);
         final = stages.final;
       } else if (isTechPassportSlot(slot)) {
@@ -4235,7 +4788,7 @@
         const validateBlob =
           activeSlot === "passport"
             ? (final.cropped ? final.blob : originalBlob)
-            : isTechPassportSlot(activeSlot) || activeSlot === "front" || activeSlot === "back"
+            : isTechPassportSlot(activeSlot) || isCarPhotoSlot(activeSlot)
               ? originalBlob
               : final.blob;
         const ok = await validateCapturedSide(activeSlot, validateBlob);
@@ -6066,6 +6619,15 @@
         return;
       }
 
+      if (isCarPhotoSlot(slot)) {
+        carPhotoBlobs[slot] = finalBlob;
+        carPhotoDataUrls[slot] = finalUrl;
+        const idx = carPhotoStepIndexForSlot(slot);
+        if (idx >= 0) carPhotoStepIndex = idx;
+        advanceCarPhotoStep();
+        return;
+      }
+
       if (slot === "front") {
         frontBlob = finalBlob;
         frontDataUrl = finalUrl;
@@ -6204,6 +6766,15 @@
         return;
       }
 
+      if (isCarPhotoSlot(slot)) {
+        delete carPhotoBlobs[slot];
+        delete carPhotoDataUrls[slot];
+        const idx = carPhotoStepIndexForSlot(slot);
+        if (idx >= 0) carPhotoStepIndex = idx;
+        refreshCarPhotoStage();
+        return;
+      }
+
       if (slot === "front") {
         frontBlob = null;
         frontDataUrl = null;
@@ -6242,6 +6813,7 @@
       closeCamera();
       resetLicenseCapture();
       resetTechPassportCapture();
+      resetCarPhotoGuide();
       activeSlot = null;
       frontBlob = null;
       backBlob = null;
@@ -6333,11 +6905,25 @@
         "license-back": "Back Side",
         "tech-front": "Front Side",
         "tech-back": "Back Side",
+        "car-front": "Car — Front",
+        "car-rear": "Car — Rear",
+        "car-left": "Car — Left side",
+        "car-right": "Car — Right side",
+        "car-engine": "Car — Engine",
+        "car-front-seat": "Car — Front seat",
+        "car-back-seat": "Car — Back seat",
+        "car-gearbox": "Car — Gearbox",
+        "car-vin": "Car — VIN plate",
+        "car-odometer": "Car — Odometer",
       };
       document.getElementById("camera-title").textContent = titles[slot] || "Document";
       const vc = document.getElementById("video-container");
       if (vc) {
         vc.classList.toggle("passport-aspect", slot === "passport");
+        vc.classList.toggle("car-aspect", isCarPhotoSlot(slot));
+      }
+      if (idFrame) {
+        idFrame.classList.toggle("car-mode", isCarPhotoSlot(slot));
       }
 
       try {
@@ -6704,7 +7290,47 @@
       return await res.json();
     }
 
+    async function fetchCarPhotoAngleCheck(blob, angle) {
+      const formData = new FormData();
+      formData.append("image", blob, "capture.jpg");
+      formData.append("angle", angle);
+      const res = await fetch(`${window.location.origin}/check-car-photo-angle`, {
+        method: "POST",
+        body: formData,
+      });
+      if (!res.ok) {
+        throw new Error(`check-car-photo-angle failed: ${res.status}`);
+      }
+      return await res.json();
+    }
+
     async function validateCapturedSide(slot, blob) {
+      // Car photos: reject documents on every angle; front also needs frontal car
+      if (isCarPhotoSlot(slot)) {
+        const angle = slot.replace(/^car-/, "");
+        const fallback =
+          angle === "front" ? CAR_FRONT_PHOTO_ERROR : CAR_PHOTO_GENERIC_ERROR;
+        const rejectCar = (msg) => {
+          const text = String(msg || fallback);
+          readinessStatus.textContent = text;
+          readinessStatus.className = "status-badge is-visible";
+          showCarUploadError(text);
+          return false;
+        };
+        try {
+          clearCarUploadError();
+          const sideData = await fetchCarPhotoAngleCheck(blob, angle);
+          if (sideData && sideData.ok === false) {
+            return rejectCar(sideData.error || fallback);
+          }
+          return true;
+        } catch (e) {
+          console.warn("car photo angle check failed:", e);
+          // Fail closed for every car-photo slot
+          return rejectCar(fallback);
+        }
+      }
+
       // Tech passport: dedicated checks only — do not run ID/license/passport rules
       if (isTechPassportSlot(slot)) {
         const techSide = slot === "tech-back" ? "back" : "front";
@@ -6890,7 +7516,15 @@
       readinessStatus.className = "status-badge is-visible status-ready";
 
       // Same input style as Upload: card + surrounding margin for edge detect
-      const src = getCaptureProcessRect(mapped);
+      // Car photos: use the full visible frame (not ID guide crop).
+      const src = isCarPhotoSlot(slot)
+        ? {
+            x: mapped.visible.x,
+            y: mapped.visible.y,
+            w: mapped.visible.w,
+            h: mapped.visible.h,
+          }
+        : getCaptureProcessRect(mapped);
       const cropW = Math.max(2, Math.round(src.w));
       const cropH = Math.max(2, Math.round(src.h));
       const cropCanvas = document.createElement("canvas");
@@ -6936,7 +7570,7 @@
         const validateBlob =
           slot === "passport"
             ? (final.cropped ? final.blob : originalBlob)
-            : isTechPassportSlot(slot) || slot === "front" || slot === "back"
+            : isTechPassportSlot(slot) || isCarPhotoSlot(slot)
               ? originalBlob
               : final.blob;
         const ok = await validateCapturedSide(slot, validateBlob);
@@ -7771,6 +8405,9 @@
     const LICENSE_BACK_SIDE_ERROR =
       "Please upload back side of driver license";
     const TECH_PASSPORT_SIDE_ERROR = "Please upload tech passport";
+    const CAR_FRONT_PHOTO_ERROR = "Please upload the front of the car";
+    const CAR_PHOTO_GENERIC_ERROR = "Please upload a clear car photo";
+    const CAR_DOCUMENT_ERROR = "Please upload a car photo, not a document";
 
     // The inline red banner replaces the generic rejection alert
     let inlineDocErrorShown = false;
@@ -7837,6 +8474,23 @@
 
     function clearTechPassportUploadError() {
       const el = document.getElementById("tech-passport-upload-error");
+      if (!el) return;
+      el.textContent = "";
+      el.classList.remove("visible");
+      inlineDocErrorShown = false;
+    }
+
+    function showCarUploadError(message = CAR_FRONT_PHOTO_ERROR) {
+      const el = document.getElementById("car-upload-error");
+      if (!el) return;
+      el.textContent = message;
+      el.classList.add("visible");
+      inlineDocErrorShown = true;
+      el.scrollIntoView({ behavior: "smooth", block: "center" });
+    }
+
+    function clearCarUploadError() {
+      const el = document.getElementById("car-upload-error");
       if (!el) return;
       el.textContent = "";
       el.classList.remove("visible");
