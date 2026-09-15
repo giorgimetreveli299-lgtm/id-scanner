@@ -81,6 +81,9 @@ _DETAIL = {
     "gearbox",
     "vin",
     "odometer",
+    "odometer-before",
+    "odometer-after",
+    "odometer-video",
 }
 _ALL_ANGLES = _EXTERIOR | _DETAIL
 
@@ -256,15 +259,22 @@ def validate_car_photo_angle(image_bytes: bytes, angle: str) -> dict:
     - All angles: reject ID / passport / license / paper documents
     - front: frontal vehicle framing
     - rear / left / right: require a car subject
-    - engine / front-seat / back-seat / gearbox / vin / odometer: require vehicle-detail cues
+    - engine / front-seat / back-seat / gearbox / vin / odometer-before / odometer-after: require vehicle-detail cues
+    - odometer-video: skipped (client enforces video type)
     """
     angle_norm = (angle or "").strip().lower().replace("car-", "")
     # Normalize underscore variants from clients
     angle_norm = angle_norm.replace("_", "-")
     if angle_norm == "interior":
         angle_norm = "front-seat"
+    if angle_norm == "odometer":
+        angle_norm = "odometer-before"
     if angle_norm not in _ALL_ANGLES:
         return {"ok": False, "error": "Unknown car photo angle", "angle": angle_norm}
+
+    # Video clip — client enforces type; skip Vision framing checks
+    if angle_norm == "odometer-video":
+        return {"ok": True, "angle": angle_norm, "skipped": True, "media": "video"}
 
     try:
         client = _get_vision_face_client()

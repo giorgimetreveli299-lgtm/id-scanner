@@ -530,7 +530,8 @@ async def check_car_photo_angle(
     - all angles: reject ID / passport / license / paper documents
     - front: must look like a frontal vehicle shot
     - other exterior angles: require a car subject
-    - engine / front-seat / back-seat / gearbox / vin / odometer: require vehicle-detail cues
+    - engine / front-seat / back-seat / gearbox / vin / odometer-before / odometer-after: require vehicle-detail cues
+    - odometer-video: skipped (client enforces video type)
     """
     try:
         image_bytes = await image.read()

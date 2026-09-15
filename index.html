@@ -651,6 +651,87 @@
     .car-shoot-field-half img.car-seat-img {
       max-height: 220px;
     }
+    .car-odometer-stage {
+      display: none;
+      width: 100%;
+      flex-direction: column;
+      gap: 14px;
+    }
+    .car-odometer-stage.visible {
+      display: flex;
+    }
+    .car-odometer-mode {
+      display: flex;
+      gap: 12px;
+      justify-content: center;
+      flex-wrap: wrap;
+    }
+    .car-odometer-mode .btn {
+      font-size: 17px;
+      padding: 14px 28px;
+      min-width: 148px;
+    }
+    .car-odometer-mode .btn.is-selected {
+      outline: 3px solid rgba(249, 115, 22, 0.35);
+      outline-offset: 2px;
+    }
+    .car-odometer-mode-reset {
+      display: none;
+      align-self: center;
+      background: transparent;
+      border: none;
+      color: var(--lilac-deep);
+      font: inherit;
+      font-size: 14px;
+      font-weight: 600;
+      cursor: pointer;
+      text-decoration: underline;
+      padding: 0;
+    }
+    .car-odometer-mode-reset.visible {
+      display: inline-block;
+    }
+    .car-odometer-photos,
+    .car-odometer-video-wrap {
+      display: none;
+      width: 100%;
+    }
+    .car-odometer-photos.visible {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 14px;
+    }
+    .car-odometer-video-wrap.visible {
+      display: block;
+    }
+    .car-odometer-video-wrap .car-shoot-field {
+      min-height: 280px;
+    }
+    .car-odometer-video-wrap video {
+      width: min(100%, 640px);
+      max-height: 280px;
+      margin-top: 4px;
+      border-radius: 10px;
+      background: #0f172a;
+    }
+    .car-thumb-video {
+      display: flex;
+      width: 100%;
+      height: 58px;
+      border-radius: 6px;
+      background: #0f172a;
+      color: #e2e8f0;
+      align-items: center;
+      justify-content: center;
+      font-size: 11px;
+      font-weight: 600;
+    }
+    @media (max-width: 640px) {
+      .car-interior-grid.visible,
+      .car-odometer-photos.visible {
+        grid-template-columns: 1fr;
+      }
+    }
     .car-thumb-pair {
       display: grid;
       grid-template-columns: 1fr 1fr;
@@ -663,11 +744,6 @@
       width: 100%;
       height: 58px;
       margin: 0;
-    }
-    @media (max-width: 640px) {
-      .car-interior-grid.visible {
-        grid-template-columns: 1fr;
-      }
     }
     .car-photo-thumbs {
       display: flex;
@@ -964,14 +1040,35 @@
 
     .car-photo-actions {
       display: flex;
-      gap: 10px;
+      gap: 14px;
       justify-content: center;
       flex-wrap: wrap;
-      margin-top: 18px;
+      margin-top: 22px;
     }
     .car-photo-actions .btn {
-      font-size: 15px;
-      padding: 12px 20px;
+      font-size: 18px;
+      font-weight: 700;
+      padding: 18px 36px;
+      min-width: 200px;
+      letter-spacing: 0.02em;
+      border: none;
+      border-radius: 10px;
+      cursor: pointer;
+      transition: background 0.2s, opacity 0.2s;
+    }
+    .car-photo-actions .btn-tech-new {
+      background: #5a6268;
+      color: #fff;
+    }
+    .car-photo-actions .btn-tech-new:hover {
+      background: #434a50;
+    }
+    .car-photo-actions .btn-tech-pdf {
+      background: var(--accent);
+      color: #fff;
+    }
+    .car-photo-actions .btn-tech-pdf:hover:not(:disabled) {
+      background: var(--accent-dark);
     }
     .car-photo-actions .btn:disabled {
       opacity: 0.55;
@@ -1693,10 +1790,49 @@
             <img id="img-car-back-seat" class="license-zoomable car-seat-img" alt="Back seat">
           </div>
         </div>
+        <div class="car-odometer-stage" id="car-odometer-stage" aria-label="Odometer">
+          <div class="car-odometer-mode" id="car-odometer-mode">
+            <button type="button" class="btn" id="btn-odo-mode-photos" onclick="setCarOdometerMode('photos')">Photos</button>
+            <button type="button" class="btn btn-upload" id="btn-odo-mode-video" onclick="setCarOdometerMode('video')">Video</button>
+          </div>
+          <button type="button" class="car-odometer-mode-reset" id="btn-odo-mode-reset" onclick="setCarOdometerMode(null)">Change Photos / Video</button>
+          <div class="car-odometer-photos" id="car-odometer-photos">
+            <div class="slot-box car-shoot-field car-shoot-field-half" id="slot-car-odometer-before">
+              <h4>Before starting the engine</h4>
+              <div class="slot-actions car-shoot-actions">
+                <button type="button" class="btn" onclick="openCarPhotoCamera('car-odometer-before')">Capture</button>
+                <button type="button" class="btn btn-upload" onclick="triggerCarPhotoUpload('car-odometer-before')">Upload</button>
+                <button type="button" class="btn btn-cancel" id="btn-car-odometer-before-cancel" onclick="cancelSlotPhoto('car-odometer-before')">Cancel</button>
+              </div>
+              <img id="img-car-odometer-before" class="license-zoomable car-seat-img" alt="Before starting the engine">
+            </div>
+            <div class="slot-box car-shoot-field car-shoot-field-half" id="slot-car-odometer-after">
+              <h4>After starting the engine</h4>
+              <div class="slot-actions car-shoot-actions">
+                <button type="button" class="btn" onclick="openCarPhotoCamera('car-odometer-after')">Capture</button>
+                <button type="button" class="btn btn-upload" onclick="triggerCarPhotoUpload('car-odometer-after')">Upload</button>
+                <button type="button" class="btn btn-cancel" id="btn-car-odometer-after-cancel" onclick="cancelSlotPhoto('car-odometer-after')">Cancel</button>
+              </div>
+              <img id="img-car-odometer-after" class="license-zoomable car-seat-img" alt="After starting the engine">
+            </div>
+          </div>
+          <div class="car-odometer-video-wrap" id="car-odometer-video-wrap">
+            <div class="slot-box car-shoot-field" id="slot-car-odometer-video">
+              <h4>Odometer video</h4>
+              <div class="slot-actions car-shoot-actions">
+                <button type="button" class="btn" id="btn-odo-video-capture" onclick="toggleCarOdometerVideoRecord()">Record</button>
+                <button type="button" class="btn btn-upload" onclick="triggerCarVideoUpload()">Upload</button>
+                <button type="button" class="btn btn-cancel" id="btn-car-odometer-video-cancel" onclick="cancelSlotPhoto('car-odometer-video')">Cancel</button>
+              </div>
+              <video id="video-car-odometer" controls playsinline style="display:none;"></video>
+            </div>
+          </div>
+        </div>
+        <input type="file" id="car-video-input" accept="video/*" style="display:none;">
         <div class="car-photo-thumbs" id="car-photo-thumbs" aria-label="Captured car photos"></div>
         <div class="car-photo-actions">
           <button type="button" class="btn btn-tech-new" id="btn-car-new" onclick="carPhotoNewClient()">New client</button>
-          <button type="button" class="btn btn-tech-pdf" id="btn-car-pdf" onclick="downloadCarPhotoPDF()" disabled>Download PDF</button>
+          <button type="button" class="btn btn-tech-pdf" id="btn-car-download" onclick="downloadCarPhotoBundle()" disabled>DOWNLOAD</button>
         </div>
       </div>
     </div>
@@ -2061,7 +2197,7 @@
     <p class="license-zoom-hint">Scroll or pinch to zoom · drag to pan · Esc to close</p>
   </div>
 
-  <input type="file" id="file-input" accept="image/*" style="display:none;">
+  <input type="file" id="file-input" accept="image/*,image/jpeg,.jpg,.jpeg,.png,.webp,.gif,.bmp" style="display:none;">
   <canvas id="hidden-canvas" style="display:none;"></canvas>
 
   <script>
@@ -2113,6 +2249,19 @@
       return typeof slot === "string" && slot.startsWith("car-");
     }
 
+    function isCarOdometerVideoSlot(slot) {
+      return slot === "car-odometer-video";
+    }
+
+    const CAR_ODOMETER_PHOTO_SLOTS = [
+      { id: "car-odometer-before", title: "Before starting the engine" },
+      { id: "car-odometer-after", title: "After starting the engine" },
+    ];
+    const CAR_ODOMETER_VIDEO_SLOT = {
+      id: "car-odometer-video",
+      title: "Odometer video",
+    };
+
     const CAR_PHOTO_SLOTS = [
       { id: "car-front", title: "Front" },
       { id: "car-rear", title: "Rear" },
@@ -2129,24 +2278,83 @@
       },
       { id: "car-gearbox", title: "Gearbox" },
       { id: "car-vin", title: "VIN" },
-      { id: "car-odometer", title: "Odometer" },
+      {
+        id: "car-odometer",
+        title: "Odometer",
+        kind: "odometer",
+        photoChildren: CAR_ODOMETER_PHOTO_SLOTS,
+        videoChild: CAR_ODOMETER_VIDEO_SLOT,
+      },
     ];
 
     const carPhotoBlobs = {};
     const carPhotoDataUrls = {};
     let carPhotoStepIndex = 0;
+    let carOdometerMode = null; // null | "photos" | "video"
+    let carOdoRecordStream = null;
+    let carOdoRecorder = null;
+    let carOdoRecordChunks = [];
+
+    function carOdometerAllIds() {
+      return [
+        ...CAR_ODOMETER_PHOTO_SLOTS.map((s) => s.id),
+        CAR_ODOMETER_VIDEO_SLOT.id,
+      ];
+    }
 
     function carPhotoLeafSlots() {
       const out = [];
       CAR_PHOTO_SLOTS.forEach((step) => {
+        if (step.kind === "odometer") {
+          if (carOdometerMode === "photos") out.push(...step.photoChildren);
+          else if (carOdometerMode === "video") out.push(step.videoChild);
+          return;
+        }
         if (step.children && step.children.length) out.push(...step.children);
         else out.push(step);
       });
       return out;
     }
 
+    /** Photo slots for the PDF (includes odometer before/after when no video was chosen). */
+    function carPhotoPdfSlots() {
+      const out = [];
+      CAR_PHOTO_SLOTS.forEach((step) => {
+        if (step.kind === "odometer") {
+          const hasVideo = Boolean(carPhotoDataUrls[step.videoChild.id]);
+          if (hasVideo) return;
+          (step.photoChildren || []).forEach((child) => {
+            if (carPhotoDataUrls[child.id]) out.push(child);
+          });
+          return;
+        }
+        if (step.children && step.children.length) {
+          step.children.forEach((child) => {
+            if (carPhotoDataUrls[child.id]) out.push(child);
+          });
+        } else if (carPhotoDataUrls[step.id]) {
+          out.push(step);
+        }
+      });
+      return out;
+    }
+
+    function carPhotoVideoSlots() {
+      const vid = CAR_ODOMETER_VIDEO_SLOT;
+      return carPhotoDataUrls[vid.id] || carPhotoBlobs[vid.id] ? [vid] : [];
+    }
+
     function carPhotoStepFilled(step) {
       if (!step) return false;
+      if (step.kind === "odometer") {
+        if (carOdometerMode === "photos") {
+          return step.photoChildren.every(({ id }) => Boolean(carPhotoDataUrls[id]));
+        }
+        if (carOdometerMode === "video") {
+          return Boolean(carPhotoDataUrls[step.videoChild.id]);
+        }
+        return false;
+      }
       if (step.children && step.children.length) {
         return step.children.every(({ id }) => Boolean(carPhotoDataUrls[id]));
       }
@@ -2156,17 +2364,61 @@
     function carPhotoStepIndexForSlot(slot) {
       return CAR_PHOTO_SLOTS.findIndex((step) => {
         if (step.id === slot) return true;
-        return Boolean(step.children?.some((c) => c.id === slot));
+        if (step.children?.some((c) => c.id === slot)) return true;
+        if (step.kind === "odometer") {
+          if (step.photoChildren?.some((c) => c.id === slot)) return true;
+          if (step.videoChild?.id === slot) return true;
+        }
+        return false;
       });
     }
 
     function currentCarPhotoSlot() {
       const step = CAR_PHOTO_SLOTS[carPhotoStepIndex] || CAR_PHOTO_SLOTS[0];
+      if (step?.kind === "odometer") {
+        if (carOdometerMode === "photos") {
+          const empty = step.photoChildren.find(({ id }) => !carPhotoDataUrls[id]);
+          return (empty || step.photoChildren[0]).id;
+        }
+        if (carOdometerMode === "video") return step.videoChild.id;
+        return step.id;
+      }
       if (step?.children?.length) {
         const empty = step.children.find(({ id }) => !carPhotoDataUrls[id]);
         return (empty || step.children[0]).id;
       }
       return step ? step.id : "car-front";
+    }
+
+    function clearCarOdometerMedia(modeToKeep) {
+      const clearId = (id) => {
+        const url = carPhotoDataUrls[id];
+        if (url && String(url).startsWith("blob:")) {
+          try { URL.revokeObjectURL(url); } catch (_) {}
+        }
+        delete carPhotoBlobs[id];
+        delete carPhotoDataUrls[id];
+      };
+      if (modeToKeep === "photos") {
+        clearId(CAR_ODOMETER_VIDEO_SLOT.id);
+      } else if (modeToKeep === "video") {
+        CAR_ODOMETER_PHOTO_SLOTS.forEach(({ id }) => clearId(id));
+      } else {
+        carOdometerAllIds().forEach(clearId);
+      }
+      stopCarOdometerRecording(false);
+    }
+
+    function setCarOdometerMode(mode) {
+      const next = mode === "photos" || mode === "video" ? mode : null;
+      if (next !== carOdometerMode) {
+        clearCarOdometerMedia(next);
+        carOdometerMode = next;
+      }
+      const odoIdx = CAR_PHOTO_SLOTS.findIndex((s) => s.kind === "odometer");
+      if (odoIdx >= 0) carPhotoStepIndex = odoIdx;
+      clearCarUploadError();
+      refreshCarPhotoStage();
     }
 
     function setCarPhotoStep(index) {
@@ -2176,21 +2428,75 @@
 
     function refreshCarPhotoStage() {
       const step = CAR_PHOTO_SLOTS[carPhotoStepIndex] || CAR_PHOTO_SLOTS[0];
-      const isInterior = Boolean(step?.children?.length);
+      const isInterior = Boolean(step?.children?.length) && step.kind !== "odometer";
+      const isOdometer = step?.kind === "odometer";
       const single = document.getElementById("slot-car-active");
       const interior = document.getElementById("car-interior-stage");
-      const interiorHeading = document.getElementById("car-interior-heading");
+      const odometer = document.getElementById("car-odometer-stage");
+      const sectionHeading = document.getElementById("car-interior-heading");
 
-      if (single) single.style.display = isInterior ? "none" : "";
+      if (single) single.style.display = isInterior || isOdometer ? "none" : "";
       if (interior) interior.classList.toggle("visible", isInterior);
-      if (interiorHeading) {
-        interiorHeading.textContent = step
+      if (odometer) odometer.classList.toggle("visible", isOdometer);
+      if (sectionHeading) {
+        sectionHeading.textContent = step
           ? `${carPhotoStepIndex + 1}. ${step.title}`
-          : "Interior";
-        interiorHeading.classList.toggle("visible", isInterior);
+          : "";
+        sectionHeading.classList.toggle("visible", isInterior || isOdometer);
       }
 
-      if (!isInterior) {
+      if (isOdometer) {
+        const modeRow = document.getElementById("car-odometer-mode");
+        const resetBtn = document.getElementById("btn-odo-mode-reset");
+        const photosWrap = document.getElementById("car-odometer-photos");
+        const videoWrap = document.getElementById("car-odometer-video-wrap");
+        const photosBtn = document.getElementById("btn-odo-mode-photos");
+        const videoBtn = document.getElementById("btn-odo-mode-video");
+        const hasMode = carOdometerMode === "photos" || carOdometerMode === "video";
+        if (modeRow) modeRow.style.display = hasMode ? "none" : "flex";
+        if (resetBtn) resetBtn.classList.toggle("visible", hasMode);
+        if (photosWrap) photosWrap.classList.toggle("visible", carOdometerMode === "photos");
+        if (videoWrap) videoWrap.classList.toggle("visible", carOdometerMode === "video");
+        if (photosBtn) photosBtn.classList.toggle("is-selected", carOdometerMode === "photos");
+        if (videoBtn) videoBtn.classList.toggle("is-selected", carOdometerMode === "video");
+
+        CAR_ODOMETER_PHOTO_SLOTS.forEach(({ id }) => {
+          const url = carPhotoDataUrls[id] || "";
+          const img = document.getElementById(`img-${id}`);
+          const box = document.getElementById(`slot-${id}`);
+          const cancelBtn = document.getElementById(`btn-${id}-cancel`);
+          if (img) {
+            if (url) {
+              img.src = url;
+              img.style.display = "block";
+            } else {
+              img.src = "";
+              img.style.display = "none";
+            }
+          }
+          if (box) box.classList.toggle("done", Boolean(url));
+          if (cancelBtn) cancelBtn.style.display = url ? "inline-block" : "none";
+        });
+
+        const vidId = CAR_ODOMETER_VIDEO_SLOT.id;
+        const vidUrl = carPhotoDataUrls[vidId] || "";
+        const vidEl = document.getElementById("video-car-odometer");
+        const vidBox = document.getElementById(`slot-${vidId}`);
+        const vidCancel = document.getElementById(`btn-${vidId}-cancel`);
+        if (vidEl) {
+          if (vidUrl && !carOdoRecorder) {
+            if (vidEl.src !== vidUrl) vidEl.src = vidUrl;
+            vidEl.style.display = "block";
+          } else if (!carOdoRecorder) {
+            vidEl.removeAttribute("src");
+            vidEl.style.display = "none";
+          }
+        }
+        if (vidBox) vidBox.classList.toggle("done", Boolean(vidUrl));
+        if (vidCancel) vidCancel.style.display = vidUrl ? "inline-block" : "none";
+        const recBtn = document.getElementById("btn-odo-video-capture");
+        if (recBtn && !carOdoRecorder) recBtn.textContent = "Record";
+      } else if (!isInterior) {
         const label = document.getElementById("car-photo-current-label");
         if (label && step) {
           label.textContent = `${carPhotoStepIndex + 1}. ${step.title}`;
@@ -2241,7 +2547,23 @@
         const active = idx === carPhotoStepIndex ? " is-active" : "";
         const done = carPhotoStepFilled(step) ? " is-done" : "";
         let media = "";
-        if (step.children?.length) {
+        if (step.kind === "odometer") {
+          if (carOdometerMode === "photos") {
+            const cells = step.photoChildren
+              .map(({ id, title }) => {
+                const url = carPhotoDataUrls[id] || "";
+                return url
+                  ? `<img class="license-zoomable" src="${url}" alt="${title}">`
+                  : `<div class="car-thumb-empty">—</div>`;
+              })
+              .join("");
+            media = `<div class="car-thumb-pair">${cells}</div>`;
+          } else if (carOdometerMode === "video" && carPhotoDataUrls[step.videoChild.id]) {
+            media = `<div class="car-thumb-video">VIDEO</div>`;
+          } else {
+            media = `<div class="car-thumb-empty">—</div>`;
+          }
+        } else if (step.children?.length) {
           const cells = step.children
             .map(({ id, title }) => {
               const url = carPhotoDataUrls[id] || "";
@@ -2265,10 +2587,24 @@
     }
 
     function resetCarPhotoGuide() {
+      stopCarOdometerRecording(false);
       carPhotoLeafSlots().forEach(({ id }) => {
+        const url = carPhotoDataUrls[id];
+        if (url && String(url).startsWith("blob:")) {
+          try { URL.revokeObjectURL(url); } catch (_) {}
+        }
         delete carPhotoBlobs[id];
         delete carPhotoDataUrls[id];
       });
+      carOdometerAllIds().forEach((id) => {
+        const url = carPhotoDataUrls[id];
+        if (url && String(url).startsWith("blob:")) {
+          try { URL.revokeObjectURL(url); } catch (_) {}
+        }
+        delete carPhotoBlobs[id];
+        delete carPhotoDataUrls[id];
+      });
+      carOdometerMode = null;
       carPhotoStepIndex = 0;
       clearCarUploadError();
       refreshCarPhotoStage();
@@ -2278,38 +2614,61 @@
       const hint = document.getElementById("car-photo-step-hint");
       if (!hint) return;
       const leaves = carPhotoLeafSlots();
-      const filled = leaves.filter(({ id }) => carPhotoDataUrls[id]).length;
-      const total = leaves.length;
+      const filledBase = CAR_PHOTO_SLOTS.filter(
+        (s) => s.kind !== "odometer" && carPhotoStepFilled(s)
+      ).length;
+      const odoFilled = carPhotoStepFilled(
+        CAR_PHOTO_SLOTS.find((s) => s.kind === "odometer")
+      );
+      const filledSteps =
+        filledBase + (odoFilled ? 1 : 0);
+      const totalSteps = CAR_PHOTO_SLOTS.length;
       const step = CAR_PHOTO_SLOTS[carPhotoStepIndex];
       if (!step) return;
-      if (filled === total) {
-        hint.textContent = "All photos are ready. Download the PDF when finished.";
+      if (filledSteps === totalSteps) {
+        hint.textContent = "All captures are ready. Download PDF (photos) and video zip when finished.";
+        return;
+      }
+      if (step.kind === "odometer") {
+        if (!carOdometerMode) {
+          hint.textContent = `Odometer (${filledSteps}/${totalSteps}): choose Photos or Video.`;
+        } else if (carOdometerMode === "photos") {
+          const n = step.photoChildren.filter(({ id }) => carPhotoDataUrls[id]).length;
+          hint.textContent =
+            n === step.photoChildren.length
+              ? `Odometer photos saved (${filledSteps}/${totalSteps}).`
+              : `Odometer photos: before and after starting the engine (${n}/2).`;
+        } else {
+          hint.textContent = carPhotoDataUrls[step.videoChild.id]
+            ? `Odometer video saved (${filledSteps}/${totalSteps}).`
+            : "Odometer: record or upload a video (photos are not accepted).";
+        }
         return;
       }
       if (step.children?.length) {
         const seatFilled = step.children.filter(({ id }) => carPhotoDataUrls[id]).length;
         if (seatFilled === step.children.length) {
-          hint.textContent = `Interior saved (${filled}/${total}). Select another angle or continue.`;
+          hint.textContent = `Interior saved (${filledSteps}/${totalSteps}). Select another angle or continue.`;
         } else {
           hint.textContent = ALLOW_FILE_UPLOAD
-            ? `Interior: capture or upload Front seat and Back seat (${filled}/${total}).`
-            : `Interior: capture Front seat and Back seat (${filled}/${total}).`;
+            ? `Interior: capture or upload Front seat and Back seat (${filledSteps}/${totalSteps}).`
+            : `Interior: capture Front seat and Back seat (${filledSteps}/${totalSteps}).`;
         }
         return;
       }
       if (carPhotoDataUrls[step.id]) {
-        hint.textContent = `${step.title} saved (${filled}/${total}). Select another angle or continue.`;
+        hint.textContent = `${step.title} saved (${filledSteps}/${totalSteps}). Select another angle or continue.`;
       } else {
         hint.textContent = ALLOW_FILE_UPLOAD
-          ? `Now capture or upload: ${step.title} (${filled}/${total}).`
-          : `Now capture: ${step.title} (${filled}/${total}).`;
+          ? `Now capture or upload: ${step.title} (${filledSteps}/${totalSteps}).`
+          : `Now capture: ${step.title} (${filledSteps}/${totalSteps}).`;
       }
     }
 
     function updateCarPhotoActionButtons() {
-      const pdfBtn = document.getElementById("btn-car-pdf");
-      if (!pdfBtn) return;
-      pdfBtn.disabled = !carPhotoLeafSlots().every(({ id }) => carPhotoDataUrls[id]);
+      const btn = document.getElementById("btn-car-download");
+      if (!btn) return;
+      btn.disabled = !CAR_PHOTO_SLOTS.every((step) => carPhotoStepFilled(step));
     }
 
     function advanceCarPhotoStep() {
@@ -2319,11 +2678,28 @@
     }
 
     function openCarPhotoCamera(slot) {
-      openCamera(slot || currentCarPhotoSlot());
+      const target = slot || currentCarPhotoSlot();
+      if (isCarOdometerVideoSlot(target)) {
+        triggerCarVideoUpload();
+        return;
+      }
+      openCamera(target);
     }
 
     function triggerCarPhotoUpload(slot) {
       triggerUpload(slot || currentCarPhotoSlot());
+    }
+
+    function triggerCarVideoUpload() {
+      if (!ALLOW_FILE_UPLOAD) {
+        alert("File upload is disabled.");
+        return;
+      }
+      const input = document.getElementById("car-video-input");
+      if (!input) return;
+      activeSlot = CAR_ODOMETER_VIDEO_SLOT.id;
+      input.value = "";
+      input.click();
     }
 
     function cancelCurrentCarPhoto() {
@@ -2335,35 +2711,252 @@
       showMethodChoice();
     }
 
-    async function downloadCarPhotoPDF() {
-      const leaves = carPhotoLeafSlots();
-      const missing = leaves.filter(({ id }) => !carPhotoDataUrls[id]);
-      if (missing.length) {
-        alert("Capture or upload all car photo angles first.");
+    async function stopCarOdometerRecording(save) {
+      const recBtn = document.getElementById("btn-odo-video-capture");
+      if (carOdoRecorder && carOdoRecorder.state !== "inactive") {
+        await new Promise((resolve) => {
+          carOdoRecorder.addEventListener("stop", resolve, { once: true });
+          try { carOdoRecorder.stop(); } catch (_) { resolve(); }
+        });
+      }
+      carOdoRecorder = null;
+      if (carOdoRecordStream) {
+        carOdoRecordStream.getTracks().forEach((t) => t.stop());
+        carOdoRecordStream = null;
+      }
+      if (recBtn) recBtn.textContent = "Record";
+      if (!save) {
+        carOdoRecordChunks = [];
         return;
       }
-      const JsPDF = await ensureJsPDF();
-      if (!JsPDF) {
-        alert("PDF library failed to load. Check your internet and try again.");
+      if (!carOdoRecordChunks.length) return;
+      const blob = new Blob(carOdoRecordChunks, {
+        type: carOdoRecordChunks[0]?.type || "video/webm",
+      });
+      carOdoRecordChunks = [];
+      applyCarVideoSlot(blob);
+    }
+
+    async function toggleCarOdometerVideoRecord() {
+      if (carOdometerMode !== "video") setCarOdometerMode("video");
+      if (carOdoRecorder && carOdoRecorder.state === "recording") {
+        await stopCarOdometerRecording(true);
         return;
       }
       try {
-        const pdf = new JsPDF({ orientation: "portrait", unit: "mm", format: "a4" });
-        for (let i = 0; i < leaves.length; i++) {
-          const { id, title } = leaves[i];
-          const parent = CAR_PHOTO_SLOTS.find((s) => s.children?.some((c) => c.id === id));
-          const label = parent ? `${parent.title} — ${title}` : title;
-          const prepared = await dataUrlForPdf(carPhotoDataUrls[id]);
-          if (i > 0) pdf.addPage();
-          placeJpegOnPdfPage(pdf, prepared.dataUrl, prepared.width, prepared.height);
-          pdf.setFontSize(11);
-          pdf.setTextColor(60);
-          pdf.text(label, 12, 10);
+        clearCarUploadError();
+        carOdoRecordStream = await navigator.mediaDevices.getUserMedia({
+          video: { facingMode: { ideal: "environment" } },
+          audio: true,
+        });
+        const vidEl = document.getElementById("video-car-odometer");
+        if (vidEl) {
+          vidEl.srcObject = carOdoRecordStream;
+          vidEl.muted = true;
+          vidEl.controls = false;
+          vidEl.style.display = "block";
+          try { await vidEl.play(); } catch (_) {}
         }
-        pdf.save("car_photo_guide.pdf");
+        carOdoRecordChunks = [];
+        const mime = MediaRecorder.isTypeSupported("video/webm;codecs=vp9")
+          ? "video/webm;codecs=vp9"
+          : MediaRecorder.isTypeSupported("video/webm")
+            ? "video/webm"
+            : "";
+        carOdoRecorder = mime
+          ? new MediaRecorder(carOdoRecordStream, { mimeType: mime })
+          : new MediaRecorder(carOdoRecordStream);
+        carOdoRecorder.ondataavailable = (ev) => {
+          if (ev.data && ev.data.size) carOdoRecordChunks.push(ev.data);
+        };
+        carOdoRecorder.start(250);
+        const recBtn = document.getElementById("btn-odo-video-capture");
+        if (recBtn) recBtn.textContent = "Stop";
       } catch (err) {
-        console.error("Car photo PDF failed:", err);
-        alert("Could not build PDF from the car photos. Try again.");
+        console.warn("odometer video record failed:", err);
+        stopCarOdometerRecording(false);
+        showCarUploadError("Could not start video recording. Try Upload instead.");
+      }
+    }
+
+    function applyCarVideoSlot(fileOrBlob) {
+      const slot = CAR_ODOMETER_VIDEO_SLOT.id;
+      const prev = carPhotoDataUrls[slot];
+      if (prev && String(prev).startsWith("blob:")) {
+        try { URL.revokeObjectURL(prev); } catch (_) {}
+      }
+      const blob = fileOrBlob;
+      const url = URL.createObjectURL(blob);
+      carPhotoBlobs[slot] = blob;
+      carPhotoDataUrls[slot] = url;
+      carOdometerMode = "video";
+      const vidEl = document.getElementById("video-car-odometer");
+      if (vidEl) {
+        vidEl.srcObject = null;
+        vidEl.src = url;
+        vidEl.muted = false;
+        vidEl.controls = true;
+        vidEl.style.display = "block";
+      }
+      const idx = carPhotoStepIndexForSlot(slot);
+      if (idx >= 0) carPhotoStepIndex = idx;
+      advanceCarPhotoStep();
+    }
+
+    function carPhotoParentForSlot(id) {
+      return CAR_PHOTO_SLOTS.find(
+        (s) =>
+          s.children?.some((c) => c.id === id) ||
+          s.photoChildren?.some((c) => c.id === id) ||
+          s.videoChild?.id === id
+      );
+    }
+
+    function carPhotoFileStem(id, title, parentTitle) {
+      const label = parentTitle ? `${parentTitle}-${title}` : title;
+      return String(label)
+        .toLowerCase()
+        .replace(/[^a-z0-9]+/g, "-")
+        .replace(/^-|-$/g, "") || id;
+    }
+
+    function carPhotoPageTitle(id, title) {
+      const parent = carPhotoParentForSlot(id);
+      return parent?.title ? `${parent.title} — ${title}` : title;
+    }
+
+    function triggerBlobDownload(blob, filename) {
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = filename;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      setTimeout(() => URL.revokeObjectURL(url), 2500);
+    }
+
+    function placeCarPhotoOnPdfPage(pdf, jpegDataUrl, imgW, imgH, title) {
+      const pageW = pdf.internal.pageSize.getWidth();
+      const pageH = pdf.internal.pageSize.getHeight();
+      const margin = 14;
+      const titleTop = margin + 4;
+      pdf.setFont("helvetica", "bold");
+      pdf.setFontSize(16);
+      pdf.setTextColor(30, 30, 30);
+      pdf.text(String(title || ""), pageW / 2, titleTop, {
+        align: "center",
+        maxWidth: pageW - margin * 2,
+      });
+
+      const titleBlock = 16;
+      const maxW = pageW - margin * 2;
+      const maxH = pageH - margin * 2 - titleBlock;
+      const ratio = imgW / imgH;
+      let w = maxW;
+      let h = w / ratio;
+      if (h > maxH) {
+        h = maxH;
+        w = h * ratio;
+      }
+      const x = margin + (maxW - w) / 2;
+      const y = margin + titleBlock + (maxH - h) / 2;
+      pdf.addImage(jpegDataUrl, "JPEG", x, y, w, h);
+    }
+
+    async function ensureJSZip() {
+      if (window.JSZip) return window.JSZip;
+      const cdns = [
+        "https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js",
+        "https://cdn.jsdelivr.net/npm/jszip@3.10.1/dist/jszip.min.js",
+      ];
+      for (const url of cdns) {
+        try {
+          await loadScript(url);
+          if (window.JSZip) return window.JSZip;
+        } catch (e) {
+          console.warn(e);
+        }
+      }
+      return null;
+    }
+
+    async function buildCarPhotoPdfBlob(photoLeaves) {
+      const JsPDF = await ensureJsPDF();
+      if (!JsPDF) throw new Error("jsPDF unavailable");
+      const pdf = new JsPDF({ orientation: "portrait", unit: "mm", format: "a4" });
+      let pages = 0;
+      for (let i = 0; i < photoLeaves.length; i++) {
+        const { id, title } = photoLeaves[i];
+        const src = carPhotoDataUrls[id];
+        if (!src) continue;
+        const prepared = await dataUrlForPdf(src);
+        if (pages > 0) pdf.addPage();
+        placeCarPhotoOnPdfPage(
+          pdf,
+          prepared.dataUrl,
+          prepared.width,
+          prepared.height,
+          carPhotoPageTitle(id, title)
+        );
+        pages += 1;
+      }
+      if (!pages) throw new Error("No photo pages for PDF");
+      return pdf.output("blob");
+    }
+
+    async function downloadCarPhotoBundle() {
+      if (!CAR_PHOTO_SLOTS.every((step) => carPhotoStepFilled(step))) {
+        alert("Capture or upload all car photo angles first.");
+        return;
+      }
+      const photoLeaves = carPhotoPdfSlots();
+      const videoLeaves = carPhotoVideoSlots();
+
+      if (!photoLeaves.length) {
+        alert("No photos to put in the PDF.");
+        return;
+      }
+
+      try {
+        const pdfBlob = await buildCarPhotoPdfBlob(photoLeaves);
+
+        if (!videoLeaves.length) {
+          triggerBlobDownload(pdfBlob, "car_photo_guide.pdf");
+          return;
+        }
+
+        const JSZip = await ensureJSZip();
+        if (!JSZip) {
+          alert("Zip library failed to load. Check your internet and try again.");
+          return;
+        }
+
+        // One button: PDF download + separate video zip (short delay avoids browser blocking).
+        triggerBlobDownload(pdfBlob, "car_photo_guide.pdf");
+
+        const zip = new JSZip();
+        for (let i = 0; i < videoLeaves.length; i++) {
+          const { id, title } = videoLeaves[i];
+          const blob = carPhotoBlobs[id];
+          if (!blob) continue;
+          const parent = carPhotoParentForSlot(id);
+          const stem = carPhotoFileStem(id, title, parent?.title);
+          const num = String(i + 1).padStart(2, "0");
+          const ext = (blob.type || "").includes("mp4")
+            ? "mp4"
+            : (blob.type || "").includes("quicktime")
+              ? "mov"
+              : "webm";
+          zip.file(`${num}-${stem}.${ext}`, blob);
+        }
+        const zipBlob = await zip.generateAsync({ type: "blob" });
+        setTimeout(() => {
+          triggerBlobDownload(zipBlob, "car_odometer_video.zip");
+        }, 400);
+      } catch (err) {
+        console.error("Car photo download failed:", err);
+        alert("Could not build the download. Try again.");
       }
     }
 
@@ -4749,13 +5342,90 @@
       }
       activeSlot = slot;
       const input = document.getElementById("file-input");
+      input.accept = "image/*,image/jpeg,.jpg,.jpeg,.png,.webp,.gif,.bmp";
       input.value = "";
       input.click();
     }
 
-    document.getElementById("file-input").addEventListener("change", async (e) => {
+    function fileExtension(name) {
+      const m = String(name || "").toLowerCase().match(/\.([a-z0-9]+)$/);
+      return m ? m[1] : "";
+    }
+
+    function isLikelyImageFile(file) {
+      if (!file) return false;
+      const type = String(file.type || "").toLowerCase();
+      if (type.startsWith("image/")) return true;
+      // Windows often reports .jpg as "" or application/octet-stream
+      const ext = fileExtension(file.name);
+      return ["jpg", "jpeg", "png", "webp", "gif", "bmp", "heic", "heif", "jfif"].includes(ext);
+    }
+
+    function isLikelyVideoFile(file) {
+      if (!file) return false;
+      const type = String(file.type || "").toLowerCase();
+      if (type.startsWith("video/")) return true;
+      const ext = fileExtension(file.name);
+      return ["mp4", "webm", "mov", "m4v", "avi", "mkv", "3gp"].includes(ext);
+    }
+
+    /** Normalize MIME so decode / Vision get a real image/* type for JPEGs. */
+    function asTypedImageFile(file) {
+      if (!file) return file;
+      const type = String(file.type || "").toLowerCase();
+      if (type.startsWith("image/") && type !== "image/jpg") return file;
+      const ext = fileExtension(file.name);
+      let mime = "image/jpeg";
+      if (ext === "png") mime = "image/png";
+      else if (ext === "webp") mime = "image/webp";
+      else if (ext === "gif") mime = "image/gif";
+      else if (ext === "bmp") mime = "image/bmp";
+      else if (ext === "heic" || ext === "heif") mime = "image/heic";
+      else if (type === "image/jpg" || ext === "jpg" || ext === "jpeg" || ext === "jfif") {
+        mime = "image/jpeg";
+      }
+      try {
+        return new File([file], file.name || `upload.${ext || "jpg"}`, {
+          type: mime,
+          lastModified: file.lastModified || Date.now(),
+        });
+      } catch (_) {
+        return file;
+      }
+    }
+
+    document.getElementById("car-video-input")?.addEventListener("change", async (e) => {
       const file = e.target.files && e.target.files[0];
+      if (!file) return;
+      if (!isLikelyVideoFile(file)) {
+        showCarUploadError("Please upload a video file, not a photo.");
+        e.target.value = "";
+        return;
+      }
+      try {
+        clearCarUploadError();
+        applyCarVideoSlot(file);
+      } catch (err) {
+        console.error(err);
+        alert("Could not upload the video.");
+      }
+    });
+
+    document.getElementById("file-input").addEventListener("change", async (e) => {
+      let file = e.target.files && e.target.files[0];
       if (!file || !activeSlot) return;
+
+      if (isCarOdometerVideoSlot(activeSlot)) {
+        showCarUploadError("Please upload a video file, not a photo.");
+        return;
+      }
+      if (!isLikelyImageFile(file)) {
+        const msg = "Please upload a photo image (JPG, PNG, …).";
+        if (isCarPhotoSlot(activeSlot)) showCarUploadError(msg);
+        else alert(msg);
+        return;
+      }
+      file = asTypedImageFile(file);
 
       try {
         const originalUrl = await new Promise((resolve, reject) => {
@@ -6767,8 +7437,21 @@
       }
 
       if (isCarPhotoSlot(slot)) {
+        const url = carPhotoDataUrls[slot];
+        if (url && String(url).startsWith("blob:")) {
+          try { URL.revokeObjectURL(url); } catch (_) {}
+        }
         delete carPhotoBlobs[slot];
         delete carPhotoDataUrls[slot];
+        if (isCarOdometerVideoSlot(slot)) {
+          const vidEl = document.getElementById("video-car-odometer");
+          if (vidEl) {
+            vidEl.removeAttribute("src");
+            vidEl.srcObject = null;
+            vidEl.style.display = "none";
+          }
+          stopCarOdometerRecording(false);
+        }
         const idx = carPhotoStepIndexForSlot(slot);
         if (idx >= 0) carPhotoStepIndex = idx;
         refreshCarPhotoStage();
@@ -6914,7 +7597,9 @@
         "car-back-seat": "Car — Back seat",
         "car-gearbox": "Car — Gearbox",
         "car-vin": "Car — VIN plate",
-        "car-odometer": "Car — Odometer",
+        "car-odometer-before": "Car — Odometer before start",
+        "car-odometer-after": "Car — Odometer after start",
+        "car-odometer-video": "Car — Odometer video",
       };
       document.getElementById("camera-title").textContent = titles[slot] || "Document";
       const vc = document.getElementById("video-container");
@@ -7307,6 +7992,10 @@
     async function validateCapturedSide(slot, blob) {
       // Car photos: reject documents on every angle; front also needs frontal car
       if (isCarPhotoSlot(slot)) {
+        if (isCarOdometerVideoSlot(slot)) {
+          clearCarUploadError();
+          return true;
+        }
         const angle = slot.replace(/^car-/, "");
         const fallback =
           angle === "front" ? CAR_FRONT_PHOTO_ERROR : CAR_PHOTO_GENERIC_ERROR;
