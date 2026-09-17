@@ -73,16 +73,16 @@ _FRONT_LABELS: dict[str, list[str]] = {
         "owner's surname",
         "owners surname",
         "owner surname",
-        "surname",
         "family name",
     ],
     "owner_personal_number": [
         "მფლობელის პირადი ნომერი",
+        "მფლობელის პირადი",
         "owner's personal number",
         "owners personal number",
+        "owner personal number",
+        "owner's personal no",
         "personal number",
-        "personal id",
-        "პირადი ნომერი",
     ],
     "expiration_date": [
         "გაუქმების თარიღი",
@@ -141,6 +141,15 @@ _BACK_LABELS: dict[str, list[str]] = {
         "cylinder capacity",
         "მოცულობა",
     ],
+    "max_power": [
+        "მაქსიმალური სიმძლავრე",
+        "maximum power",
+        "max power",
+        "max. power",
+        "engine power",
+        "სიმძლავრე",
+        "power",
+    ],
     "fuel_type": [
         "საწვავის ტიპი",
         "fuel type",
@@ -171,6 +180,12 @@ _ENGINE_RE = re.compile(
     re.I,
 )
 _ENGINE_BARE_RE = re.compile(r"\b(\d{3,4})\b")
+# P.2 max power in kW (e.g. 110, 85 kW, 147 კვტ)
+_POWER_RE = re.compile(
+    r"\b(\d{2,4}(?:[.,]\d+)?)\s*(?:k\s*w|კვტ|კილოვატი?)\b",
+    re.I,
+)
+_POWER_BARE_RE = re.compile(r"\b(\d{2,4}(?:[.,]\d+)?)\b")
 _YEAR_FULL_RE = re.compile(r"^(?:19|20)\d{2}$")
 _CARD_NO_RE = re.compile(r"\b([A-Z]{0,3}\d{6,12}[A-Z0-9]*)\b", re.I)
 # Single letter line: "A CX635CX", "E WBA…", "R WHITE", "H -"
@@ -369,6 +384,9 @@ def _normalize_engine(value: str, *, from_code: bool = False) -> str:
     raw = _clean_value(value or "")
     if not raw:
         return ""
+    # Do not treat kW figures as engine capacity when units are present
+    if _POWER_RE.search(raw) and not _ENGINE_RE.search(raw):
+        return ""
     m = _ENGINE_RE.search(raw)
     if m:
         return _clean_value(m.group(1))
@@ -379,6 +397,36 @@ def _normalize_engine(value: str, *, from_code: bool = False) -> str:
         if _YEAR_FULL_RE.match(num) and not from_code:
             return ""
         return num
+    return ""
+
+
+def _normalize_max_power(value: str, *, from_code: bool = False) -> str:
+    """Normalize P.2 maximum power to a kW number string (no unit suffix)."""
+    raw = _clean_value(value or "")
+    if not raw:
+        return ""
+    # Prefer explicit kW / კვტ matches
+    m = _POWER_RE.search(raw)
+    if m:
+        return _clean_value(m.group(1).replace(",", "."))
+    # Ignore cm³ displacement when scanning free text
+    if _ENGINE_RE.search(raw) and not from_code:
+        return ""
+    m = _POWER_BARE_RE.search(raw)
+    if m:
+        num = m.group(1).replace(",", ".")
+        # Years are not power; keep rare bare values only from P.2 code
+        if _YEAR_FULL_RE.match(re.sub(r"\D", "", num)[:4]) and not from_code:
+            return ""
+        # Plausible passenger-vehicle kW range (also allows light EV / truck)
+        try:
+            n = float(num)
+        except ValueError:
+            return ""
+        if from_code and 1 <= n <= 2000:
+            return _clean_value(num)
+        if 10 <= n <= 800:
+            return _clean_value(num)
     return ""
 
 
@@ -444,6 +492,9 @@ def _trim_code_value(value: str) -> str:
 def _value_after_dotted_code(lines: list[str], index: int, same_line_value: str) -> str:
     """Use same-line value, or the next non-empty line when OCR wrapped the field."""
     val = _trim_code_value(same_line_value)
+    # Same line is often only the bilingual caption (no real value yet)
+    if val and _is_label_caption_value(val):
+        val = ""
     if (
         val
         and val != "-"
@@ -471,6 +522,9 @@ def _value_after_dotted_code(lines: list[str], index: int, same_line_value: str)
             continue
         if _as_field_code(nxt.split()[0] if nxt else ""):
             continue
+        if _is_label_caption_value(nxt):
+            # Keep scanning — real value (e.g. C.1.4 digits) is often below caption
+            continue
         cand = _trim_code_value(nxt)
         if (
             cand
@@ -480,6 +534,42 @@ def _value_after_dotted_code(lines: list[str], index: int, same_line_value: str)
         ):
             return cand
     return val if val and not _as_field_code(val.split()[0] if val else "") else ""
+
+
+def _is_label_caption_value(value: str) -> bool:
+    """True when OCR captured a field title instead of the value (common on C.1.x)."""
+    raw = _clean_value(value or "")
+    if not raw:
+        return False
+    digits = re.sub(r"\D", "", raw)
+    if len(digits) >= 9:
+        return False
+    # Bilingual titles: "მფლობელის პირადი ნომერი / Owner's Personal Number"
+    if "/" in raw and re.search(
+        r"მფლობელ|owner|პირადი|personal|გვარი|surname|სახელი|name|გაუქმ|expir",
+        raw,
+        re.I,
+    ):
+        return True
+    if re.search(
+        r"^(?:მფლობელის\s+)?(?:პირადი\s*ნომ|გვარი|სახელი)|"
+        r"owner'?s?\s*(?:personal|surname|name)|"
+        r"personal\s*(?:number|no)\b",
+        raw,
+        re.I,
+    ):
+        # Pure caption — little/no leftover content beyond the label words
+        stripped = re.sub(
+            r"მფლობელ(?:ის)?|პირადი|ნომერი|გვარი|სახელი|"
+            r"owner'?s?|personal|number|surname|family|name|given|first|no\.?|#|№",
+            " ",
+            raw,
+            flags=re.I,
+        )
+        stripped = re.sub(r"[/\\|().:\-]+", " ", stripped)
+        stripped = re.sub(r"\s+", " ", stripped).strip()
+        return len(stripped) < 3
+    return False
 
 
 def _vehicle_text_value(value: str) -> str:
@@ -728,6 +818,8 @@ def _code_value_ok(key: str, value: str) -> bool:
         )
     if key == "P.1":
         return bool(_ENGINE_RE.search(val) or re.search(r"\b\d{3,4}\b", val))
+    if key == "P.2":
+        return bool(_POWER_RE.search(val) or re.search(r"\b\d{2,4}(?:[.,]\d+)?\b", val))
     return not _looks_like_junk(val)
 
 
@@ -817,19 +909,93 @@ def _codes_from_words(
                 continue
             if txt.startswith("(") and parts:
                 break
+            if key == "C.1.4" and _is_label_caption_value(txt):
+                continue
             parts.append(txt)
             joined = " ".join(parts)
             if key in {"A", "B", "C", "I", "L", "H", "E", "R"} and _code_value_ok(key, joined):
                 break
-            if key == "C.1.4" and re.search(r"\d{11}", joined):
+            if key == "C.1.4" and re.search(r"\d{9,11}", joined):
                 break
             if key in {"C.1.1", "C.1.2"} and len(parts) >= 2:
+                break
+            if key == "P.1" and (
+                _ENGINE_RE.search(joined) or re.search(r"\b\d{3,4}\b", joined)
+            ):
+                break
+            if key == "P.2" and (
+                _POWER_RE.search(joined)
+                or re.search(r"\b\d{2,4}(?:[.,]\d+)?\b", joined)
+            ):
                 break
             # Stop if we already have a good value and next looks like English caption
             if parts and not _code_value_ok(key, txt) and _code_value_ok(key, parts[0]):
                 parts = parts[:1]
                 break
         val = _trim_code_value(" ".join(parts))
+        # C.1.4: prefer extracting digits from joined right-side tokens
+        if key == "C.1.4" and val and not _code_value_ok(key, val):
+            pid = _personal_id_from_text(val)
+            if pid:
+                val = pid
+        # Values often sit BELOW the code (column layout), not to the right
+        if (not val or not _code_value_ok(key, val)) and key.startswith("C.1"):
+            # C.1.4 digits are often far right of the code / under the bilingual title
+            cx_tol = (
+                max(220.0, row_tol * 18)
+                if key == "C.1.4"
+                else max(80.0, row_tol * 8)
+            )
+            below = [
+                nxt
+                for nxt in tokens
+                if not nxt["key"]
+                and float(nxt["cy"]) > float(tok["cy"]) + 2
+                and float(nxt["cy"]) <= float(tok["cy"]) + row_tol * (
+                    5.5 if key == "C.1.4" else 3.5
+                )
+                and abs(float(nxt["cx"]) - float(tok["cx"])) <= cx_tol
+            ]
+            # Also accept same-row far-right digit tokens for C.1.4
+            if key == "C.1.4":
+                far_right = [
+                    nxt
+                    for nxt in tokens
+                    if not nxt["key"]
+                    and abs(float(nxt["cy"]) - float(tok["cy"])) <= row_tol * 1.4
+                    and float(nxt["cx"]) > float(tok["x2"]) - 2
+                    and re.search(r"\d{9,11}", re.sub(r"\D", "", nxt.get("text") or ""))
+                ]
+                below = far_right + below
+            below.sort(key=lambda n: (float(n["cy"]), float(n["cx"])))
+            bparts: list[str] = []
+            for nxt in below[:8]:
+                txt = (nxt.get("text") or "").strip()
+                if not txt or txt.startswith("("):
+                    if bparts:
+                        break
+                    continue
+                if _is_label_caption_value(txt) and key == "C.1.4":
+                    continue
+                bparts.append(txt)
+                joined = " ".join(bparts)
+                if key == "C.1.4" and re.search(r"\d{9,11}", joined):
+                    break
+                if key in {"C.1.1", "C.1.2"} and (
+                    _GEO_RE.search(joined) or re.search(r"[A-Za-z]{3,}", joined)
+                ):
+                    if len(bparts) >= 2 or _GEO_RE.search(joined):
+                        break
+            bval = _trim_code_value(" ".join(bparts))
+            if bval and _code_value_ok(key, bval):
+                val = bval
+            elif key == "C.1.4":
+                # Last resort: any 9–11 digit token near this code box
+                for nxt in below:
+                    pid = _personal_id_from_text(nxt.get("text") or "")
+                    if pid:
+                        val = pid
+                        break
         if not val and key == "H":
             # bare H / H . with no word to the right
             val = "-"
@@ -1085,7 +1251,7 @@ def _collect_back_codes(
 ) -> dict[str, str]:
     """
     Back-side certificate codes (user mapping):
-      D.1 mark, D.2 type, D.3 model, E VIN, P.1 engine, P.3 fuel, R color
+      D.1 mark, D.2 type, D.3 model, E VIN, P.1 engine, P.2 max power (kW), P.3 fuel, R color
     """
     codes = _collect_side_codes(
         text,
@@ -1156,6 +1322,8 @@ def _parse_back_codes(
         out["vin"] = _normalize_vin(codes["E"])
     if codes.get("P.1"):
         out["engine_capacity"] = _normalize_engine(codes["P.1"], from_code=True)
+    if codes.get("P.2"):
+        out["max_power"] = _normalize_max_power(codes["P.2"], from_code=True)
     if codes.get("P.3"):
         out["fuel_type"] = _normalize_fuel(codes["P.3"])
     if codes.get("R"):
@@ -1334,9 +1502,35 @@ def _enrich_back(
             data["engine_capacity"], from_code=True
         )
     if not data.get("engine_capacity"):
-        eng = _first_match(_ENGINE_RE, text)
+        eng = _engine_from_nearby_lines(text, lines)
         if eng:
-            data["engine_capacity"] = _normalize_engine(eng)
+            data["engine_capacity"] = eng
+        else:
+            eng = _first_match(_ENGINE_RE, text)
+            if eng:
+                data["engine_capacity"] = _normalize_engine(eng)
+            else:
+                # Last resort: bare 3–4 digit on a P.1 line (from_code keeps years like 1998 rare)
+                for line in lines or []:
+                    if re.search(r"P\s*[.,]?\s*1\b", line or "", re.I):
+                        bare = _normalize_engine(line, from_code=True)
+                        if bare:
+                            data["engine_capacity"] = bare
+                            break
+
+    if data.get("max_power"):
+        data["max_power"] = _normalize_max_power(data["max_power"], from_code=True)
+    if not data.get("max_power"):
+        pwr = _max_power_from_nearby_lines(text, lines)
+        if pwr:
+            data["max_power"] = pwr
+        else:
+            for line in lines or []:
+                if re.search(r"P\s*[.,]?\s*2\b", line or "", re.I):
+                    bare = _normalize_max_power(line, from_code=True)
+                    if bare:
+                        data["max_power"] = bare
+                        break
 
     if data.get("fuel_type"):
         data["fuel_type"] = _normalize_fuel(data["fuel_type"])
@@ -1368,14 +1562,370 @@ def _looks_like_front(text: str) -> bool:
 def _looks_like_back(text: str) -> bool:
     t = text or ""
     return bool(
-        re.search(r"(?i)\bD\.[123]\b|\bP\.[13]\b", t)
+        re.search(r"(?i)\bD\.[123]\b|\bP\.[123]\b", t)
         or _VIN_RE.search(t)
         or re.search(r"(?i)\bVIN\b|მარკა|ძრავ", t)
     )
 
 
-# Soft label fill only when dotted codes are missing (type/color often succeed)
-_BACK_LABEL_FALLBACK_KEYS = ("type", "color", "fuel_type")
+# Soft label fill only when dotted codes are missing
+_BACK_LABEL_FALLBACK_KEYS = (
+    "type",
+    "color",
+    "fuel_type",
+    "engine_capacity",
+    "max_power",
+)
+
+
+def _personal_id_from_text(text: str) -> str:
+    """Best 11-digit (prefer) or 9-digit owner/company id from a narrow text slice."""
+    pids = _find_personal_ids(text or "")
+    if pids:
+        return _pick_personal_id(pids)
+    for m in re.finditer(r"(?<!\d)(\d{11})(?!\d)", text or ""):
+        return m.group(1)
+    for m in re.finditer(r"(?<!\d)(\d{9})(?!\d)", text or ""):
+        # 9-digit company tax id — avoid short date fragments
+        return m.group(1)
+    return ""
+
+
+def _line_looks_like_owner_caption(line: str) -> bool:
+    return bool(
+        re.search(
+            r"მფლობელ|owner|surname|family\s*name|გვარი|სახელი|"
+            r"პირადი|personal|given\s*name|first\s*name",
+            line or "",
+            re.I,
+        )
+    )
+
+
+def _owner_surname_from_lines(lines: list[str]) -> str:
+    """C.1.1 / მფლობელის გვარი — accept Georgian and/or Latin (no geo-only filter)."""
+    for i, line in enumerate(lines or []):
+        stripped = (line or "").strip()
+        m = re.match(
+            r"^\s*[(\[]?C\s*[.,]?\s*1\s*[.,]?\s*1[)\]]?[.)\-:]*\s*(.*)$",
+            stripped,
+            re.I,
+        )
+        if not m:
+            continue
+        val = _value_after_dotted_code(lines, i, m.group(1))
+        if val and _code_value_ok("C.1.1", val) and not _looks_like_address(val):
+            return val
+
+    for i, line in enumerate(lines or []):
+        stripped = (line or "").strip()
+        if not re.search(
+            r"მფლობელის\s*გვარი|owner'?s?\s*surname|family\s*name",
+            stripped,
+            re.I,
+        ):
+            continue
+        # Same line after label
+        after = re.split(
+            r"მფლობელის\s*გვარი|owner'?s?\s*surname|family\s*name",
+            stripped,
+            maxsplit=1,
+            flags=re.I,
+        )
+        if len(after) > 1:
+            cand = _trim_code_value(
+                re.sub(r"^[\s/:：\-–—]+", "", after[1])
+            )
+            # Drop English caption remnant
+            cand = re.split(
+                r"\s*/\s*(?:Owner|Surname|Family)\b",
+                cand,
+                maxsplit=1,
+                flags=re.I,
+            )[0].strip()
+            if cand and _code_value_ok("C.1.1", cand) and not _looks_like_address(cand):
+                return cand
+        for j in range(i + 1, min(i + 5, len(lines))):
+            nxt = (lines[j] or "").strip()
+            if not nxt:
+                continue
+            if _as_field_code(nxt.split()[0] if nxt else ""):
+                break
+            if re.match(
+                r"^\s*[(\[]?C\s*[.,]?\s*1\s*[.,]?\s*[234]",
+                nxt,
+                re.I,
+            ):
+                break
+            if _line_looks_like_owner_caption(nxt) and not (
+                _GEO_RE.search(nxt) or re.search(r"[A-Za-z]{3,}", nxt)
+            ):
+                continue
+            cand = _trim_code_value(nxt)
+            cand = re.split(r"\s*\(", cand, maxsplit=1)[0].strip()
+            if cand and _code_value_ok("C.1.1", cand) and not _looks_like_address(cand):
+                return cand
+    return ""
+
+
+def _owner_personal_from_lines(lines: list[str]) -> str:
+    """Only from C.1.4 / მფლობელის პირადი rows — never whole-page scan."""
+    for i, line in enumerate(lines or []):
+        stripped = (line or "").strip()
+        is_code = bool(
+            re.match(
+                r"^\s*[(\[]?C\s*[.,]?\s*1\s*[.,]?\s*4[)\]]?",
+                stripped,
+                re.I,
+            )
+            or re.search(r"\bC\s*[.,]?\s*1\s*[.,]?\s*4\b", stripped, re.I)
+        )
+        is_caption = bool(
+            re.search(
+                r"მფლობელის\s*პირადი|owner'?s?\s*personal\s*(?:number|no|id|#)",
+                stripped,
+                re.I,
+            )
+        )
+        # Bare "პირადი ნომერი" only if C.1.4 is nearby (prev/same/next)
+        is_bare_personal = bool(
+            re.search(r"პირადი\s*ნომ|personal\s*(?:number|no)\b", stripped, re.I)
+        )
+        if is_bare_personal and not is_code and not is_caption:
+            window = " ".join(
+                (lines[k] or "") for k in range(max(0, i - 1), min(len(lines), i + 2))
+            )
+            if not re.search(r"C\s*[.,]?\s*1\s*[.,]?\s*4|მფლობელ", window, re.I):
+                continue
+        if not (is_code or is_caption or is_bare_personal):
+            continue
+        # Prefer digits on the same line as C.1.4 / caption first
+        same = _personal_id_from_text(stripped)
+        if same:
+            return same
+        for j in range(i, min(i + 6, len(lines))):
+            chunk = lines[j] or ""
+            # Stop at next owner/code block (but not C.1.4 itself)
+            if j > i and re.match(
+                r"^\s*[(\[]?[A-Z](?:[.,]\d+(?:[.,]\d+)?)?[)\]]?",
+                chunk,
+                re.I,
+            ):
+                key = _as_field_code(chunk.split()[0] if chunk.split() else "")
+                if key and key != "C.1.4":
+                    break
+            if j > i and _is_label_caption_value(chunk):
+                continue
+            pid = _personal_id_from_text(chunk)
+            if pid:
+                return pid
+    return ""
+
+
+def _c14_personal_from_words(words: list[dict] | None) -> str:
+    """Spatial C.1.4 → nearest 9/11-digit id to the right or below."""
+    if not words:
+        return ""
+    heights = [max(1, int(w["y2"] - w["y1"])) for w in words]
+    heights.sort()
+    row_tol = max(10.0, heights[len(heights) // 2] * 0.85)
+
+    code_boxes: list[dict] = []
+    digit_boxes: list[dict] = []
+    for w in words:
+        t = (w.get("text") or "").strip()
+        if not t:
+            continue
+        key = _as_field_code(t)
+        if key == "C.1.4" or re.fullmatch(r"[(\[]?C\s*[.,]?\s*1\s*[.,]?\s*4[)\]]?", t, re.I):
+            code_boxes.append(w)
+            continue
+        pid = _personal_id_from_text(t)
+        if pid:
+            digit_boxes.append({**w, "pid": pid})
+
+    if not code_boxes or not digit_boxes:
+        return ""
+
+    best: tuple[float, str] | None = None
+    for code in code_boxes:
+        for dig in digit_boxes:
+            same_row = abs(float(dig["cy"]) - float(code["cy"])) <= row_tol * 1.6
+            below = (
+                float(dig["cy"]) > float(code["cy"]) + 2
+                and float(dig["cy"]) <= float(code["cy"]) + row_tol * 6
+            )
+            to_right = float(dig["cx"]) >= float(code["cx"]) - 10
+            if not ((same_row and to_right) or (below and to_right)):
+                continue
+            dist = abs(float(dig["cx"]) - float(code["cx"])) + abs(
+                float(dig["cy"]) - float(code["cy"])
+            ) * 1.5
+            if best is None or dist < best[0]:
+                best = (dist, dig["pid"])
+    return best[1] if best else ""
+
+
+def _extract_front_personal_number(
+    text: str,
+    lines: list[str],
+    words: list[dict] | None = None,
+) -> str:
+    """
+    Always read owner's personal / company id from front-side C.1.4.
+    Never whole-page guessing — only C.1.4 code zone and its caption.
+    """
+    codes = _collect_front_codes(text, lines, words)
+    raw = codes.get("C.1.4") or ""
+    if raw:
+        pid = _personal_id_from_text(raw)
+        if pid:
+            return pid
+        digits = re.sub(r"\D", "", raw)
+        if len(digits) in (9, 11):
+            return digits
+
+    pid = _c14_personal_from_words(words)
+    if pid:
+        return pid
+
+    pid = _owner_personal_from_lines(lines)
+    if pid:
+        return pid
+
+    labeled = _field_from_labels(
+        lines, _FRONT_LABELS["owner_personal_number"], prefer_georgian=False
+    )
+    if labeled:
+        pid = _personal_id_from_text(labeled)
+        if pid:
+            return pid
+        digits = re.sub(r"\D", "", labeled)
+        if len(digits) in (9, 11):
+            return digits
+
+    return ""
+
+
+def _engine_from_nearby_lines(text: str, lines: list[str]) -> str:
+    """Find capacity on P.1 / ძრავის მოცულობა rows, then anywhere on the back."""
+    candidates: list[str] = []
+    for line in lines or []:
+        stripped = (line or "").strip()
+        if not stripped:
+            continue
+        # Skip P.2-only power rows so kW is not mistaken for displacement
+        if re.search(r"P\s*[.,]?\s*2\b", stripped, re.I) and not re.search(
+            r"P\s*[.,]?\s*1\b", stripped, re.I
+        ):
+            continue
+        if not re.search(
+            r"P\s*[.,]?\s*1\b|ძრავ|capacity|displacement|მოცულობა|cm\s*3|cm³|\bcc\b",
+            stripped,
+            re.I,
+        ):
+            continue
+        eng = _normalize_engine(stripped, from_code=True)
+        if eng:
+            candidates.append(eng)
+    if candidates:
+        for c in candidates:
+            if not _YEAR_FULL_RE.match(c):
+                return c
+        return candidates[0]
+    eng = _first_match(_ENGINE_RE, text or "")
+    if eng:
+        return _normalize_engine(eng)
+    return ""
+
+
+def _max_power_from_nearby_lines(text: str, lines: list[str]) -> str:
+    """Find max power (kW) on P.2 / სიმძლავრე rows, then explicit kW anywhere."""
+    candidates: list[str] = []
+    for line in lines or []:
+        stripped = (line or "").strip()
+        if not stripped:
+            continue
+        if not re.search(
+            r"P\s*[.,]?\s*2\b|სიმძლავრე|maximum\s+power|max\.?\s*power|k\s*w|კვტ",
+            stripped,
+            re.I,
+        ):
+            continue
+        pwr = _normalize_max_power(stripped, from_code=True)
+        if pwr:
+            candidates.append(pwr)
+    if candidates:
+        return candidates[0]
+    m = _POWER_RE.search(text or "")
+    if m:
+        return _normalize_max_power(m.group(0), from_code=True)
+    return ""
+
+
+def _fill_missing_front_owner_fields(
+    data: dict,
+    text: str,
+    lines: list[str],
+    words: list[dict] | None = None,
+) -> dict:
+    """
+    When C.1.1 / C.1.2 / C.1.4 codes were missed by OCR, fill from captions
+    — without whole-page personal-id guessing (that caused wrong IDs).
+    """
+    if not data.get("owner_surname"):
+        raw = _owner_surname_from_lines(lines)
+        if not raw:
+            # Label map without geo-only filter (Latin surnames are valid)
+            raw = _field_from_labels(
+                lines, _FRONT_LABELS["owner_surname"], prefer_georgian=False
+            )
+        if raw and _code_value_ok("C.1.1", raw) and not _looks_like_address(raw):
+            if _is_legal_entity(raw):
+                data["owner_name"] = _company_name_value(raw)
+                data["owner_surname"] = "-"
+            else:
+                data["owner_surname"] = _owner_bilingual(raw)
+
+    if not data.get("owner_name"):
+        raw = _field_from_labels(
+            lines, _FRONT_LABELS["owner_name"], prefer_georgian=False
+        )
+        if not raw:
+            for i, line in enumerate(lines or []):
+                if re.match(
+                    r"^\s*[(\[]?C\s*[.,]?\s*1\s*[.,]?\s*2[)\]]?",
+                    line or "",
+                    re.I,
+                ):
+                    raw = _value_after_dotted_code(
+                        lines,
+                        i,
+                        re.sub(
+                            r"^\s*[(\[]?C\s*[.,]?\s*1\s*[.,]?\s*2[)\]]?[.)\-:]*\s*",
+                            "",
+                            line or "",
+                            flags=re.I,
+                        ),
+                    )
+                    break
+        if raw and _code_value_ok("C.1.2", raw) and not _looks_like_address(raw):
+            if _is_legal_entity(raw):
+                data["owner_name"] = _company_name_value(raw)
+                data["owner_surname"] = "-"
+            else:
+                data["owner_name"] = _owner_bilingual(raw)
+
+    # Personal number: ALWAYS from front C.1.4 (code / caption / word boxes)
+    pid = _extract_front_personal_number(text, lines, words)
+    if pid:
+        data["owner_personal_number"] = pid
+    else:
+        cur_pid = re.sub(r"\D", "", str(data.get("owner_personal_number") or ""))
+        if data.get("owner_personal_number") and len(cur_pid) not in (9, 11):
+            data["owner_personal_number"] = ""
+
+    return data
 
 
 def _crop_xyxy_to_data_url(
@@ -1943,15 +2493,19 @@ def extract_tech_passport_info(front_bytes: bytes, back_bytes: bytes) -> dict:
     front_text, front_lines, front_words, _front_rot = ocr_image_ex(front_bytes)
     back_text, back_lines, back_words, _back_rot = ocr_image_ex(back_bytes)
 
-    # Codes only for front — labels pollute plate/year/owner from parenthetical captions
+    # Codes only for front — labels pollute plate/year from parenthetical captions
     front = _enrich_front({}, front_text, front_lines, front_words)
     if not front.get("card_number"):
         labeled_card = _field_from_labels(front_lines, _FRONT_LABELS["card_number"])
         if labeled_card and re.search(r"[A-Z]{2,3}\d{5,}", labeled_card, re.I):
             front["card_number"] = _clean_value(labeled_card).upper()
+    # Owner gaps: C.1.1 / C.1.4 — fill from captions; personal ALWAYS from front C.1.4
+    front = _fill_missing_front_owner_fields(
+        front, front_text, front_lines, front_words
+    )
 
     back = _enrich_back({}, back_text, back_lines, back_words)
-    # Only fill a few back gaps from labels when this side actually looks like the back
+    # Soft label fill for back gaps (incl. engine capacity) when side looks like back
     if _looks_like_back(back_text):
         labeled_back = _parse_side(back_text, back_lines, _BACK_LABELS)
         for key in _BACK_LABEL_FALLBACK_KEYS:
@@ -1964,6 +2518,9 @@ def extract_tech_passport_info(front_bytes: bytes, back_bytes: bytes) -> dict:
         for k, v in alt.items():
             if v and not front.get(k):
                 front[k] = v
+        front = _fill_missing_front_owner_fields(
+            front, back_text, back_lines, back_words
+        )
 
     if not back.get("vin") and front_text and _looks_like_back(front_text):
         alt = _enrich_back({}, front_text, front_lines, front_words)
