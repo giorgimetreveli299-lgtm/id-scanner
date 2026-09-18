@@ -42,6 +42,84 @@
       color: var(--text);
       min-height: 100vh;
     }
+    .page-instructions {
+      position: fixed;
+      top: 12px;
+      left: 12px;
+      z-index: 2000;
+      max-width: min(360px, calc(100vw - 24px));
+      font-family: var(--font-body);
+    }
+    .page-instructions > summary {
+      list-style: none;
+      cursor: pointer;
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      padding: 8px 14px;
+      border-radius: 10px;
+      background: rgba(255, 255, 255, 0.92);
+      border: 1px solid var(--line);
+      box-shadow: 0 8px 22px rgba(42, 24, 64, 0.08);
+      color: var(--accent-dark);
+      font-family: var(--font-display);
+      font-weight: 700;
+      font-size: 0.92rem;
+      letter-spacing: 0.01em;
+      user-select: none;
+    }
+    .page-instructions > summary::-webkit-details-marker { display: none; }
+    .page-instructions > summary::after {
+      content: "";
+      width: 0.45em;
+      height: 0.45em;
+      border-right: 2px solid var(--accent-dark);
+      border-bottom: 2px solid var(--accent-dark);
+      transform: rotate(45deg);
+      margin-top: -0.2em;
+      transition: transform 0.2s;
+    }
+    .page-instructions[open] > summary::after {
+      transform: rotate(-135deg);
+      margin-top: 0.15em;
+    }
+    .page-instructions > summary:hover {
+      background: #fff;
+      border-color: rgba(249, 115, 22, 0.35);
+    }
+    .page-instructions-body {
+      margin-top: 8px;
+      padding: 14px 16px 14px 14px;
+      border-radius: 12px;
+      background: rgba(255, 255, 255, 0.96);
+      border: 1px solid var(--line);
+      box-shadow: 0 14px 32px rgba(42, 24, 64, 0.1);
+      max-height: min(70vh, 420px);
+      overflow: auto;
+    }
+    .page-instructions-body ol {
+      margin: 0;
+      padding-left: 1.35rem;
+      color: var(--text);
+      font-size: 0.88rem;
+      line-height: 1.55;
+    }
+    .page-instructions-body li {
+      margin: 0 0 0.65em;
+    }
+    .page-instructions-body li:last-child {
+      margin-bottom: 0;
+    }
+    @media (max-width: 520px) {
+      .page-instructions {
+        top: 8px;
+        left: 8px;
+        max-width: calc(100vw - 16px);
+      }
+      body {
+        padding-top: 56px;
+      }
+    }
     .container { max-width: 860px; margin: 0 auto; }
     .card {
       background: rgba(255, 255, 255, 0.86);
@@ -271,7 +349,8 @@
       font-size: 1.15rem;
     }
 
-    .license-extract-banner {
+    .license-extract-banner,
+    .extract-banner {
       margin: 0 0 16px;
       padding: 14px 16px;
       border-radius: 12px;
@@ -282,15 +361,23 @@
       text-align: center;
       border: 2px solid transparent;
     }
-    .license-extract-banner.is-ok {
+    .license-extract-banner.is-ok,
+    .extract-banner.is-ok {
       color: #166534;
       background: #dcfce7;
       border-color: #86efac;
     }
-    .license-extract-banner.is-error {
+    .license-extract-banner.is-error,
+    .extract-banner.is-error {
       color: #991b1b;
       background: #fee2e2;
       border-color: #fca5a5;
+    }
+    .extract-banner.is-error {
+      cursor: pointer;
+    }
+    .extract-banner:empty {
+      display: none;
     }
 
     .license-fields {
@@ -1060,10 +1147,7 @@
       max-width: 720px;
     }
     .id-frame.car-mode {
-      width: 92%;
-      height: 88%;
-      border-radius: 12px;
-      border-style: dashed;
+      display: none;
     }
 
     .car-photo-actions {
@@ -1344,7 +1428,7 @@
     }
 
     .generate-bar {
-      display: flex;
+      display: none;
       flex-wrap: wrap;
       align-items: center;
       gap: 10px 14px;
@@ -1463,6 +1547,7 @@
     }
     .mrz-toggle:hover { background: #efe6f7; }
     .mrz-overall-status {
+      display: none !important;
       flex-shrink: 0;
       min-width: 118px;
       padding: 12px 20px;
@@ -1473,7 +1558,6 @@
       line-height: 1.2;
       border: 2px solid transparent;
       cursor: default;
-      display: inline-flex;
       align-items: center;
       justify-content: center;
       transition: background 0.2s, border-color 0.2s, box-shadow 0.2s;
@@ -1518,6 +1602,10 @@
     .input-with-badge.flash-error {
       animation: field-error-flash 0.55s ease-in-out 4;
       border-width: 2px;
+    }
+    .tech-passport-field.flash-error,
+    .field-group.flash-error {
+      animation: field-error-flash 0.55s ease-in-out 4;
     }
     .mrz-panel {
       position: relative;
@@ -1568,6 +1656,18 @@
   </style>
 </head>
 <body>
+  <details class="page-instructions">
+    <summary>Instruction</summary>
+    <div class="page-instructions-body">
+      <ol>
+        <li>დოკუმენტი აუცილებლად უნდა დადოთ მუქ ზედაპირზე, უმჯობესია შავზე.</li>
+        <li>დოკუმენტი უნდა იყოს ნათელ ადგილზე.</li>
+        <li>გადაღებული ფოტო უნდა იყოს მკვეთრი და კარგ ხარისხში.</li>
+        <li>ფოტოების ატვირთვის შემდეგ ველოდებით ინფორმაციის ექსტრაქტირებას, ვამოწმებთ რომ ყველა ინფორმაცია სწორია; თუ სადმე შეამჩნევთ ხარვეზს, ასწორებთ მექანიკურად (ხელით).</li>
+        <li>პროცესს ვასრულებთ „Download PDF“ ღილაკით.</li>
+      </ol>
+    </div>
+  </details>
   <div class="container">
     <div class="card method-choice-card" id="method-choice">
       <h2>Select a document type to continue.</h2>
@@ -1693,6 +1793,12 @@
         <div id="tech-passport-ocr-status" class="tech-passport-ocr-status" aria-live="polite"></div>
 
         <div id="tech-passport-results" class="tech-passport-results">
+          <div
+            id="tech-extract-banner"
+            class="extract-banner"
+            role="status"
+            aria-live="polite"
+          ></div>
           <div class="tech-passport-results-head">
             <h3>Vehicle data</h3>
           </div>
@@ -2102,6 +2208,12 @@
 
       <div class="card" id="results-card">
         <h3>Extracted data</h3>
+        <div
+          id="id-extract-banner"
+          class="extract-banner"
+          role="status"
+          aria-live="polite"
+        ></div>
         <div class="generate-bar" id="generate-bar">
           <label for="generate-stage">Generate</label>
           <select id="generate-stage" onchange="onGenerateStageChange()">
@@ -2400,9 +2512,9 @@
       return out;
     }
 
-    function clearCarRoofMedia() {
+    async function clearCarRoofMedia() {
       const id = CAR_ROOF_SLOT.id;
-      if (carVideoRecordSlot === id) stopCarGuideVideoRecording(false);
+      if (carVideoRecordSlot === id) await stopCarGuideVideoRecording(false);
       const url = carPhotoDataUrls[id];
       if (url && String(url).startsWith("blob:")) {
         try { URL.revokeObjectURL(url); } catch (_) {}
@@ -2417,14 +2529,14 @@
       }
     }
 
-    function setCarCabriolet(checked) {
+    async function setCarCabriolet(checked) {
       const next = Boolean(checked);
       if (next === carCabriolet) {
         refreshCarPhotoStage();
         return;
       }
       carCabriolet = next;
-      if (!carCabriolet) clearCarRoofMedia();
+      if (!carCabriolet) await clearCarRoofMedia();
       const slots = activeCarPhotoSlots();
       carPhotoStepIndex = Math.max(0, Math.min(slots.length - 1, carPhotoStepIndex));
       clearCarUploadError();
@@ -2537,7 +2649,8 @@
       return step ? step.id : "car-front";
     }
 
-    function clearCarOdometerMedia(modeToKeep) {
+    async function clearCarOdometerMedia(modeToKeep) {
+      await stopCarOdometerRecording(false);
       const clearId = (id) => {
         const url = carPhotoDataUrls[id];
         if (url && String(url).startsWith("blob:")) {
@@ -2553,13 +2666,12 @@
       } else {
         carOdometerAllIds().forEach(clearId);
       }
-      stopCarOdometerRecording(false);
     }
 
-    function setCarOdometerMode(mode) {
+    async function setCarOdometerMode(mode) {
       const next = mode === "photos" || mode === "video" ? mode : null;
       if (next !== carOdometerMode) {
-        clearCarOdometerMedia(next);
+        await clearCarOdometerMedia(next);
         carOdometerMode = next;
       }
       const slots = activeCarPhotoSlots();
@@ -2770,8 +2882,8 @@
       }).join("");
     }
 
-    function resetCarPhotoGuide() {
-      stopCarOdometerRecording(false);
+    async function resetCarPhotoGuide() {
+      await stopCarOdometerRecording(false);
       carPhotoLeafSlots().forEach(({ id }) => {
         const url = carPhotoDataUrls[id];
         if (url && String(url).startsWith("blob:")) {
@@ -2788,7 +2900,7 @@
         delete carPhotoBlobs[id];
         delete carPhotoDataUrls[id];
       });
-      clearCarRoofMedia();
+      await clearCarRoofMedia();
       carOdometerMode = null;
       carCabriolet = false;
       const cabCb = document.getElementById("car-cabriolet");
@@ -2901,12 +3013,12 @@
       input.click();
     }
 
-    function cancelCurrentCarPhoto() {
-      cancelSlotPhoto(currentCarPhotoSlot());
+    async function cancelCurrentCarPhoto() {
+      await cancelSlotPhoto(currentCarPhotoSlot());
     }
 
-    function carPhotoNewClient() {
-      resetCarPhotoGuide();
+    async function carPhotoNewClient() {
+      await resetCarPhotoGuide();
       showMethodChoice();
     }
 
@@ -2946,7 +3058,7 @@
     async function toggleCarGuideVideoRecord(slot) {
       const target = slot || currentCarPhotoSlot() || CAR_ODOMETER_VIDEO_SLOT.id;
       if (isCarOdometerVideoSlot(target) && carOdometerMode !== "video") {
-        setCarOdometerMode("video");
+        await setCarOdometerMode("video");
       }
       if (carOdoRecorder && carOdoRecorder.state === "recording") {
         await stopCarGuideVideoRecording(true);
@@ -2984,7 +3096,7 @@
         if (recBtn) recBtn.textContent = "Stop";
       } catch (err) {
         console.warn("car guide video record failed:", err);
-        stopCarGuideVideoRecording(false);
+        await stopCarGuideVideoRecording(false);
         showCarUploadError("Could not start video recording. Try Upload instead.");
       }
     }
@@ -3351,9 +3463,10 @@
     }
 
     /**
-     * KA and EN are translations:
-     * - delete on one side → delete same index on the other (remember for restore)
-     * - re-type the deleted letter(s) → restore the other side too
+     * KA and EN are translations in one input ("ნინო / Nino"):
+     * - If EN matches transliteration of KA → sync by letter mapping (digraphs OK)
+     * - Otherwise → same-index sync (translations of different length)
+     * - Re-type deleted letter(s) → restore the other side too
      */
     function techSyncBilingualPairOnInput(el) {
       if (!el || el.dataset.techBilSkip === "1") {
@@ -3384,29 +3497,62 @@
       const insRight = techInsertedRange(prev.right, cur.right);
       const insLeft = techInsertedRange(prev.left, cur.left);
 
+      const leftIsGeo = /[\u10D0-\u10FF]/.test(prev.left);
+      const rightIsLat = /^[A-Za-z\s\-'.]*$/.test(String(prev.right || "").trim());
+      const translitMatch =
+        leftIsGeo &&
+        rightIsLat &&
+        typeof transliterateKa === "function" &&
+        transliterateKa(prev.left).toLowerCase() === String(prev.right || "").toLowerCase();
+
       if (delRight && prev.right.length > cur.right.length) {
-        const otherText = prev.left.slice(delRight.start, delRight.end + 1);
+        let otherText = "";
+        let nextLeft = prev.left;
+        if (translitMatch && typeof idLatRangeToGeoIndices === "function") {
+          const geoIndices = idLatRangeToGeoIndices(prev.left, delRight.start, delRight.end);
+          otherText = geoIndices.map((i) => prev.left[i]).join("");
+          nextLeft = idDeleteGeoIndices(prev.left, geoIndices);
+        } else {
+          otherText = prev.left.slice(delRight.start, delRight.end + 1);
+          nextLeft = techDeleteRange(prev.left, delRight.start, delRight.end);
+        }
         techPushBilRestore(el, {
           editSide: "right",
           index: delRight.start,
           editText: delRight.text,
           otherText,
+          translit: translitMatch,
         });
-        left = techDeleteRange(prev.left, delRight.start, delRight.end);
+        left = nextLeft;
         right = cur.right;
         caretSide = "right";
         caretInSide = delRight.start;
         changed = true;
       } else if (delLeft && prev.left.length > cur.left.length) {
-        const otherText = prev.right.slice(delLeft.start, delLeft.end + 1);
-        techPushBilRestore(el, {
-          editSide: "left",
-          index: delLeft.start,
-          editText: delLeft.text,
-          otherText,
-        });
-        right = techDeleteRange(prev.right, delLeft.start, delLeft.end);
         left = cur.left;
+        if (translitMatch && typeof transliterateKa === "function") {
+          // Georgian edited → rebuild Latin from remaining Georgian
+          const otherText = prev.right;
+          techPushBilRestore(el, {
+            editSide: "left",
+            index: delLeft.start,
+            editText: delLeft.text,
+            otherText,
+            translit: true,
+            fullRight: prev.right,
+          });
+          right = left.trim() ? transliterateKa(left) : "";
+        } else {
+          const otherText = prev.right.slice(delLeft.start, delLeft.end + 1);
+          techPushBilRestore(el, {
+            editSide: "left",
+            index: delLeft.start,
+            editText: delLeft.text,
+            otherText,
+            translit: false,
+          });
+          right = techDeleteRange(prev.right, delLeft.start, delLeft.end);
+        }
         caretSide = "left";
         caretInSide = delLeft.start;
         changed = true;
@@ -3415,7 +3561,11 @@
         right = cur.right;
         left = cur.left;
         if (hit && hit.otherText) {
-          left = techInsertAt(prev.left, hit.index, hit.otherText);
+          if (hit.translit && typeof idInsertGeoAtLatPos === "function") {
+            left = idInsertGeoAtLatPos(prev.left, hit.index, hit.otherText);
+          } else {
+            left = techInsertAt(prev.left, hit.index, hit.otherText);
+          }
           changed = true;
         }
         caretSide = "right";
@@ -3424,12 +3574,33 @@
         const hit = techPopBilRestore(el, "left", insLeft.start, insLeft.text);
         left = cur.left;
         right = cur.right;
-        if (hit && hit.otherText) {
-          right = techInsertAt(prev.right, hit.index, hit.otherText);
+        if (hit) {
+          if (hit.translit && typeof transliterateKa === "function") {
+            right = left.trim() ? transliterateKa(left) : "";
+            changed = true;
+          } else if (hit.otherText) {
+            right = techInsertAt(prev.right, hit.index, hit.otherText);
+            changed = true;
+          }
+        } else if (translitMatch && typeof transliterateKa === "function") {
+          // New Georgian typed → rebuild Latin transliteration
+          right = left.trim() ? transliterateKa(left) : "";
           changed = true;
         }
         caretSide = "left";
         caretInSide = insLeft.end + 1;
+      } else if (
+        translitMatch &&
+        typeof transliterateKa === "function" &&
+        cur.left !== prev.left &&
+        cur.right === prev.right
+      ) {
+        // Replace / other left-side edits → keep Latin in sync via transliteration
+        left = cur.left;
+        right = left.trim() ? transliterateKa(left) : "";
+        caretSide = "left";
+        caretInSide = cur.left.length;
+        changed = true;
       }
 
       const lt = String(left || "").trim();
@@ -3682,6 +3853,7 @@
         const status = getTechQrBadgeStatus(inputId, kind, value);
         showTechPassportQrBadge(inputId, badgeId, wrapId, kind, status);
       });
+      updateTechExtractBanner();
     }
 
     function bindTechPassportQrBadgeInputs() {
@@ -3763,6 +3935,14 @@
       });
       techRememberBilingualSnapshots();
       clearTechPassportQrPanel();
+      techExtractBannerActive = false;
+      techExtractOriginals = {};
+      const banner = document.getElementById("tech-extract-banner");
+      if (banner) {
+        banner.textContent = "";
+        banner.classList.remove("is-ok", "is-error");
+        banner.onclick = null;
+      }
       document.getElementById("tech-passport-results")?.classList.remove("visible");
       const status = document.getElementById("tech-passport-ocr-status");
       if (status) {
@@ -3791,6 +3971,203 @@
 
     function techPassportFieldValue(id) {
       return (document.getElementById(id)?.value || "").trim();
+    }
+
+    /** Fields validated for the tech-passport extract status banner. */
+    const TECH_EXTRACT_FIELD_CHECKS = [
+      { label: "Registration Number", requiredIds: ["tech-reg-number"], qrInputId: "tech-reg-number" },
+      { label: "Production year", requiredIds: ["tech-prod-year"] },
+      { label: "Registration date", requiredIds: ["tech-reg-date"] },
+      { label: "Owner's Name", requiredIds: ["tech-owner-name"] },
+      { label: "Owner's Surname", requiredIds: ["tech-owner-surname"], allowDash: true },
+      { label: "Owner's Personal Number", requiredIds: ["tech-owner-personal"] },
+      { label: "Expiration Date", requiredIds: ["tech-expiry"], allowDash: true },
+      { label: "Card Number", requiredIds: ["tech-card-number"], qrInputId: "tech-card-number" },
+      { label: "Mark", requiredIds: ["tech-mark"], qrInputId: "tech-mark" },
+      { label: "Type", requiredIds: ["tech-type"] },
+      { label: "Model", requiredIds: ["tech-model"], qrInputId: "tech-model" },
+      { label: "V.I.N Code", requiredIds: ["tech-vin"] },
+      { label: "Engine Capacity", requiredIds: ["tech-engine"], optional: true },
+      { label: "Maximum Power", requiredIds: ["tech-max-power"], optional: true },
+      { label: "Fuel Type", requiredIds: ["tech-fuel"] },
+      { label: "Color", requiredIds: ["tech-color"] },
+    ];
+
+    let techExtractBannerActive = false;
+    let techExtractBannerListenersBound = false;
+    let techExtractOriginals = {};
+
+    function rememberTechExtractOriginals() {
+      techExtractOriginals = {};
+      TECH_PASSPORT_FIELD_IDS.forEach((id) => {
+        techExtractOriginals[id] = techPassportFieldValue(id);
+      });
+    }
+
+    /** True for blank, "-", "—", or bilingual "- / -" placeholders. */
+    function techIsDashPlaceholder(val) {
+      const s = String(val || "").trim();
+      if (!s) return true;
+      if (/^[-_—–−.]+$/.test(s)) return true;
+      const parts = s.split("/").map((p) => p.trim()).filter(Boolean);
+      return parts.length > 0 && parts.every((p) => /^[-_—–−.]+$/.test(p));
+    }
+
+    function techFieldEditedFromOriginal(id, allowDash = false) {
+      if (!(id in techExtractOriginals)) return false;
+      const cur = techPassportFieldValue(id);
+      const orig = techExtractOriginals[id];
+      // Dash / blank on allowDash fields is a normal empty value, not a correction error
+      if (allowDash && techIsDashPlaceholder(cur)) return false;
+      if (allowDash && techIsDashPlaceholder(orig) && techIsDashPlaceholder(cur)) return false;
+      return cur !== orig;
+    }
+
+    function techFieldIsEmpty(id, allowDash = false) {
+      const val = techPassportFieldValue(id);
+      // allowDash: blank or "-" counts as present/OK (e.g. expiration date H)
+      if (allowDash && techIsDashPlaceholder(val)) return false;
+      if (!val) return true;
+      return false;
+    }
+
+    function techQrFieldHasError(inputId) {
+      const badge = TECH_QR_CHECK_FIELDS.find((f) => f.inputId === inputId);
+      if (!badge) return false;
+      const el = document.getElementById(badge.badgeId);
+      return Boolean(
+        el && !el.classList.contains("hidden") && el.classList.contains("is-error")
+      );
+    }
+
+    function collectTechValidationErrors() {
+      const errors = [];
+      if (!techExtractBannerActive) return errors;
+
+      for (const field of TECH_EXTRACT_FIELD_CHECKS) {
+        let fieldError = false;
+
+        if (!field.optional) {
+          for (const id of field.requiredIds) {
+            if (techFieldIsEmpty(id, field.allowDash)) {
+              fieldError = true;
+              break;
+            }
+            if (techFieldEditedFromOriginal(id, field.allowDash)) {
+              fieldError = true;
+              break;
+            }
+          }
+        } else {
+          for (const id of field.requiredIds) {
+            const val = techPassportFieldValue(id);
+            if (field.allowDash && techIsDashPlaceholder(val)) continue;
+            if (val && techFieldEditedFromOriginal(id, field.allowDash)) {
+              fieldError = true;
+              break;
+            }
+          }
+        }
+
+        if (!fieldError && field.qrInputId && techQrFieldHasError(field.qrInputId)) {
+          fieldError = true;
+        }
+
+        if (fieldError) errors.push(field.label);
+      }
+
+      return errors;
+    }
+
+    function flashTechExtractField(inputId) {
+      const input = document.getElementById(inputId);
+      if (!input) return;
+      const wrap =
+        input.closest(".tech-passport-field") ||
+        input.closest(".license-input-wrap") ||
+        input;
+      wrap.scrollIntoView({ behavior: "smooth", block: "center" });
+      wrap.classList.remove("flash-error");
+      void wrap.offsetWidth;
+      wrap.classList.add("flash-error");
+      window.clearTimeout(flashTechExtractField._timer);
+      flashTechExtractField._timer = window.setTimeout(() => {
+        wrap.classList.remove("flash-error");
+      }, 2400);
+      try {
+        input.focus({ preventScroll: true });
+      } catch (_) {
+        input.focus();
+      }
+    }
+
+    function firstTechErrorInputId() {
+      for (const field of TECH_EXTRACT_FIELD_CHECKS) {
+        let bad = false;
+        if (!field.optional) {
+          for (const id of field.requiredIds) {
+            if (
+              techFieldIsEmpty(id, field.allowDash) ||
+              techFieldEditedFromOriginal(id, field.allowDash)
+            ) {
+              bad = true;
+              break;
+            }
+          }
+        } else {
+          for (const id of field.requiredIds) {
+            const val = techPassportFieldValue(id);
+            if (field.allowDash && techIsDashPlaceholder(val)) continue;
+            if (val && techFieldEditedFromOriginal(id, field.allowDash)) {
+              bad = true;
+              break;
+            }
+          }
+        }
+        if (!bad && field.qrInputId && techQrFieldHasError(field.qrInputId)) bad = true;
+        if (bad) return field.requiredIds[0] || field.qrInputId;
+      }
+      return null;
+    }
+
+    function updateTechExtractBanner() {
+      const banner = document.getElementById("tech-extract-banner");
+      if (!banner) return;
+
+      if (!techExtractBannerActive) {
+        banner.textContent = "";
+        banner.classList.remove("is-ok", "is-error");
+        banner.onclick = null;
+        return;
+      }
+
+      const errors = collectTechValidationErrors();
+      if (!errors.length) {
+        banner.textContent = "Every extracted information is correct and ready to process";
+        banner.classList.add("is-ok");
+        banner.classList.remove("is-error");
+        banner.onclick = null;
+        banner.title = "";
+      } else {
+        banner.textContent = `Check out ${errors.join(", ")}`;
+        banner.classList.add("is-error");
+        banner.classList.remove("is-ok");
+        banner.title = "Click to jump to the first field with an error";
+        banner.onclick = (e) => {
+          e.preventDefault();
+          const id = firstTechErrorInputId();
+          if (id) flashTechExtractField(id);
+        };
+      }
+    }
+
+    function setupTechExtractBannerListeners() {
+      if (techExtractBannerListenersBound) return;
+      techExtractBannerListenersBound = true;
+      TECH_PASSPORT_FIELD_IDS.forEach((id) => {
+        document.getElementById(id)?.addEventListener("input", updateTechExtractBanner);
+        document.getElementById(id)?.addEventListener("change", updateTechExtractBanner);
+      });
     }
 
     function techPassportNewClient() {
@@ -3900,6 +4277,10 @@
       techRememberBilingualSnapshots();
       populateTechPassportQrPanel(data || {});
       updateTechPassportQrBadges();
+      rememberTechExtractOriginals();
+      setupTechExtractBannerListeners();
+      techExtractBannerActive = true;
+      updateTechExtractBanner();
       updateTechPassportResultsVisibility();
     }
 
@@ -3913,6 +4294,14 @@
       });
       techRememberBilingualSnapshots();
       clearTechPassportQrPanel();
+      techExtractBannerActive = false;
+      techExtractOriginals = {};
+      const techBanner = document.getElementById("tech-extract-banner");
+      if (techBanner) {
+        techBanner.textContent = "";
+        techBanner.classList.remove("is-ok", "is-error");
+        techBanner.onclick = null;
+      }
       updateTechPassportResultsVisibility();
       status?.classList.add("visible");
       status?.classList.remove("is-error");
@@ -4242,12 +4631,57 @@
       }
     }
 
+    const LICENSE_GEO_LAT_PAIRS = [
+      ["lic-surname-geo", "lic-surname-lat"],
+      ["lic-given-geo", "lic-given-lat"],
+      ["lic-pob-geo", "lic-pob-lat"],
+      ["lic-residence-geo", "lic-residence-lat"],
+    ];
+
+    let licenseGeoLatListenersBound = false;
+
+    function refreshLicenseGeoLatSnapshots() {
+      LICENSE_GEO_LAT_PAIRS.forEach(([geoId, latId]) => {
+        const geoEl = document.getElementById(geoId);
+        const latEl = document.getElementById(latId);
+        if (geoEl) {
+          geoEl._idBilPrevGeo = geoEl.value;
+          geoEl._restore = [];
+        }
+        if (latEl) latEl._idBilPrevLat = latEl.value;
+      });
+    }
+
+    function bindLicenseGeoLatSync() {
+      if (licenseGeoLatListenersBound) return;
+      if (typeof syncIdGeoLatPair !== "function") return;
+      licenseGeoLatListenersBound = true;
+      LICENSE_GEO_LAT_PAIRS.forEach(([geoId, latId]) => {
+        const geoEl = document.getElementById(geoId);
+        const latEl = document.getElementById(latId);
+        if (!geoEl || !latEl) return;
+        geoEl._idBilPrevGeo = geoEl.value;
+        latEl._idBilPrevLat = latEl.value;
+        geoEl._restore = [];
+        geoEl.addEventListener("input", () => {
+          syncIdGeoLatPair(geoEl, latEl, "geo");
+          updateLicenseExtractBanner();
+        });
+        latEl.addEventListener("input", () => {
+          syncIdGeoLatPair(geoEl, latEl, "lat");
+          updateLicenseExtractBanner();
+        });
+      });
+    }
+
     function setupLicenseFieldListeners() {
       if (licenseFieldListenersBound) return;
       licenseFieldListenersBound = true;
       LICENSE_TEXT_IDS.forEach((id) => {
         document.getElementById(id)?.addEventListener("input", updateLicenseExtractBanner);
       });
+      bindLicenseGeoLatSync();
+      refreshLicenseGeoLatSnapshots();
     }
 
     function clearLicenseResults() {
@@ -4771,7 +5205,15 @@
 
     function setLicenseInput(id, value) {
       const el = document.getElementById(id);
-      if (el) el.value = value || "";
+      if (!el) return;
+      el.value = value || "";
+      if (id.endsWith("-geo")) {
+        el._idBilPrevGeo = el.value;
+        el._restore = [];
+      }
+      if (id.endsWith("-lat")) {
+        el._idBilPrevLat = el.value;
+      }
     }
 
     function showLicenseCheckedBadge(inputId, badgeId, wrapId, show) {
@@ -5081,6 +5523,7 @@
 
       rememberLicenseExtractOriginals();
       setupLicenseFieldListeners();
+      refreshLicenseGeoLatSnapshots();
       updateLicenseExtractBanner();
 
       document.getElementById("license-results")?.classList.add("visible");
@@ -5239,15 +5682,15 @@
         if (docLabel) docLabel.textContent = "პასპორტის ნომერი / Passport Number";
         if (frontCap) frontCap.textContent = "Passport";
         if (backFig) backFig.classList.add("hidden-side");
-        if (generateBar) generateBar.style.display = "none";
         if (portraitLabel) portraitLabel.textContent = "Passport photo";
       } else {
         if (docLabel) docLabel.textContent = "ბარათის ნომერი / Card Number";
         if (frontCap) frontCap.textContent = "Front side";
         if (backFig) backFig.classList.remove("hidden-side");
-        if (generateBar) generateBar.style.display = "flex";
         if (portraitLabel) portraitLabel.textContent = "ID photo";
       }
+      // UI hidden; keep Final pipeline active via #generate-stage default
+      if (generateBar) generateBar.style.display = "none";
     }
 
     function showMethodChoice() {
@@ -5270,7 +5713,7 @@
       window.scrollTo({ top: 0, behavior: "smooth" });
     }
 
-    function selectMethod(method) {
+    async function selectMethod(method) {
       if (method === "license") {
         selectedMethod = "license";
         clearPassportUploadError();
@@ -5303,7 +5746,7 @@
         selectedMethod = "car-photo";
         clearPassportUploadError();
         clearIdUploadError();
-        resetCarPhotoGuide();
+        await resetCarPhotoGuide();
         document.getElementById("method-choice").classList.add("hidden");
         document.getElementById("scanner-view").classList.remove("visible");
         document.getElementById("passport-view").classList.remove("visible");
@@ -7560,6 +8003,7 @@
         if (el) el.value = "";
       });
       clearBadges();
+      clearIdExtractBanner();
       const results = document.getElementById("results-card");
       const pdfBtn = document.getElementById("btn-pdf");
       const newBtn = document.getElementById("btn-new");
@@ -7575,7 +8019,7 @@
       }
     }
 
-    function cancelSlotPhoto(slot) {
+    async function cancelSlotPhoto(slot) {
       if (!slot) return;
 
       if (slot === "passport") {
@@ -7659,23 +8103,23 @@
       }
 
       if (isCarPhotoSlot(slot)) {
-        const url = carPhotoDataUrls[slot];
-        if (url && String(url).startsWith("blob:")) {
-          try { URL.revokeObjectURL(url); } catch (_) {}
-        }
-        delete carPhotoBlobs[slot];
-        delete carPhotoDataUrls[slot];
         if (isCarGuideVideoSlot(slot)) {
+          if (carVideoRecordSlot === slot || isCarOdometerVideoSlot(slot)) {
+            await stopCarGuideVideoRecording(false);
+          }
           const vidEl = carGuideVideoEl(slot);
           if (vidEl) {
             vidEl.removeAttribute("src");
             vidEl.srcObject = null;
             vidEl.style.display = "none";
           }
-          if (carVideoRecordSlot === slot || isCarOdometerVideoSlot(slot)) {
-            stopCarGuideVideoRecording(false);
-          }
         }
+        const url = carPhotoDataUrls[slot];
+        if (url && String(url).startsWith("blob:")) {
+          try { URL.revokeObjectURL(url); } catch (_) {}
+        }
+        delete carPhotoBlobs[slot];
+        delete carPhotoDataUrls[slot];
         const idx = carPhotoStepIndexForSlot(slot);
         if (idx >= 0) carPhotoStepIndex = idx;
         refreshCarPhotoStage();
@@ -7716,11 +8160,11 @@
       updateStepHint();
     }
 
-    function newClient() {
+    async function newClient() {
       closeCamera();
       resetLicenseCapture();
       resetTechPassportCapture();
-      resetCarPhotoGuide();
+      await resetCarPhotoGuide();
       activeSlot = null;
       frontBlob = null;
       backBlob = null;
@@ -8549,6 +8993,181 @@
       return titleLatin(out);
     }
 
+    /**
+     * Map each Georgian char to its Latin slice indices (pre–title-case lengths).
+     * Used to sync deletions/insertions between paired geo / latin inputs.
+     */
+    function idGeoLatSegments(geo) {
+      const segs = [];
+      let latPos = 0;
+      for (let i = 0; i < String(geo || "").length; i++) {
+        const ch = geo[i];
+        let piece = "";
+        if (KA_TO_LAT[ch]) piece = KA_TO_LAT[ch];
+        else if (" -'".includes(ch)) piece = ch;
+        else continue;
+        segs.push({
+          geoIndex: i,
+          latStart: latPos,
+          latEnd: latPos + piece.length - 1,
+          piece,
+          geoChar: ch,
+        });
+        latPos += piece.length;
+      }
+      return segs;
+    }
+
+    function idDeletedRange(prev, next) {
+      const p = String(prev || "");
+      const n = String(next || "");
+      if (n.length >= p.length) return null;
+      let start = 0;
+      while (start < n.length && start < p.length && p[start] === n[start]) start++;
+      let endP = p.length - 1;
+      let endN = n.length - 1;
+      while (endN >= start && endP >= start && p[endP] === n[endN]) {
+        endP--;
+        endN--;
+      }
+      if (start > endP) return null;
+      if (n.slice(start, endN + 1) !== "") return null;
+      return { start, end: endP, text: p.slice(start, endP + 1) };
+    }
+
+    function idInsertedRange(prev, next) {
+      const p = String(prev || "");
+      const n = String(next || "");
+      if (n.length <= p.length) return null;
+      let start = 0;
+      while (start < p.length && start < n.length && p[start] === n[start]) start++;
+      let endP = p.length - 1;
+      let endN = n.length - 1;
+      while (endP >= start && endN >= start && p[endP] === n[endN]) {
+        endP--;
+        endN--;
+      }
+      if (start > endN) return null;
+      if (p.slice(start, endP + 1) !== "") return null;
+      return { start, end: endN, text: n.slice(start, endN + 1) };
+    }
+
+    function idLatRangeToGeoIndices(geo, latStart, latEnd) {
+      const segs = idGeoLatSegments(geo);
+      const indices = [];
+      for (const s of segs) {
+        if (s.latEnd >= latStart && s.latStart <= latEnd) indices.push(s.geoIndex);
+      }
+      return indices;
+    }
+
+    function idDeleteGeoIndices(geo, indices) {
+      if (!indices.length) return String(geo || "");
+      const chars = Array.from(String(geo || ""));
+      const kill = new Set(indices);
+      return chars.filter((_, i) => !kill.has(i)).join("");
+    }
+
+    function idInsertGeoAtLatPos(geo, latIndex, geoText) {
+      const segs = idGeoLatSegments(geo);
+      let insertAt = String(geo || "").length;
+      for (const s of segs) {
+        if (latIndex <= s.latStart) {
+          insertAt = s.geoIndex;
+          break;
+        }
+        if (latIndex > s.latStart && latIndex <= s.latEnd + 1) {
+          insertAt = s.geoIndex + 1;
+        }
+      }
+      const s = String(geo || "");
+      const t = String(geoText || "");
+      return s.slice(0, insertAt) + t + s.slice(insertAt);
+    }
+
+    function idPushGeoLatRestore(pair, entry) {
+      if (!pair._restore) pair._restore = [];
+      pair._restore.push(entry);
+    }
+
+    function idPopGeoLatRestore(pair, editSide, index, editText) {
+      const stack = pair._restore;
+      if (!stack || !stack.length) return null;
+      for (let i = stack.length - 1; i >= 0; i--) {
+        const e = stack[i];
+        if (e.editSide !== editSide) continue;
+        if (e.index !== index) continue;
+        if (e.editText !== editText) continue;
+        stack.splice(i, 1);
+        return e;
+      }
+      return null;
+    }
+
+    /** Sync Georgian ↔ Latin paired inputs when either side is edited. */
+    function syncIdGeoLatPair(geoEl, latEl, source) {
+      if (!geoEl || !latEl) return;
+      if (geoEl.dataset.idBilSkip === "1" || latEl.dataset.idBilSkip === "1") {
+        geoEl._idBilPrevGeo = geoEl.value;
+        latEl._idBilPrevLat = latEl.value;
+        return;
+      }
+
+      const prevGeo = geoEl._idBilPrevGeo != null ? String(geoEl._idBilPrevGeo) : String(geoEl.value || "");
+      const prevLat = latEl._idBilPrevLat != null ? String(latEl._idBilPrevLat) : String(latEl.value || "");
+      const curGeo = String(geoEl.value || "");
+      const curLat = String(latEl.value || "");
+      const pair = geoEl;
+
+      if (source === "geo") {
+        // Full re-transliterate Latin from Georgian (existing behaviour)
+        const lat = curGeo.trim() ? transliterateKa(curGeo) : "";
+        if (latEl.value !== lat) latEl.value = lat;
+        pair._restore = [];
+        geoEl._idBilPrevGeo = curGeo;
+        latEl._idBilPrevLat = lat;
+        return;
+      }
+
+      // source === "lat"
+      const del = idDeletedRange(prevLat, curLat);
+      const ins = idInsertedRange(prevLat, curLat);
+      let nextGeo = prevGeo;
+
+      if (del) {
+        const expected = transliterateKa(prevGeo);
+        let geoIndices;
+        if (expected.toLowerCase() === prevLat.toLowerCase()) {
+          geoIndices = idLatRangeToGeoIndices(prevGeo, del.start, del.end);
+        } else if (prevGeo.length === prevLat.length) {
+          geoIndices = [];
+          for (let i = del.start; i <= del.end && i < prevGeo.length; i++) geoIndices.push(i);
+        } else {
+          geoIndices = idLatRangeToGeoIndices(prevGeo, del.start, del.end);
+        }
+        if (geoIndices.length) {
+          const otherText = geoIndices.map((i) => prevGeo[i]).join("");
+          idPushGeoLatRestore(pair, {
+            editSide: "lat",
+            index: del.start,
+            editText: del.text,
+            otherText,
+          });
+          nextGeo = idDeleteGeoIndices(prevGeo, geoIndices);
+        }
+        if (geoEl.value !== nextGeo) geoEl.value = nextGeo;
+      } else if (ins) {
+        const hit = idPopGeoLatRestore(pair, "lat", ins.start, ins.text);
+        if (hit && hit.otherText) {
+          nextGeo = idInsertGeoAtLatPos(prevGeo, hit.index, hit.otherText);
+          if (geoEl.value !== nextGeo) geoEl.value = nextGeo;
+        }
+      }
+
+      geoEl._idBilPrevGeo = geoEl.value;
+      latEl._idBilPrevLat = latEl.value;
+    }
+
     function splitGeoLatin(value) {
       const raw = String(value || "").trim();
       if (!raw) return { geo: "", lat: "" };
@@ -9181,6 +9800,7 @@
         el.classList.add("hidden");
         el.textContent = "Checked";
         el.title = "";
+        updateIdExtractBanner();
         return;
       }
 
@@ -9199,6 +9819,178 @@
         el.textContent = "Checked";
         el.classList.add("ok");
         el.title = "All checked fields match MRZ";
+      }
+      updateIdExtractBanner();
+    }
+
+    /** Fields validated for the ID / Passport extract status banner. */
+    const ID_EXTRACT_FIELD_CHECKS = [
+      { label: "Name", requiredIds: ["first_name", "first_name_lat"], badgeIds: ["first_name_lat"] },
+      { label: "Surname", requiredIds: ["last_name", "last_name_lat"], badgeIds: ["last_name_lat"] },
+      { label: "Date of Birth", requiredIds: ["birth_date"], badgeIds: ["birth_date"] },
+      { label: "Place of Birth", requiredIds: ["birth_place", "birth_place_lat"], badgeIds: ["birth_place_lat"] },
+      { label: "Citizenship", requiredIds: ["citizenship"], badgeIds: ["citizenship"] },
+      { label: "Sex", requiredIds: ["gender"], badgeIds: ["gender"] },
+      { label: "Personal number", requiredIds: ["personal_id"], badgeIds: ["personal_id"] },
+      { label: "Card number", requiredIds: ["card_number"], badgeIds: ["card_number"] },
+      { label: "Date of expiry", requiredIds: ["expiry_date"], badgeIds: ["expiry_date"] },
+      { label: "Date of issue", requiredIds: ["issue_date"] },
+    ];
+
+    let idExtractBannerActive = false;
+    let idExtractBannerListenersBound = false;
+    let idExtractOriginals = {};
+
+    function idFieldValue(id) {
+      return (document.getElementById(id)?.value || "").trim();
+    }
+
+    function rememberIdExtractOriginals() {
+      idExtractOriginals = {};
+      ID_EXTRACT_FIELD_CHECKS.forEach((field) => {
+        field.requiredIds.forEach((id) => {
+          idExtractOriginals[id] = idFieldValue(id);
+        });
+      });
+    }
+
+    function idFieldEditedFromOriginal(id) {
+      if (!(id in idExtractOriginals)) return false;
+      const orig = idExtractOriginals[id];
+      if (!orig) return false;
+      return idFieldValue(id) !== orig;
+    }
+
+    function idBadgeHasProblem(fieldId) {
+      const badge = document.getElementById(`badge-${fieldId}`);
+      if (!badge || badge.classList.contains("hidden")) return false;
+      return (
+        badge.classList.contains("error") ||
+        badge.classList.contains("not-checked")
+      );
+    }
+
+    function collectIdValidationErrors() {
+      const errors = [];
+      if (!idExtractBannerActive) return errors;
+
+      for (const field of ID_EXTRACT_FIELD_CHECKS) {
+        let fieldError = false;
+        for (const id of field.requiredIds) {
+          if (!idFieldValue(id)) {
+            fieldError = true;
+            break;
+          }
+          if (idFieldEditedFromOriginal(id)) {
+            fieldError = true;
+            break;
+          }
+        }
+        if (!fieldError && field.badgeIds) {
+          for (const bid of field.badgeIds) {
+            if (idBadgeHasProblem(bid)) {
+              fieldError = true;
+              break;
+            }
+          }
+        }
+        if (fieldError) errors.push(field.label);
+      }
+      return errors;
+    }
+
+    function firstIdErrorInputId() {
+      for (const field of ID_EXTRACT_FIELD_CHECKS) {
+        let bad = false;
+        for (const id of field.requiredIds) {
+          if (!idFieldValue(id) || idFieldEditedFromOriginal(id)) {
+            bad = true;
+            break;
+          }
+        }
+        if (!bad && field.badgeIds) {
+          for (const bid of field.badgeIds) {
+            if (idBadgeHasProblem(bid)) {
+              bad = true;
+              break;
+            }
+          }
+        }
+        if (bad) return field.requiredIds[0];
+      }
+      return null;
+    }
+
+    function updateIdExtractBanner() {
+      const banner = document.getElementById("id-extract-banner");
+      if (!banner) return;
+
+      if (!idExtractBannerActive) {
+        banner.textContent = "";
+        banner.classList.remove("is-ok", "is-error");
+        banner.onclick = null;
+        return;
+      }
+
+      const errors = collectIdValidationErrors();
+      if (!errors.length) {
+        banner.textContent = "Every extracted information is correct and ready to process";
+        banner.classList.add("is-ok");
+        banner.classList.remove("is-error");
+        banner.onclick = null;
+        banner.title = "";
+      } else {
+        banner.textContent = `Check out ${errors.join(", ")}`;
+        banner.classList.add("is-error");
+        banner.classList.remove("is-ok");
+        banner.title = "Click to jump to the first field with an error";
+        banner.onclick = (e) => {
+          e.preventDefault();
+          const id = firstIdErrorInputId();
+          if (id) flashErrorField(id);
+        };
+      }
+    }
+
+    function setupIdExtractBannerListeners() {
+      if (idExtractBannerListenersBound) return;
+      idExtractBannerListenersBound = true;
+      ID_EXTRACT_FIELD_CHECKS.forEach((field) => {
+        field.requiredIds.forEach((id) => {
+          document.getElementById(id)?.addEventListener("input", updateIdExtractBanner);
+        });
+      });
+    }
+
+    function activateIdExtractBanner() {
+      rememberIdExtractOriginals();
+      setupIdExtractBannerListeners();
+      // Keep geo↔lat sync baselines aligned with filled OCR values
+      [
+        ["first_name", "first_name_lat"],
+        ["last_name", "last_name_lat"],
+        ["birth_place", "birth_place_lat"],
+      ].forEach(([geoId, latId]) => {
+        const geoEl = document.getElementById(geoId);
+        const latEl = document.getElementById(latId);
+        if (geoEl) {
+          geoEl._idBilPrevGeo = geoEl.value;
+          geoEl._restore = [];
+        }
+        if (latEl) latEl._idBilPrevLat = latEl.value;
+      });
+      idExtractBannerActive = true;
+      updateIdExtractBanner();
+    }
+
+    function clearIdExtractBanner() {
+      idExtractBannerActive = false;
+      idExtractOriginals = {};
+      const banner = document.getElementById("id-extract-banner");
+      if (banner) {
+        banner.textContent = "";
+        banner.classList.remove("is-ok", "is-error");
+        banner.onclick = null;
       }
     }
 
@@ -9257,7 +10049,7 @@
       });
     });
 
-    // Georgian → Latin live sync (name, surname, birth place)
+    // Georgian ↔ Latin live sync (name, surname, birth place)
     [
       ["first_name", "first_name_lat"],
       ["last_name", "last_name_lat"],
@@ -9266,32 +10058,41 @@
       const geoEl = document.getElementById(geoId);
       const latEl = document.getElementById(latId);
       if (!geoEl || !latEl) return;
+      geoEl._idBilPrevGeo = geoEl.value;
+      latEl._idBilPrevLat = latEl.value;
+      geoEl._restore = [];
+
       geoEl.addEventListener("input", () => {
-        const geo = geoEl.value;
-        const lat = geo.trim() ? transliterateKa(geo) : "";
-        latEl.value = lat;
-        // Re-check Latin against MRZ when applicable
+        syncIdGeoLatPair(geoEl, latEl, "geo");
         if (BADGE_FIELDS.includes(latId)) {
           const ta = document.getElementById("mrz_strip");
           const mrzText = ta ? ta.value : "";
-          if (mrzText) setBadge(latId, fieldMatchesMrz(latId, lat.trim(), mrzText));
+          if (mrzText) setBadge(latId, fieldMatchesMrz(latId, latEl.value.trim(), mrzText));
+        }
+        if (latId === "birth_place_lat") setBirthPlaceLatBadge();
+      });
+
+      latEl.addEventListener("input", () => {
+        syncIdGeoLatPair(geoEl, latEl, "lat");
+        if (BADGE_FIELDS.includes(latId)) {
+          const ta = document.getElementById("mrz_strip");
+          const mrzText = ta ? ta.value : "";
+          if (mrzText) setBadge(latId, fieldMatchesMrz(latId, latEl.value.trim(), mrzText));
         }
         if (latId === "birth_place_lat") setBirthPlaceLatBadge();
       });
     });
 
-    // Birth place Latin edited manually → geo/latin match badge
-    {
-      const latEl = document.getElementById("birth_place_lat");
-      if (latEl) {
-        latEl.addEventListener("input", () => setBirthPlaceLatBadge());
-      }
-    }
-
     function setField(id, value) {
       const el = document.getElementById(id);
       if (!el) return false;
       el.value = value || "";
+      if (id === "first_name" || id === "last_name" || id === "birth_place") {
+        el._idBilPrevGeo = el.value;
+      }
+      if (id === "first_name_lat" || id === "last_name_lat" || id === "birth_place_lat") {
+        el._idBilPrevLat = el.value;
+      }
       if (value) {
         el.style.backgroundColor = "#e8f0fe";
         setTimeout(() => { el.style.backgroundColor = ""; }, 1500);
@@ -9518,6 +10319,7 @@
       document.getElementById("mrz-panel").classList.remove("collapsed");
       document.getElementById("mrz-chevron").textContent = "▲";
       updateMrzBadges(mrzText);
+      activateIdExtractBanner();
       return { filled, ext };
     }
 
@@ -9743,6 +10545,7 @@
         document.getElementById("mrz-panel").classList.remove("collapsed");
         document.getElementById("mrz-chevron").textContent = "▲";
         updateMrzBadges(mrzText);
+        activateIdExtractBanner();
 
         results.classList.add("visible");
         pdfBtn.classList.add("visible");
