@@ -11,6 +11,7 @@
     rel="stylesheet"
   />
   <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
   <style>
     :root {
       --bg: #faf5ff;
@@ -41,84 +42,6 @@
       padding: 24px 16px 48px;
       color: var(--text);
       min-height: 100vh;
-    }
-    .page-instructions {
-      position: fixed;
-      top: 12px;
-      left: 12px;
-      z-index: 2000;
-      max-width: min(360px, calc(100vw - 24px));
-      font-family: var(--font-body);
-    }
-    .page-instructions > summary {
-      list-style: none;
-      cursor: pointer;
-      display: inline-flex;
-      align-items: center;
-      gap: 8px;
-      padding: 8px 14px;
-      border-radius: 10px;
-      background: rgba(255, 255, 255, 0.92);
-      border: 1px solid var(--line);
-      box-shadow: 0 8px 22px rgba(42, 24, 64, 0.08);
-      color: var(--accent-dark);
-      font-family: var(--font-display);
-      font-weight: 700;
-      font-size: 0.92rem;
-      letter-spacing: 0.01em;
-      user-select: none;
-    }
-    .page-instructions > summary::-webkit-details-marker { display: none; }
-    .page-instructions > summary::after {
-      content: "";
-      width: 0.45em;
-      height: 0.45em;
-      border-right: 2px solid var(--accent-dark);
-      border-bottom: 2px solid var(--accent-dark);
-      transform: rotate(45deg);
-      margin-top: -0.2em;
-      transition: transform 0.2s;
-    }
-    .page-instructions[open] > summary::after {
-      transform: rotate(-135deg);
-      margin-top: 0.15em;
-    }
-    .page-instructions > summary:hover {
-      background: #fff;
-      border-color: rgba(249, 115, 22, 0.35);
-    }
-    .page-instructions-body {
-      margin-top: 8px;
-      padding: 14px 16px 14px 14px;
-      border-radius: 12px;
-      background: rgba(255, 255, 255, 0.96);
-      border: 1px solid var(--line);
-      box-shadow: 0 14px 32px rgba(42, 24, 64, 0.1);
-      max-height: min(70vh, 420px);
-      overflow: auto;
-    }
-    .page-instructions-body ol {
-      margin: 0;
-      padding-left: 1.35rem;
-      color: var(--text);
-      font-size: 0.88rem;
-      line-height: 1.55;
-    }
-    .page-instructions-body li {
-      margin: 0 0 0.65em;
-    }
-    .page-instructions-body li:last-child {
-      margin-bottom: 0;
-    }
-    @media (max-width: 520px) {
-      .page-instructions {
-        top: 8px;
-        left: 8px;
-        max-width: calc(100vw - 16px);
-      }
-      body {
-        padding-top: 56px;
-      }
     }
     .container { max-width: 860px; margin: 0 auto; }
     .card {
@@ -905,6 +828,17 @@
       background: #0f172a;
       cursor: zoom-in;
     }
+    .car-thumb img.car-thumb-preview {
+      object-fit: contain;
+      background: #fff;
+      cursor: default;
+    }
+    #car-photo-view .slot-box img.car-slot-preview,
+    #car-photo-view .slot-box img.license-zoomable.car-slot-preview {
+      object-fit: contain;
+      background: #fff;
+      cursor: default;
+    }
     .car-thumb-empty {
       display: flex;
       width: 100%;
@@ -1186,6 +1120,70 @@
       opacity: 0.55;
       cursor: not-allowed;
     }
+    #car-photo-view.is-readonly .car-shoot-actions,
+    #car-photo-view.is-readonly .car-odometer-mode,
+    #car-photo-view.is-readonly .car-odometer-mode-reset,
+    #car-photo-view.is-readonly .car-cabriolet-check,
+    #car-photo-view.is-lock-pending .car-shoot-actions,
+    #car-photo-view.is-lock-pending .car-odometer-mode,
+    #car-photo-view.is-lock-pending .car-odometer-mode-reset,
+    #car-photo-view.is-lock-pending .car-cabriolet-check {
+      display: none !important;
+    }
+
+    .car-photo-layout {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) minmax(220px, 280px);
+      gap: 18px;
+      align-items: start;
+    }
+    .car-photo-session-panel {
+      position: sticky;
+      top: 16px;
+      padding: 18px 16px 20px;
+      text-align: center;
+    }
+    .car-photo-session-panel h3 {
+      margin: 0 0 6px;
+      font-family: var(--font-display);
+      font-size: 1.05rem;
+      color: var(--accent-dark);
+    }
+    .car-session-id {
+      margin: 0 0 12px;
+      font-family: var(--font-display);
+      font-size: 1.65rem;
+      font-weight: 800;
+      letter-spacing: 0.02em;
+      color: var(--text);
+    }
+    .car-session-qr {
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      min-height: 180px;
+      margin: 0 auto 12px;
+      padding: 10px;
+      background: #fff;
+      border-radius: 12px;
+      border: 1px solid var(--line);
+    }
+    .car-session-qr img,
+    .car-session-qr canvas {
+      display: block;
+      max-width: 100%;
+      height: auto;
+    }
+    @media (max-width: 820px) {
+      .car-photo-layout {
+        grid-template-columns: 1fr;
+      }
+      .car-photo-session-panel {
+        position: static;
+        order: -1;
+      }
+    }
+
     .car-upload-error {
       display: none;
       margin: 0 0 12px;
@@ -1656,18 +1654,6 @@
   </style>
 </head>
 <body>
-  <details class="page-instructions">
-    <summary>Instruction</summary>
-    <div class="page-instructions-body">
-      <ol>
-        <li>დოკუმენტი აუცილებლად უნდა დადოთ მუქ ზედაპირზე, უმჯობესია შავზე.</li>
-        <li>დოკუმენტი უნდა იყოს ნათელ ადგილზე.</li>
-        <li>გადაღებული ფოტო უნდა იყოს მკვეთრი და კარგ ხარისხში.</li>
-        <li>ფოტოების ატვირთვის შემდეგ ველოდებით ინფორმაციის ექსტრაქტირებას, ვამოწმებთ რომ ყველა ინფორმაცია სწორია; თუ სადმე შეამჩნევთ ხარვეზს, ასწორებთ მექანიკურად (ხელით).</li>
-        <li>პროცესს ვასრულებთ „Download PDF“ ღილაკით.</li>
-      </ol>
-    </div>
-  </details>
   <div class="container">
     <div class="card method-choice-card" id="method-choice">
       <h2>Select a document type to continue.</h2>
@@ -1914,7 +1900,8 @@
     </div>
 
     <div id="car-photo-view">
-      <div class="card">
+      <div class="car-photo-layout">
+      <div class="card car-photo-main">
         <button type="button" class="view-back" onclick="carPhotoNewClient()">← Back</button>
         <h2>Car photo guide</h2>
         <p class="step-hint" id="car-photo-step-hint">
@@ -1926,7 +1913,7 @@
           role="alert"
           aria-live="assertive"
         ></div>
-        <h3 class="car-interior-heading" id="car-interior-heading">6. Interior</h3>
+        <h3 class="car-interior-heading" id="car-interior-heading">Odometer</h3>
         <div class="slot-box car-shoot-field" id="slot-car-active">
           <h4 id="car-photo-current-label">1. Front</h4>
           <div class="slot-actions car-shoot-actions">
@@ -1944,26 +1931,7 @@
             <button type="button" class="btn btn-cancel" id="btn-car-roof-cancel" onclick="cancelSlotPhoto('car-roof')">Cancel</button>
           </div>
           <video id="video-car-roof" controls playsinline style="display:none;"></video>
-        </div>
-        <div class="car-interior-grid" id="car-interior-stage" aria-label="Interior seats">
-          <div class="slot-box car-shoot-field car-shoot-field-half" id="slot-car-front-seat">
-            <h4>Front seat</h4>
-            <div class="slot-actions car-shoot-actions">
-              <button type="button" class="btn" onclick="openCarPhotoCamera('car-front-seat')">Capture</button>
-              <button type="button" class="btn btn-upload" onclick="triggerCarPhotoUpload('car-front-seat')">Upload</button>
-              <button type="button" class="btn btn-cancel" id="btn-car-front-seat-cancel" onclick="cancelSlotPhoto('car-front-seat')">Cancel</button>
-            </div>
-            <img id="img-car-front-seat" class="license-zoomable car-seat-img" alt="Front seat">
-          </div>
-          <div class="slot-box car-shoot-field car-shoot-field-half" id="slot-car-back-seat">
-            <h4>Back seat</h4>
-            <div class="slot-actions car-shoot-actions">
-              <button type="button" class="btn" onclick="openCarPhotoCamera('car-back-seat')">Capture</button>
-              <button type="button" class="btn btn-upload" onclick="triggerCarPhotoUpload('car-back-seat')">Upload</button>
-              <button type="button" class="btn btn-cancel" id="btn-car-back-seat-cancel" onclick="cancelSlotPhoto('car-back-seat')">Cancel</button>
-            </div>
-            <img id="img-car-back-seat" class="license-zoomable car-seat-img" alt="Back seat">
-          </div>
+          <img id="img-car-roof" class="license-zoomable" alt="Roof">
         </div>
         <div class="car-odometer-stage" id="car-odometer-stage" aria-label="Odometer">
           <div class="car-odometer-mode" id="car-odometer-mode">
@@ -2013,6 +1981,12 @@
           <button type="button" class="btn btn-tech-new" id="btn-car-new" onclick="carPhotoNewClient()">New client</button>
           <button type="button" class="btn btn-tech-pdf" id="btn-car-download" onclick="downloadCarPhotoBundle()" disabled>DOWNLOAD</button>
         </div>
+      </div>
+      <aside class="card car-photo-session-panel" id="car-photo-session-panel" aria-label="Car photo session">
+        <h3>Session</h3>
+        <p class="car-session-id" id="car-session-label">—</p>
+        <div class="car-session-qr" id="car-session-qr"></div>
+      </aside>
       </div>
     </div>
 
@@ -2385,11 +2359,11 @@
   <input type="file" id="file-input" accept="image/*,image/jpeg,.jpg,.jpeg,.png,.webp,.gif,.bmp" style="display:none;">
   <canvas id="hidden-canvas" style="display:none;"></canvas>
 
+  <script src="/js/document-crop.js"></script>
+  <script src="/js/car-guide.js"></script>
   <script>
     const FRAME_W = 0.82;
     const FRAME_H = 0.78;
-    const LICENSE_ASPECT = 85.6 / 54;
-    const LICENSE_SCAN_WIDTH = 1400;
 
     let activeSlot = null;
     let videoStream = null;
@@ -2416,7 +2390,7 @@
     let readyStreak = 0; // consecutive good frames before "ready"
     let readyGraceUntil = 0; // keep Capture enabled briefly (iOS tap vs flicker)
     let capturingNow = false;
-    let selectedMethod = null;
+    var selectedMethod = null;
     /** VIN slot only: gallery Upload skips Vision angle checks (Capture still validates). */
     let carVinGalleryUpload = false;
 
@@ -2430,856 +2404,6 @@
 
     function isTechPassportSlot(slot) {
       return slot === "tech-front" || slot === "tech-back";
-    }
-
-    function isCarPhotoSlot(slot) {
-      return typeof slot === "string" && slot.startsWith("car-");
-    }
-
-    function isCarOdometerVideoSlot(slot) {
-      return slot === "car-odometer-video";
-    }
-
-    function isCarGuideVideoSlot(slot) {
-      return slot === "car-odometer-video" || slot === "car-roof";
-    }
-
-    function carGuideVideoEl(slot) {
-      if (slot === "car-roof") return document.getElementById("video-car-roof");
-      return document.getElementById("video-car-odometer");
-    }
-
-    function carGuideVideoRecordBtn(slot) {
-      if (slot === "car-roof") return document.getElementById("btn-roof-video-capture");
-      return document.getElementById("btn-odo-video-capture");
-    }
-
-    const CAR_ODOMETER_PHOTO_SLOTS = [
-      { id: "car-odometer-before", title: "Before starting the engine" },
-      { id: "car-odometer-after", title: "After starting the engine" },
-    ];
-    const CAR_ODOMETER_VIDEO_SLOT = {
-      id: "car-odometer-video",
-      title: "Odometer video",
-    };
-
-    const CAR_ROOF_SLOT = { id: "car-roof", title: "Roof", kind: "video" };
-
-    const CAR_PHOTO_SLOTS = [
-      { id: "car-front", title: "Front" },
-      { id: "car-rear", title: "Rear" },
-      { id: "car-left", title: "Left side" },
-      { id: "car-right", title: "Right side" },
-      { id: "car-engine", title: "Engine" },
-      {
-        id: "car-interior",
-        title: "Interior",
-        children: [
-          { id: "car-front-seat", title: "Front seat" },
-          { id: "car-back-seat", title: "Back seat" },
-        ],
-      },
-      { id: "car-gearbox", title: "Gearbox" },
-      { id: "car-vin", title: "VIN" },
-      { id: "car-truck", title: "Truck" },
-      {
-        id: "car-odometer",
-        title: "Odometer",
-        kind: "odometer",
-        photoChildren: CAR_ODOMETER_PHOTO_SLOTS,
-        videoChild: CAR_ODOMETER_VIDEO_SLOT,
-      },
-    ];
-
-    const carPhotoBlobs = {};
-    const carPhotoDataUrls = {};
-    let carPhotoStepIndex = 0;
-    let carOdometerMode = null; // null | "photos" | "video"
-    let carCabriolet = false;
-    let carOdoRecordStream = null;
-    let carOdoRecorder = null;
-    let carOdoRecordChunks = [];
-    let carVideoRecordSlot = null;
-
-    /** Active guide steps — inserts Roof before Odometer when Cabriolet is checked. */
-    function activeCarPhotoSlots() {
-      if (!carCabriolet) return CAR_PHOTO_SLOTS;
-      const out = [];
-      CAR_PHOTO_SLOTS.forEach((step) => {
-        if (step.kind === "odometer") out.push(CAR_ROOF_SLOT);
-        out.push(step);
-      });
-      return out;
-    }
-
-    async function clearCarRoofMedia() {
-      const id = CAR_ROOF_SLOT.id;
-      if (carVideoRecordSlot === id) await stopCarGuideVideoRecording(false);
-      const url = carPhotoDataUrls[id];
-      if (url && String(url).startsWith("blob:")) {
-        try { URL.revokeObjectURL(url); } catch (_) {}
-      }
-      delete carPhotoBlobs[id];
-      delete carPhotoDataUrls[id];
-      const vidEl = document.getElementById("video-car-roof");
-      if (vidEl) {
-        vidEl.removeAttribute("src");
-        vidEl.srcObject = null;
-        vidEl.style.display = "none";
-      }
-    }
-
-    async function setCarCabriolet(checked) {
-      const next = Boolean(checked);
-      if (next === carCabriolet) {
-        refreshCarPhotoStage();
-        return;
-      }
-      carCabriolet = next;
-      if (!carCabriolet) await clearCarRoofMedia();
-      const slots = activeCarPhotoSlots();
-      carPhotoStepIndex = Math.max(0, Math.min(slots.length - 1, carPhotoStepIndex));
-      clearCarUploadError();
-      refreshCarPhotoStage();
-    }
-
-    function carOdometerAllIds() {
-      return [
-        ...CAR_ODOMETER_PHOTO_SLOTS.map((s) => s.id),
-        CAR_ODOMETER_VIDEO_SLOT.id,
-      ];
-    }
-
-    function carPhotoLeafSlots() {
-      const out = [];
-      activeCarPhotoSlots().forEach((step) => {
-        if (step.kind === "odometer") {
-          if (carOdometerMode === "photos") out.push(...step.photoChildren);
-          else if (carOdometerMode === "video") out.push(step.videoChild);
-          return;
-        }
-        if (step.children && step.children.length) out.push(...step.children);
-        else out.push(step);
-      });
-      return out;
-    }
-
-    /** Photo slots for the PDF (includes odometer before/after when no video was chosen). */
-    function carPhotoPdfSlots() {
-      const out = [];
-      activeCarPhotoSlots().forEach((step) => {
-        if (step.kind === "video" || isCarGuideVideoSlot(step.id)) return;
-        if (step.kind === "odometer") {
-          const hasVideo = Boolean(carPhotoDataUrls[step.videoChild.id]);
-          if (hasVideo) return;
-          (step.photoChildren || []).forEach((child) => {
-            if (carPhotoDataUrls[child.id]) out.push(child);
-          });
-          return;
-        }
-        if (step.children && step.children.length) {
-          step.children.forEach((child) => {
-            if (carPhotoDataUrls[child.id]) out.push(child);
-          });
-        } else if (carPhotoDataUrls[step.id]) {
-          out.push(step);
-        }
-      });
-      return out;
-    }
-
-    function carPhotoVideoSlots() {
-      const out = [];
-      if (carPhotoDataUrls[CAR_ODOMETER_VIDEO_SLOT.id] || carPhotoBlobs[CAR_ODOMETER_VIDEO_SLOT.id]) {
-        out.push(CAR_ODOMETER_VIDEO_SLOT);
-      }
-      if (carCabriolet && (carPhotoDataUrls[CAR_ROOF_SLOT.id] || carPhotoBlobs[CAR_ROOF_SLOT.id])) {
-        out.push(CAR_ROOF_SLOT);
-      }
-      return out;
-    }
-
-    function carPhotoStepFilled(step) {
-      if (!step) return false;
-      if (step.kind === "odometer") {
-        if (carOdometerMode === "photos") {
-          return step.photoChildren.every(({ id }) => Boolean(carPhotoDataUrls[id]));
-        }
-        if (carOdometerMode === "video") {
-          return Boolean(carPhotoDataUrls[step.videoChild.id]);
-        }
-        return false;
-      }
-      if (step.kind === "video" || isCarGuideVideoSlot(step.id)) {
-        return Boolean(carPhotoDataUrls[step.id]);
-      }
-      if (step.children && step.children.length) {
-        return step.children.every(({ id }) => Boolean(carPhotoDataUrls[id]));
-      }
-      return Boolean(carPhotoDataUrls[step.id]);
-    }
-
-    function carPhotoStepIndexForSlot(slot) {
-      return activeCarPhotoSlots().findIndex((step) => {
-        if (step.id === slot) return true;
-        if (step.children?.some((c) => c.id === slot)) return true;
-        if (step.kind === "odometer") {
-          if (step.photoChildren?.some((c) => c.id === slot)) return true;
-          if (step.videoChild?.id === slot) return true;
-        }
-        return false;
-      });
-    }
-
-    function currentCarPhotoSlot() {
-      const slots = activeCarPhotoSlots();
-      const step = slots[carPhotoStepIndex] || slots[0];
-      if (step?.kind === "odometer") {
-        if (carOdometerMode === "photos") {
-          const empty = step.photoChildren.find(({ id }) => !carPhotoDataUrls[id]);
-          return (empty || step.photoChildren[0]).id;
-        }
-        if (carOdometerMode === "video") return step.videoChild.id;
-        return step.id;
-      }
-      if (step?.children?.length) {
-        const empty = step.children.find(({ id }) => !carPhotoDataUrls[id]);
-        return (empty || step.children[0]).id;
-      }
-      return step ? step.id : "car-front";
-    }
-
-    async function clearCarOdometerMedia(modeToKeep) {
-      await stopCarOdometerRecording(false);
-      const clearId = (id) => {
-        const url = carPhotoDataUrls[id];
-        if (url && String(url).startsWith("blob:")) {
-          try { URL.revokeObjectURL(url); } catch (_) {}
-        }
-        delete carPhotoBlobs[id];
-        delete carPhotoDataUrls[id];
-      };
-      if (modeToKeep === "photos") {
-        clearId(CAR_ODOMETER_VIDEO_SLOT.id);
-      } else if (modeToKeep === "video") {
-        CAR_ODOMETER_PHOTO_SLOTS.forEach(({ id }) => clearId(id));
-      } else {
-        carOdometerAllIds().forEach(clearId);
-      }
-    }
-
-    async function setCarOdometerMode(mode) {
-      const next = mode === "photos" || mode === "video" ? mode : null;
-      if (next !== carOdometerMode) {
-        await clearCarOdometerMedia(next);
-        carOdometerMode = next;
-      }
-      const slots = activeCarPhotoSlots();
-      const odoIdx = slots.findIndex((s) => s.kind === "odometer");
-      if (odoIdx >= 0) carPhotoStepIndex = odoIdx;
-      clearCarUploadError();
-      refreshCarPhotoStage();
-    }
-
-    function setCarPhotoStep(index) {
-      const slots = activeCarPhotoSlots();
-      carPhotoStepIndex = Math.max(0, Math.min(slots.length - 1, index));
-      refreshCarPhotoStage();
-    }
-
-    function refreshCarPhotoStage() {
-      const slots = activeCarPhotoSlots();
-      if (carPhotoStepIndex >= slots.length) {
-        carPhotoStepIndex = Math.max(0, slots.length - 1);
-      }
-      const step = slots[carPhotoStepIndex] || slots[0];
-      const isInterior = Boolean(step?.children?.length) && step.kind !== "odometer";
-      const isOdometer = step?.kind === "odometer";
-      const isRoofVideo = step?.kind === "video" || step?.id === "car-roof";
-      const single = document.getElementById("slot-car-active");
-      const roofStage = document.getElementById("slot-car-roof");
-      const interior = document.getElementById("car-interior-stage");
-      const odometer = document.getElementById("car-odometer-stage");
-      const sectionHeading = document.getElementById("car-interior-heading");
-
-      if (single) single.style.display = isInterior || isOdometer || isRoofVideo ? "none" : "";
-      if (roofStage) roofStage.classList.toggle("visible", isRoofVideo);
-      if (interior) interior.classList.toggle("visible", isInterior);
-      if (odometer) odometer.classList.toggle("visible", isOdometer);
-      if (sectionHeading) {
-        sectionHeading.textContent = step
-          ? `${carPhotoStepIndex + 1}. ${step.title}`
-          : "";
-        sectionHeading.classList.toggle("visible", isInterior || isOdometer);
-      }
-
-      if (isRoofVideo) {
-        const roofLabel = document.getElementById("car-roof-label");
-        if (roofLabel && step) {
-          roofLabel.textContent = `${carPhotoStepIndex + 1}. ${step.title}`;
-        }
-        const vidId = CAR_ROOF_SLOT.id;
-        const vidUrl = carPhotoDataUrls[vidId] || "";
-        const vidEl = document.getElementById("video-car-roof");
-        const vidCancel = document.getElementById("btn-car-roof-cancel");
-        if (vidEl) {
-          if (vidUrl && !(carOdoRecorder && carVideoRecordSlot === vidId)) {
-            if (vidEl.src !== vidUrl) vidEl.src = vidUrl;
-            vidEl.style.display = "block";
-          } else if (!(carOdoRecorder && carVideoRecordSlot === vidId)) {
-            vidEl.removeAttribute("src");
-            vidEl.style.display = "none";
-          }
-        }
-        if (roofStage) roofStage.classList.toggle("done", Boolean(vidUrl));
-        if (vidCancel) vidCancel.style.display = vidUrl ? "inline-block" : "none";
-        const recBtn = document.getElementById("btn-roof-video-capture");
-        if (recBtn && !(carOdoRecorder && carVideoRecordSlot === vidId)) {
-          recBtn.textContent = "Record";
-        }
-      } else if (isOdometer) {
-        const modeRow = document.getElementById("car-odometer-mode");
-        const resetBtn = document.getElementById("btn-odo-mode-reset");
-        const photosWrap = document.getElementById("car-odometer-photos");
-        const videoWrap = document.getElementById("car-odometer-video-wrap");
-        const photosBtn = document.getElementById("btn-odo-mode-photos");
-        const videoBtn = document.getElementById("btn-odo-mode-video");
-        const hasMode = carOdometerMode === "photos" || carOdometerMode === "video";
-        if (modeRow) modeRow.style.display = hasMode ? "none" : "flex";
-        if (resetBtn) resetBtn.classList.toggle("visible", hasMode);
-        if (photosWrap) photosWrap.classList.toggle("visible", carOdometerMode === "photos");
-        if (videoWrap) videoWrap.classList.toggle("visible", carOdometerMode === "video");
-        if (photosBtn) photosBtn.classList.toggle("is-selected", carOdometerMode === "photos");
-        if (videoBtn) videoBtn.classList.toggle("is-selected", carOdometerMode === "video");
-
-        CAR_ODOMETER_PHOTO_SLOTS.forEach(({ id }) => {
-          const url = carPhotoDataUrls[id] || "";
-          const img = document.getElementById(`img-${id}`);
-          const box = document.getElementById(`slot-${id}`);
-          const cancelBtn = document.getElementById(`btn-${id}-cancel`);
-          if (img) {
-            if (url) {
-              img.src = url;
-              img.style.display = "block";
-            } else {
-              img.src = "";
-              img.style.display = "none";
-            }
-          }
-          if (box) box.classList.toggle("done", Boolean(url));
-          if (cancelBtn) cancelBtn.style.display = url ? "inline-block" : "none";
-        });
-
-        const vidId = CAR_ODOMETER_VIDEO_SLOT.id;
-        const vidUrl = carPhotoDataUrls[vidId] || "";
-        const vidEl = document.getElementById("video-car-odometer");
-        const vidBox = document.getElementById(`slot-${vidId}`);
-        const vidCancel = document.getElementById(`btn-${vidId}-cancel`);
-        if (vidEl) {
-          if (vidUrl && !carOdoRecorder) {
-            if (vidEl.src !== vidUrl) vidEl.src = vidUrl;
-            vidEl.style.display = "block";
-          } else if (!carOdoRecorder) {
-            vidEl.removeAttribute("src");
-            vidEl.style.display = "none";
-          }
-        }
-        if (vidBox) vidBox.classList.toggle("done", Boolean(vidUrl));
-        if (vidCancel) vidCancel.style.display = vidUrl ? "inline-block" : "none";
-        const recBtn = document.getElementById("btn-odo-video-capture");
-        if (recBtn && !carOdoRecorder) recBtn.textContent = "Record";
-      } else if (!isInterior) {
-        const label = document.getElementById("car-photo-current-label");
-        if (label && step) {
-          label.textContent = `${carPhotoStepIndex + 1}. ${step.title}`;
-        }
-        const activeImg = document.getElementById("img-car-active");
-        const url = step ? carPhotoDataUrls[step.id] : "";
-        if (activeImg) {
-          if (url) {
-            activeImg.src = url;
-            activeImg.style.display = "block";
-          } else {
-            activeImg.src = "";
-            activeImg.style.display = "none";
-          }
-        }
-        if (single) single.classList.toggle("done", Boolean(url));
-        const cancelBtn = document.getElementById("btn-car-cancel");
-        if (cancelBtn) cancelBtn.style.display = url ? "inline-block" : "none";
-      } else {
-        (step.children || []).forEach(({ id }) => {
-          const url = carPhotoDataUrls[id] || "";
-          const img = document.getElementById(`img-${id}`);
-          const box = document.getElementById(`slot-${id}`);
-          const cancelBtn = document.getElementById(`btn-${id}-cancel`);
-          if (img) {
-            if (url) {
-              img.src = url;
-              img.style.display = "block";
-            } else {
-              img.src = "";
-              img.style.display = "none";
-            }
-          }
-          if (box) box.classList.toggle("done", Boolean(url));
-          if (cancelBtn) cancelBtn.style.display = url ? "inline-block" : "none";
-        });
-      }
-
-      renderCarPhotoThumbs();
-      updateCarPhotoStepHint();
-      updateCarPhotoActionButtons();
-    }
-
-    function renderCarPhotoThumbs() {
-      const host = document.getElementById("car-photo-thumbs");
-      if (!host) return;
-      host.innerHTML = activeCarPhotoSlots().map((step, idx) => {
-        const active = idx === carPhotoStepIndex ? " is-active" : "";
-        const done = carPhotoStepFilled(step) ? " is-done" : "";
-        let media = "";
-        if (step.kind === "odometer") {
-          if (carOdometerMode === "photos") {
-            const cells = step.photoChildren
-              .map(({ id, title }) => {
-                const url = carPhotoDataUrls[id] || "";
-                return url
-                  ? `<img class="license-zoomable" src="${url}" alt="${title}">`
-                  : `<div class="car-thumb-empty">—</div>`;
-              })
-              .join("");
-            media = `<div class="car-thumb-pair">${cells}</div>`;
-          } else if (carOdometerMode === "video" && carPhotoDataUrls[step.videoChild.id]) {
-            media = `<div class="car-thumb-video">VIDEO</div>`;
-          } else {
-            media = `<div class="car-thumb-empty">—</div>`;
-          }
-        } else if (step.kind === "video" || isCarGuideVideoSlot(step.id)) {
-          media = carPhotoDataUrls[step.id]
-            ? `<div class="car-thumb-video">VIDEO</div>`
-            : `<div class="car-thumb-empty">—</div>`;
-        } else if (step.children?.length) {
-          const cells = step.children
-            .map(({ id, title }) => {
-              const url = carPhotoDataUrls[id] || "";
-              return url
-                ? `<img class="license-zoomable" src="${url}" alt="${title}">`
-                : `<div class="car-thumb-empty">—</div>`;
-            })
-            .join("");
-          media = `<div class="car-thumb-pair">${cells}</div>`;
-        } else {
-          const url = carPhotoDataUrls[step.id] || "";
-          media = url
-            ? `<img class="license-zoomable" src="${url}" alt="${step.title}">`
-            : `<div class="car-thumb-empty">—</div>`;
-        }
-        return `<button type="button" class="car-thumb${active}${done}" onclick="setCarPhotoStep(${idx})" title="${step.title}">
-          <span class="car-thumb-label">${idx + 1}. ${step.title}</span>
-          ${media}
-        </button>`;
-      }).join("");
-    }
-
-    async function resetCarPhotoGuide() {
-      await stopCarOdometerRecording(false);
-      carPhotoLeafSlots().forEach(({ id }) => {
-        const url = carPhotoDataUrls[id];
-        if (url && String(url).startsWith("blob:")) {
-          try { URL.revokeObjectURL(url); } catch (_) {}
-        }
-        delete carPhotoBlobs[id];
-        delete carPhotoDataUrls[id];
-      });
-      carOdometerAllIds().forEach((id) => {
-        const url = carPhotoDataUrls[id];
-        if (url && String(url).startsWith("blob:")) {
-          try { URL.revokeObjectURL(url); } catch (_) {}
-        }
-        delete carPhotoBlobs[id];
-        delete carPhotoDataUrls[id];
-      });
-      await clearCarRoofMedia();
-      carOdometerMode = null;
-      carCabriolet = false;
-      const cabCb = document.getElementById("car-cabriolet");
-      if (cabCb) cabCb.checked = false;
-      carPhotoStepIndex = 0;
-      clearCarUploadError();
-      refreshCarPhotoStage();
-    }
-
-    function updateCarPhotoStepHint() {
-      const hint = document.getElementById("car-photo-step-hint");
-      if (!hint) return;
-      const slots = activeCarPhotoSlots();
-      const filledBase = slots.filter(
-        (s) => s.kind !== "odometer" && carPhotoStepFilled(s)
-      ).length;
-      const odoFilled = carPhotoStepFilled(
-        slots.find((s) => s.kind === "odometer")
-      );
-      const filledSteps =
-        filledBase + (odoFilled ? 1 : 0);
-      const totalSteps = slots.length;
-      const step = slots[carPhotoStepIndex];
-      if (!step) return;
-      if (filledSteps === totalSteps) {
-        hint.textContent = "All captures are ready. Download PDF (photos) and video zip when finished.";
-        return;
-      }
-      if (step.kind === "odometer") {
-        if (!carOdometerMode) {
-          hint.textContent = `Odometer (${filledSteps}/${totalSteps}): choose Photos or Video.`;
-        } else if (carOdometerMode === "photos") {
-          const n = step.photoChildren.filter(({ id }) => carPhotoDataUrls[id]).length;
-          hint.textContent =
-            n === step.photoChildren.length
-              ? `Odometer photos saved (${filledSteps}/${totalSteps}).`
-              : `Odometer photos: before and after starting the engine (${n}/2).`;
-        } else {
-          hint.textContent = carPhotoDataUrls[step.videoChild.id]
-            ? `Odometer video saved (${filledSteps}/${totalSteps}).`
-            : "Odometer: record or upload a video (photos are not accepted).";
-        }
-        return;
-      }
-      if (step.kind === "video" || step.id === "car-roof") {
-        hint.textContent = carPhotoDataUrls[step.id]
-          ? `Roof video saved (${filledSteps}/${totalSteps}).`
-          : "Roof: record or upload a video (photos are not accepted).";
-        return;
-      }
-      if (step.children?.length) {
-        const seatFilled = step.children.filter(({ id }) => carPhotoDataUrls[id]).length;
-        if (seatFilled === step.children.length) {
-          hint.textContent = `Interior saved (${filledSteps}/${totalSteps}). Select another angle or continue.`;
-        } else {
-          hint.textContent = ALLOW_FILE_UPLOAD
-            ? `Interior: capture or upload Front seat and Back seat (${filledSteps}/${totalSteps}).`
-            : `Interior: capture Front seat and Back seat (${filledSteps}/${totalSteps}).`;
-        }
-        return;
-      }
-      if (carPhotoDataUrls[step.id]) {
-        hint.textContent = `${step.title} saved (${filledSteps}/${totalSteps}). Select another angle or continue.`;
-      } else {
-        hint.textContent = ALLOW_FILE_UPLOAD
-          ? `Now capture or upload: ${step.title} (${filledSteps}/${totalSteps}).`
-          : `Now capture: ${step.title} (${filledSteps}/${totalSteps}).`;
-      }
-    }
-
-    function updateCarPhotoActionButtons() {
-      const btn = document.getElementById("btn-car-download");
-      if (!btn) return;
-      btn.disabled = !activeCarPhotoSlots().every((step) => carPhotoStepFilled(step));
-    }
-
-    function advanceCarPhotoStep() {
-      const nextEmpty = activeCarPhotoSlots().findIndex((step) => !carPhotoStepFilled(step));
-      if (nextEmpty >= 0) carPhotoStepIndex = nextEmpty;
-      refreshCarPhotoStage();
-    }
-
-    function openCarPhotoCamera(slot) {
-      const target = slot || currentCarPhotoSlot();
-      if (isCarGuideVideoSlot(target)) {
-        triggerCarVideoUpload(target);
-        return;
-      }
-      openCamera(target);
-    }
-
-    function triggerCarPhotoUpload(slot) {
-      const target = slot || currentCarPhotoSlot();
-      if (isCarGuideVideoSlot(target)) {
-        triggerCarVideoUpload(target);
-        return;
-      }
-      triggerUpload(target);
-    }
-
-    function triggerCarVideoUpload(slot) {
-      if (!ALLOW_FILE_UPLOAD) {
-        alert("File upload is disabled.");
-        return;
-      }
-      const input = document.getElementById("car-video-input");
-      if (!input) return;
-      activeSlot = slot || currentCarPhotoSlot() || CAR_ODOMETER_VIDEO_SLOT.id;
-      input.value = "";
-      input.click();
-    }
-
-    async function cancelCurrentCarPhoto() {
-      await cancelSlotPhoto(currentCarPhotoSlot());
-    }
-
-    async function carPhotoNewClient() {
-      await resetCarPhotoGuide();
-      showMethodChoice();
-    }
-
-    async function stopCarGuideVideoRecording(save) {
-      const slot = carVideoRecordSlot || CAR_ODOMETER_VIDEO_SLOT.id;
-      const recBtn = carGuideVideoRecordBtn(slot);
-      if (carOdoRecorder && carOdoRecorder.state !== "inactive") {
-        await new Promise((resolve) => {
-          carOdoRecorder.addEventListener("stop", resolve, { once: true });
-          try { carOdoRecorder.stop(); } catch (_) { resolve(); }
-        });
-      }
-      carOdoRecorder = null;
-      if (carOdoRecordStream) {
-        carOdoRecordStream.getTracks().forEach((t) => t.stop());
-        carOdoRecordStream = null;
-      }
-      if (recBtn) recBtn.textContent = "Record";
-      const recordSlot = carVideoRecordSlot;
-      carVideoRecordSlot = null;
-      if (!save) {
-        carOdoRecordChunks = [];
-        return;
-      }
-      if (!carOdoRecordChunks.length) return;
-      const blob = new Blob(carOdoRecordChunks, {
-        type: carOdoRecordChunks[0]?.type || "video/webm",
-      });
-      carOdoRecordChunks = [];
-      applyCarVideoSlot(blob, recordSlot || slot);
-    }
-
-    async function stopCarOdometerRecording(save) {
-      return stopCarGuideVideoRecording(save);
-    }
-
-    async function toggleCarGuideVideoRecord(slot) {
-      const target = slot || currentCarPhotoSlot() || CAR_ODOMETER_VIDEO_SLOT.id;
-      if (isCarOdometerVideoSlot(target) && carOdometerMode !== "video") {
-        await setCarOdometerMode("video");
-      }
-      if (carOdoRecorder && carOdoRecorder.state === "recording") {
-        await stopCarGuideVideoRecording(true);
-        return;
-      }
-      try {
-        clearCarUploadError();
-        carVideoRecordSlot = target;
-        carOdoRecordStream = await navigator.mediaDevices.getUserMedia({
-          video: { facingMode: { ideal: "environment" } },
-          audio: true,
-        });
-        const vidEl = carGuideVideoEl(target);
-        if (vidEl) {
-          vidEl.srcObject = carOdoRecordStream;
-          vidEl.muted = true;
-          vidEl.controls = false;
-          vidEl.style.display = "block";
-          try { await vidEl.play(); } catch (_) {}
-        }
-        carOdoRecordChunks = [];
-        const mime = MediaRecorder.isTypeSupported("video/webm;codecs=vp9")
-          ? "video/webm;codecs=vp9"
-          : MediaRecorder.isTypeSupported("video/webm")
-            ? "video/webm"
-            : "";
-        carOdoRecorder = mime
-          ? new MediaRecorder(carOdoRecordStream, { mimeType: mime })
-          : new MediaRecorder(carOdoRecordStream);
-        carOdoRecorder.ondataavailable = (ev) => {
-          if (ev.data && ev.data.size) carOdoRecordChunks.push(ev.data);
-        };
-        carOdoRecorder.start(250);
-        const recBtn = carGuideVideoRecordBtn(target);
-        if (recBtn) recBtn.textContent = "Stop";
-      } catch (err) {
-        console.warn("car guide video record failed:", err);
-        await stopCarGuideVideoRecording(false);
-        showCarUploadError("Could not start video recording. Try Upload instead.");
-      }
-    }
-
-    function applyCarVideoSlot(fileOrBlob, slotId) {
-      const slot = slotId || activeSlot || CAR_ODOMETER_VIDEO_SLOT.id;
-      const prev = carPhotoDataUrls[slot];
-      if (prev && String(prev).startsWith("blob:")) {
-        try { URL.revokeObjectURL(prev); } catch (_) {}
-      }
-      const blob = fileOrBlob;
-      const url = URL.createObjectURL(blob);
-      carPhotoBlobs[slot] = blob;
-      carPhotoDataUrls[slot] = url;
-      if (isCarOdometerVideoSlot(slot)) carOdometerMode = "video";
-      const vidEl = carGuideVideoEl(slot);
-      if (vidEl) {
-        vidEl.srcObject = null;
-        vidEl.src = url;
-        vidEl.muted = false;
-        vidEl.controls = true;
-        vidEl.style.display = "block";
-      }
-      const idx = carPhotoStepIndexForSlot(slot);
-      if (idx >= 0) carPhotoStepIndex = idx;
-      advanceCarPhotoStep();
-    }
-
-    function carPhotoParentForSlot(id) {
-      return activeCarPhotoSlots().find(
-        (s) =>
-          s.children?.some((c) => c.id === id) ||
-          s.photoChildren?.some((c) => c.id === id) ||
-          s.videoChild?.id === id
-      );
-    }
-
-    function carPhotoFileStem(id, title, parentTitle) {
-      const label = parentTitle ? `${parentTitle}-${title}` : title;
-      return String(label)
-        .toLowerCase()
-        .replace(/[^a-z0-9]+/g, "-")
-        .replace(/^-|-$/g, "") || id;
-    }
-
-    function carPhotoPageTitle(id, title) {
-      const parent = carPhotoParentForSlot(id);
-      return parent?.title ? `${parent.title} — ${title}` : title;
-    }
-
-    function triggerBlobDownload(blob, filename) {
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement("a");
-      a.href = url;
-      a.download = filename;
-      document.body.appendChild(a);
-      a.click();
-      a.remove();
-      setTimeout(() => URL.revokeObjectURL(url), 2500);
-    }
-
-    function placeCarPhotoOnPdfPage(pdf, jpegDataUrl, imgW, imgH, title) {
-      const pageW = pdf.internal.pageSize.getWidth();
-      const pageH = pdf.internal.pageSize.getHeight();
-      const margin = 14;
-      const titleTop = margin + 4;
-      pdf.setFont("helvetica", "bold");
-      pdf.setFontSize(16);
-      pdf.setTextColor(30, 30, 30);
-      pdf.text(String(title || ""), pageW / 2, titleTop, {
-        align: "center",
-        maxWidth: pageW - margin * 2,
-      });
-
-      const titleBlock = 16;
-      const maxW = pageW - margin * 2;
-      const maxH = pageH - margin * 2 - titleBlock;
-      const ratio = imgW / imgH;
-      let w = maxW;
-      let h = w / ratio;
-      if (h > maxH) {
-        h = maxH;
-        w = h * ratio;
-      }
-      const x = margin + (maxW - w) / 2;
-      const y = margin + titleBlock + (maxH - h) / 2;
-      pdf.addImage(jpegDataUrl, "JPEG", x, y, w, h);
-    }
-
-    async function ensureJSZip() {
-      if (window.JSZip) return window.JSZip;
-      const cdns = [
-        "https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js",
-        "https://cdn.jsdelivr.net/npm/jszip@3.10.1/dist/jszip.min.js",
-      ];
-      for (const url of cdns) {
-        try {
-          await loadScript(url);
-          if (window.JSZip) return window.JSZip;
-        } catch (e) {
-          console.warn(e);
-        }
-      }
-      return null;
-    }
-
-    async function buildCarPhotoPdfBlob(photoLeaves) {
-      const JsPDF = await ensureJsPDF();
-      if (!JsPDF) throw new Error("jsPDF unavailable");
-      const pdf = new JsPDF({ orientation: "portrait", unit: "mm", format: "a4" });
-      let pages = 0;
-      for (let i = 0; i < photoLeaves.length; i++) {
-        const { id, title } = photoLeaves[i];
-        const src = carPhotoDataUrls[id];
-        if (!src) continue;
-        const prepared = await dataUrlForPdf(src);
-        if (pages > 0) pdf.addPage();
-        placeCarPhotoOnPdfPage(
-          pdf,
-          prepared.dataUrl,
-          prepared.width,
-          prepared.height,
-          carPhotoPageTitle(id, title)
-        );
-        pages += 1;
-      }
-      if (!pages) throw new Error("No photo pages for PDF");
-      return pdf.output("blob");
-    }
-
-    async function downloadCarPhotoBundle() {
-      if (!activeCarPhotoSlots().every((step) => carPhotoStepFilled(step))) {
-        alert("Capture or upload all car photo angles first.");
-        return;
-      }
-      const photoLeaves = carPhotoPdfSlots();
-      const videoLeaves = carPhotoVideoSlots();
-
-      if (!photoLeaves.length) {
-        alert("No photos to put in the PDF.");
-        return;
-      }
-
-      try {
-        const pdfBlob = await buildCarPhotoPdfBlob(photoLeaves);
-
-        if (!videoLeaves.length) {
-          triggerBlobDownload(pdfBlob, "car_photo_guide.pdf");
-          return;
-        }
-
-        const JSZip = await ensureJSZip();
-        if (!JSZip) {
-          alert("Zip library failed to load. Check your internet and try again.");
-          return;
-        }
-
-        // One button: PDF download + separate video zip (short delay avoids browser blocking).
-        triggerBlobDownload(pdfBlob, "car_photo_guide.pdf");
-
-        const zip = new JSZip();
-        for (let i = 0; i < videoLeaves.length; i++) {
-          const { id, title } = videoLeaves[i];
-          const blob = carPhotoBlobs[id];
-          if (!blob) continue;
-          const parent = carPhotoParentForSlot(id);
-          const stem = carPhotoFileStem(id, title, parent?.title);
-          const num = String(i + 1).padStart(2, "0");
-          const ext = (blob.type || "").includes("mp4")
-            ? "mp4"
-            : (blob.type || "").includes("quicktime")
-              ? "mov"
-              : "webm";
-          zip.file(`${num}-${stem}.${ext}`, blob);
-        }
-        const zipBlob = await zip.generateAsync({ type: "blob" });
-        setTimeout(() => {
-          triggerBlobDownload(zipBlob, "car_guide_videos.zip");
-        }, 400);
-      } catch (err) {
-        console.error("Car photo download failed:", err);
-        alert("Could not build the download. Try again.");
-      }
     }
 
     function licenseSlotId(side) {
@@ -5327,6 +4451,16 @@
       document.getElementById("license-zoom-stage")?.classList.remove("is-dragging");
     }
 
+    function carGuideImageOpensZoom(img) {
+      if (!img || img.style.display === "none") return false;
+      if (img.classList.contains("car-thumb-preview") || img.classList.contains("car-slot-preview")) return false;
+      const srcAttr = img.getAttribute("src") || "";
+      if (!srcAttr) return false;
+      const captureSlot = img.closest(".slot-box");
+      if (captureSlot && !captureSlot.classList.contains("done")) return false;
+      return true;
+    }
+
     function initLicenseImageZoom() {
       const modal = document.getElementById("license-zoom-modal");
       const stage = document.getElementById("license-zoom-stage");
@@ -5342,11 +4476,7 @@
           }
           return;
         }
-        if (!img || img.style.display === "none") return;
-        const srcAttr = img.getAttribute("src") || "";
-        if (!srcAttr) return;
-        const captureSlot = img.closest(".slot-box");
-        if (captureSlot && !captureSlot.classList.contains("done")) return;
+        if (!carGuideImageOpensZoom(img)) return;
         openLicenseImageZoom(img.currentSrc || img.src, img.alt || "Photo");
       });
 
@@ -5704,6 +4834,7 @@
       setPortrait("");
       clearPassportUploadError();
       clearIdUploadError();
+      clearCarPhotoSessionUrl();
       document.getElementById("method-choice").classList.remove("hidden");
       document.getElementById("scanner-view").classList.remove("visible");
       document.getElementById("passport-view").classList.remove("visible");
@@ -5743,17 +4874,7 @@
         return;
       }
       if (method === "car-photo") {
-        selectedMethod = "car-photo";
-        clearPassportUploadError();
-        clearIdUploadError();
-        await resetCarPhotoGuide();
-        document.getElementById("method-choice").classList.add("hidden");
-        document.getElementById("scanner-view").classList.remove("visible");
-        document.getElementById("passport-view").classList.remove("visible");
-        document.getElementById("license-view").classList.remove("visible");
-        document.getElementById("tech-passport-view")?.classList.remove("visible");
-        document.getElementById("car-photo-view")?.classList.add("visible");
-        window.scrollTo({ top: 0, behavior: "smooth" });
+        await enterCarPhotoGuide({ allocate: true });
         return;
       }
       selectedMethod = method;
@@ -6053,6 +5174,10 @@
     document.getElementById("car-video-input")?.addEventListener("change", async (e) => {
       const file = e.target.files && e.target.files[0];
       if (!file) return;
+      if (carPhotoEditsBlocked()) {
+        e.target.value = "";
+        return;
+      }
       if (!isLikelyVideoFile(file)) {
         showCarUploadError("Please upload a video file, not a photo.");
         e.target.value = "";
@@ -6077,6 +5202,11 @@
       if (isCarGuideVideoSlot(activeSlot)) {
         showCarUploadError("Please upload a video file, not a photo.");
         carVinGalleryUpload = false;
+        return;
+      }
+      if (isCarPhotoSlot(activeSlot) && carPhotoEditsBlocked()) {
+        carVinGalleryUpload = false;
+        e.target.value = "";
         return;
       }
       if (!isLikelyImageFile(file)) {
@@ -6150,716 +5280,6 @@
       }
     });
 
-    /** True if image border looks like a white / very light background. */
-    function borderLooksWhite(gray, w, h) {
-      const band = Math.max(2, Math.floor(Math.min(w, h) * 0.07));
-      let sum = 0;
-      let n = 0;
-      for (let y = 0; y < h; y++) {
-        for (let x = 0; x < w; x++) {
-          if (x >= band && x < w - band && y >= band && y < h - band) continue;
-          sum += gray[y * w + x];
-          n++;
-        }
-      }
-      return n > 0 && sum / n >= 205;
-    }
-
-    /** Pull mask back from its edges so a thin ring next to the card survives. */
-    function erodeMask(mask, w, h, rounds) {
-      let cur = mask;
-      for (let r = 0; r < rounds; r++) {
-        const next = new Uint8Array(cur);
-        for (let y = 0; y < h; y++) {
-          for (let x = 0; x < w; x++) {
-            const i = y * w + x;
-            if (!cur[i]) continue;
-            const up = y > 0 ? cur[i - w] : 1;
-            const down = y < h - 1 ? cur[i + w] : 1;
-            const left = x > 0 ? cur[i - 1] : 1;
-            const right = x < w - 1 ? cur[i + 1] : 1;
-            if (!up || !down || !left || !right) next[i] = 0;
-          }
-        }
-        cur = next;
-      }
-      return cur;
-    }
-
-    /**
-     * Flood-fill near-white pixels connected to the image border.
-     * Returns Uint8Array mask (1 = background to paint black).
-     */
-    function floodWhiteBackgroundMask(rgba, w, h, thresh) {
-      const mask = new Uint8Array(w * h);
-      const seen = new Uint8Array(w * h);
-      const stack = [];
-
-      const bright = (i) => {
-        const o = i * 4;
-        return 0.299 * rgba[o] + 0.587 * rgba[o + 1] + 0.114 * rgba[o + 2] >= thresh;
-      };
-
-      const push = (x, y) => {
-        if (x < 0 || y < 0 || x >= w || y >= h) return;
-        const i = y * w + x;
-        if (seen[i]) return;
-        seen[i] = 1;
-        if (!bright(i)) return;
-        mask[i] = 1;
-        stack.push(i);
-      };
-
-      for (let x = 0; x < w; x++) {
-        push(x, 0);
-        push(x, h - 1);
-      }
-      for (let y = 0; y < h; y++) {
-        push(0, y);
-        push(w - 1, y);
-      }
-
-      while (stack.length) {
-        const i = stack.pop();
-        const x = i % w;
-        const y = (i / w) | 0;
-        push(x + 1, y);
-        push(x - 1, y);
-        push(x, y + 1);
-        push(x, y - 1);
-      }
-      return mask;
-    }
-
-    /**
-     * Build a TEMP analysis image only (never used as final crop pixels):
-     * - black padding
-     * - optional outer-band white→black to help find the card contour
-     * Original bitmap is never modified.
-     */
-    async function buildAnalysisBlackBg(bitmap) {
-      const srcW = bitmap.width;
-      const srcH = bitmap.height;
-      const pad = Math.max(32, Math.round(Math.min(srcW, srcH) * 0.06));
-
-      const maxSide = 360;
-      const scale = Math.min(1, maxSide / Math.max(srcW, srcH));
-      const sw = Math.max(2, Math.round(srcW * scale));
-      const sh = Math.max(2, Math.round(srcH * scale));
-
-      const sample = document.createElement("canvas");
-      sample.width = sw;
-      sample.height = sh;
-      const sctx = sample.getContext("2d", { willReadFrequently: true });
-      sctx.drawImage(bitmap, 0, 0, sw, sh);
-      const sampleData = sctx.getImageData(0, 0, sw, sh);
-      const gray = new Float32Array(sw * sh);
-      for (let i = 0, p = 0; i < sampleData.data.length; i += 4, p++) {
-        gray[p] = 0.299 * sampleData.data[i] + 0.587 * sampleData.data[i + 1] + 0.114 * sampleData.data[i + 2];
-      }
-
-      const whiteBg = borderLooksWhite(gray, sw, sh);
-
-      const out = document.createElement("canvas");
-      out.width = srcW + pad * 2;
-      out.height = srcH + pad * 2;
-      const ctx = out.getContext("2d");
-      ctx.fillStyle = "#000";
-      ctx.fillRect(0, 0, out.width, out.height);
-      // Draw ORIGINAL pixels unchanged into analysis canvas
-      ctx.drawImage(bitmap, pad, pad);
-
-      if (whiteBg) {
-        // Only darken outer band of white background on the ANALYSIS copy.
-        // High threshold + erosion keep the card's own light edge out of the mask,
-        // otherwise the detected contour eats into the card (over-crop on white desks).
-        let mask = floodWhiteBackgroundMask(sampleData.data, sw, sh, 234);
-        mask = erodeMask(mask, sw, sh, 2);
-        const bx = Math.max(2, Math.floor(sw * 0.11));
-        const by = Math.max(2, Math.floor(sh * 0.11));
-        for (let y = by; y < sh - by; y++) {
-          for (let x = bx; x < sw - bx; x++) {
-            mask[y * sw + x] = 0; // never touch card interior on analysis either
-          }
-        }
-
-        const id = ctx.getImageData(pad, pad, srcW, srcH);
-        const px = id.data;
-        for (let y = 0; y < srcH; y++) {
-          const my = Math.min(sh - 1, Math.floor(y * scale));
-          for (let x = 0; x < srcW; x++) {
-            const mx = Math.min(sw - 1, Math.floor(x * scale));
-            if (!mask[my * sw + mx]) continue;
-            const i = (y * srcW + x) * 4;
-            px[i] = 0;
-            px[i + 1] = 0;
-            px[i + 2] = 0;
-          }
-        }
-        ctx.putImageData(id, pad, pad);
-      }
-
-      const analysisBitmap = await toDrawableBitmap(out);
-      return { analysisBitmap, pad, whiteBg };
-    }
-
-    /** Straighten tilted photo without cropping to document contour. */
-    async function deskewBitmapOnly(bitmap) {
-      const analysis = analyzeForDeskew(bitmap);
-      const angle = analysis.angle;
-      // Conservative: only small confident corrections
-      if (Math.abs(angle) < 1.2 || !analysis.confident) {
-        return canvasToJpeg(bitmap, 0, 0, bitmap.width, bitmap.height);
-      }
-
-      const rotated = await rotateBitmap(bitmap, -angle);
-      const result = await canvasToJpeg(rotated, 0, 0, rotated.width, rotated.height);
-      if (typeof rotated.close === "function") rotated.close();
-      return result;
-    }
-
-    /** Analyze image and return deskew angle only if clearly better than original. */
-    function analyzeForDeskew(bitmap) {
-      const srcW = bitmap.width;
-      const srcH = bitmap.height;
-      const maxSide = 420;
-      const scale = Math.min(1, maxSide / Math.max(srcW, srcH));
-      const w = Math.max(2, Math.round(srcW * scale));
-      const h = Math.max(2, Math.round(srcH * scale));
-
-      const canvas = document.createElement("canvas");
-      canvas.width = w;
-      canvas.height = h;
-      const ctx = canvas.getContext("2d", { willReadFrequently: true });
-      ctx.drawImage(bitmap, 0, 0, w, h);
-      const { data } = ctx.getImageData(0, 0, w, h);
-
-      const gray = new Float32Array(w * h);
-      let sumG = 0;
-      for (let i = 0, p = 0; i < data.length; i += 4, p++) {
-        const g = 0.299 * data[i] + 0.587 * data[i + 1] + 0.114 * data[i + 2];
-        gray[p] = g;
-        sumG += g;
-      }
-      const meanG = sumG / gray.length;
-      const blur = boxBlurGray(gray, w, h, Math.max(2, Math.round(Math.min(w, h) * 0.03)));
-      const ID_ASPECT = 85.6 / 54;
-
-      let best = findBestIdWindow(blur, w, h, ID_ASPECT);
-      const brightBox = findBrightCardBox(blur, gray, w, h, meanG, ID_ASPECT);
-      if (brightBox && (!best || brightBox.score > best.score)) best = brightBox;
-      const edgeBox = findEdgeCardBox(gray, w, h, ID_ASPECT);
-      if (edgeBox && (!best || edgeBox.score > best.score * 1.05)) best = edgeBox;
-      if (!best) {
-        return { angle: 0, confident: false };
-      }
-
-      return estimateDeskewAngle(gray, w, h, best);
-    }
-
-    /** Auto-crop ID card tightly — remove patterned/dark backgrounds. */
-    /**
-     * Detect ID box on an analysis image (may have black assist bg).
-     * Returns { best, gray, blur, meanG, w, h, scale } or best=null.
-     */
-    function detectCardBoxOnBitmap(analysisBitmap, aspectRatio) {
-      const srcW = analysisBitmap.width;
-      const srcH = analysisBitmap.height;
-      const maxSide = 480;
-      const scale = Math.min(1, maxSide / Math.max(srcW, srcH));
-      const w = Math.max(2, Math.round(srcW * scale));
-      const h = Math.max(2, Math.round(srcH * scale));
-
-      const canvas = document.createElement("canvas");
-      canvas.width = w;
-      canvas.height = h;
-      const ctx = canvas.getContext("2d", { willReadFrequently: true });
-      ctx.drawImage(analysisBitmap, 0, 0, w, h);
-      const { data } = ctx.getImageData(0, 0, w, h);
-
-      const gray = new Float32Array(w * h);
-      let sumG = 0;
-      for (let i = 0, p = 0; i < data.length; i += 4, p++) {
-        const g = 0.299 * data[i] + 0.587 * data[i + 1] + 0.114 * data[i + 2];
-        gray[p] = g;
-        sumG += g;
-      }
-      const meanG = sumG / gray.length;
-      const blur = boxBlurGray(gray, w, h, Math.max(2, Math.round(Math.min(w, h) * 0.03)));
-      const ID_ASPECT = aspectRatio || 85.6 / 54;
-
-      let best = findBestIdWindow(blur, w, h, ID_ASPECT);
-      const brightBox = findBrightCardBox(blur, gray, w, h, meanG, ID_ASPECT);
-      if (brightBox && (!best || brightBox.score > best.score)) best = brightBox;
-      const edgeBox = findEdgeCardBox(gray, w, h, ID_ASPECT);
-      if (edgeBox && (!best || edgeBox.score > best.score * 1.05)) best = edgeBox;
-
-      return { best, gray, blur, meanG, w, h, scale, ID_ASPECT };
-    }
-
-    /**
-     * Crop to document. Black-bg assist is ONLY for finding the contour —
-     * final JPEG pixels always come from the unmodified original (or its rotate).
-     * Tilts are corrected toward a flat ID-aspect rectangle (like a straight scan).
-     *
-     * options.passport — slightly easier warp acceptance + deskew for biodata pages.
-     * options.idCard — tighter full-bleed crop (match flat ID front/back scans).
-     * options.protectMrz — keep extra bottom margin; skip aggressive border trim (ID back).
-     */
-    async function cropDocumentBitmap(bitmap, aspectRatio, options = {}) {
-      // ID aspect stays 85.6/54 unless caller (passport) passes another ratio
-      const ID_ASPECT = aspectRatio || 85.6 / 54;
-      const passport = !!options.passport;
-      const licenseScan = !!options.licenseScan;
-      const idCard = !!options.idCard || licenseScan || (!passport && !aspectRatio);
-      const protectMrz = !!options.protectMrz;
-      let analysisTemps = [];
-
-      const closeTemp = (bmp) => {
-        if (bmp && typeof bmp.close === "function") {
-          try { bmp.close(); } catch (_) {}
-        }
-      };
-
-      const analyze = async (origBmp) => {
-        const assist = await buildAnalysisBlackBg(origBmp);
-        analysisTemps.push(assist.analysisBitmap);
-        const det = detectCardBoxOnBitmap(assist.analysisBitmap, ID_ASPECT);
-        return {
-          ...det,
-          pad: assist.pad,
-          whiteBg: assist.whiteBg,
-          assistBitmap: assist.analysisBitmap,
-        };
-      };
-
-      // Map analysis-full-res crop rect → original bitmap coords
-      const mapToOriginal = (minX, minY, maxX, maxY, scale, pad, origW, origH) => {
-        let sx = Math.floor(minX / scale) - pad;
-        let sy = Math.floor(minY / scale) - pad;
-        let ex = Math.ceil((maxX + 1) / scale) - pad;
-        let ey = Math.ceil((maxY + 1) / scale) - pad;
-        sx = Math.max(0, Math.min(origW - 1, sx));
-        sy = Math.max(0, Math.min(origH - 1, sy));
-        ex = Math.max(sx + 1, Math.min(origW, ex));
-        ey = Math.max(sy + 1, Math.min(origH, ey));
-        return { sx, sy, sw: ex - sx, sh: ey - sy };
-      };
-
-      const mapPtToOriginal = (x, y, scale, pad, origW, origH) => ({
-        x: Math.max(0, Math.min(origW - 1, x / scale - pad)),
-        y: Math.max(0, Math.min(origH - 1, y / scale - pad)),
-      });
-
-      let workingOrig = bitmap;
-      let rotatedExtra = null;
-      let warpedExtra = null;
-      let turnedExtra = null;
-      let straightenShot = null; // jpeg after straighten only (before crop)
-      let det = await analyze(workingOrig);
-
-      const cleanupTemps = () => {
-        for (const t of analysisTemps) closeTemp(t);
-        analysisTemps = [];
-        closeTemp(rotatedExtra);
-        closeTemp(warpedExtra);
-        closeTemp(turnedExtra);
-      };
-
-      // Sideways capture: the card box only matches inside a landscape frame,
-      // so give the detector a quarter-turned copy before giving up.
-      if (!det.best) {
-        const turned = await rotateBitmap(workingOrig, 90);
-        const turnedDet = await analyze(turned);
-        if (turnedDet.best) {
-          turnedExtra = turned;
-          workingOrig = turned;
-          det = turnedDet;
-          straightenShot = await canvasToJpeg(turned, 0, 0, turned.width, turned.height);
-        } else {
-          closeTemp(turned);
-        }
-      }
-
-      // 1) Perspective straighten when we can lock onto the 4 card corners
-      if (det.best) {
-        const quadA = findCardQuad(det.gray, det.w, det.h, det.best);
-        if (quadA) {
-          const quadOrig = quadA.map((p) =>
-            mapPtToOriginal(p.x, p.y, det.scale, det.pad, workingOrig.width, workingOrig.height)
-          );
-          if (isPlausibleCardQuad(quadOrig, workingOrig.width, workingOrig.height, ID_ASPECT, {
-            passport,
-          })) {
-            try {
-              warpedExtra = await warpQuadToIdBitmap(workingOrig, quadOrig, ID_ASPECT, {
-                targetWidth: licenseScan ? 1800 : undefined,
-              });
-              let result = await canvasToJpeg(
-                warpedExtra, 0, 0, warpedExtra.width, warpedExtra.height
-              );
-              // Never run aggressive border trim on ID back — MRZ lives on the bottom edge
-              if (idCard && !protectMrz) {
-                result = await trimIdScanBorders(result, ID_ASPECT);
-              }
-              cleanupTemps();
-              // Warp already straightens + crops to ID aspect
-              return { ...result, straighten: result };
-            } catch (err) {
-              console.warn("perspective warp failed, falling back:", err);
-            }
-          }
-        }
-      }
-
-      // 2) Fallback: rotate deskew + axis-aligned crop
-      if (det.best) {
-        const skew = estimateDeskewAngle(det.gray, det.w, det.h, det.best);
-        const minSkew = passport ? 0.5 : 0.6;
-        if (skew.confident && Math.abs(skew.angle) >= minSkew) {
-          rotatedExtra = await rotateBitmap(workingOrig, -skew.angle);
-          workingOrig = rotatedExtra;
-          straightenShot = await canvasToJpeg(
-            workingOrig, 0, 0, workingOrig.width, workingOrig.height
-          );
-          det = await analyze(workingOrig);
-        }
-      }
-
-      const outW = workingOrig.width;
-      const outH = workingOrig.height;
-
-      if (!det.best) {
-        const fallback = await canvasToJpeg(workingOrig, 0, 0, outW, outH);
-        cleanupTemps();
-        return { ...fallback, straighten: straightenShot || fallback };
-      }
-
-      let { minX, minY, maxX, maxY } = tightenCardBox(
-        det.blur, det.gray, det.w, det.h, det.best, det.meanG, { idCard, protectMrz }
-      );
-
-      // Prefer full-bleed card (reference scans have almost no desk margin).
-      // ID back keeps a larger bottom pad so the MRZ strip is never shaved.
-      const padRatio = licenseScan
-        ? (det.whiteBg ? 0.003 : 0.001)
-        : idCard
-        ? (det.whiteBg ? 0.008 : 0.004)
-        : (det.whiteBg ? 0.03 : 0.015);
-      const padX = Math.max(1, Math.round((maxX - minX) * padRatio));
-      const padY = Math.max(1, Math.round((maxY - minY) * padRatio));
-      const padBottom = protectMrz
-        ? Math.max(padY, Math.round((maxY - minY) * 0.035))
-        : padY;
-      minX = Math.max(0, minX - padX);
-      minY = Math.max(0, minY - padY);
-      maxX = Math.min(det.w - 1, maxX + padX);
-      maxY = Math.min(det.h - 1, maxY + padBottom);
-
-      const { sx, sy, sw, sh } = mapToOriginal(
-        minX, minY, maxX, maxY, det.scale, det.pad, outW, outH
-      );
-
-      if (sw < outW * 0.12 || sh < outH * 0.08) {
-        const fallback = await canvasToJpeg(workingOrig, 0, 0, outW, outH);
-        cleanupTemps();
-        return { ...fallback, straighten: straightenShot || fallback };
-      }
-
-      // Crop from ORIGINAL pixels only — analysis black paint never reaches output
-      let result = await rectifyToIdAspect(workingOrig, sx, sy, sw, sh, ID_ASPECT, {
-        targetWidth: licenseScan ? 1800 : undefined,
-        fillColor: licenseScan ? "#ffffff" : "#111111",
-      });
-      if (idCard && !protectMrz) {
-        result = await trimIdScanBorders(result, ID_ASPECT);
-      }
-      cleanupTemps();
-      return { ...result, straighten: straightenShot || result };
-    }
-
-    /** Brighten a processed JPEG for better OCR readability. */
-    async function applyBrightnessToResult(result, amount = 1.04) {
-      const bmp = await toDrawableBitmap(result.blob);
-      try {
-        const out = document.createElement("canvas");
-        out.width = bmp.width;
-        out.height = bmp.height;
-        const ctx = out.getContext("2d");
-        ctx.filter = `brightness(${amount}) contrast(1.01)`;
-        ctx.drawImage(bmp, 0, 0);
-        ctx.filter = "none";
-        return await canvasToJpeg(out, 0, 0, out.width, out.height);
-      } finally {
-        if (typeof bmp.close === "function") {
-          try { bmp.close(); } catch (_) {}
-        }
-      }
-    }
-
-    /** Georgian REMARKS page wash — lavender/magenta (low green, mid luminance). */
-    function isRemarksPurple(r, g, b) {
-      const lum = 0.299 * r + 0.587 * g + 0.114 * b;
-      if (lum < 70 || lum > 210) return false;
-      // Classic blue-purple header OR pink-lavender illustration wash
-      if (b > r + 12 && b > g + 8 && b > 90) return true;
-      if (g + 14 < r && g + 14 < b && Math.max(r, b) > 110) return true;
-      return false;
-    }
-
-    /**
-     * Score a horizontal band: MRZ-like dense dark text near the bottom of biodata,
-     * vs purple/lavender REMARKS wash on page 03.
-     */
-    function scorePassportHalf(rgba, w, h, y0, y1) {
-      let purple = 0;
-      let dark = 0;
-      let edge = 0;
-      let n = 0;
-      const yStart = Math.max(0, y0 | 0);
-      const yEnd = Math.min(h, y1 | 0);
-      for (let y = yStart; y < yEnd; y += 2) {
-        for (let x = 0; x < w; x += 2) {
-          const i = (y * w + x) * 4;
-          const r = rgba[i];
-          const g = rgba[i + 1];
-          const b = rgba[i + 2];
-          const lum = 0.299 * r + 0.587 * g + 0.114 * b;
-          n++;
-          if (lum < 70) dark++;
-          if (isRemarksPurple(r, g, b)) purple++;
-          if (x + 2 < w) {
-            const i2 = (y * w + x + 2) * 4;
-            const lum2 = 0.299 * rgba[i2] + 0.587 * rgba[i2 + 1] + 0.114 * rgba[i2 + 2];
-            if (Math.abs(lum - lum2) > 40) edge++;
-          }
-        }
-      }
-      if (!n) return { purple: 0, dark: 0, edge: 0, mrz: 0 };
-      // MRZ sits in the lower ~30% of the biodata page — dense dark + edges
-      const bandH = Math.max(1, yEnd - yStart);
-      const mrzY0 = yStart + Math.floor(bandH * 0.65);
-      let mrzDark = 0;
-      let mrzN = 0;
-      for (let y = mrzY0; y < yEnd; y += 2) {
-        for (let x = 0; x < w; x += 2) {
-          const i = (y * w + x) * 4;
-          const lum = 0.299 * rgba[i] + 0.587 * rgba[i + 1] + 0.114 * rgba[i + 2];
-          mrzN++;
-          if (lum < 85) mrzDark++;
-        }
-      }
-      return {
-        purple: purple / n,
-        dark: dark / n,
-        edge: edge / n,
-        mrz: mrzN ? mrzDark / mrzN : 0,
-      };
-    }
-
-    function scorePassportVStrip(rgba, w, h, x0, x1) {
-      let purple = 0;
-      let n = 0;
-      let mrzDark = 0;
-      let mrzN = 0;
-      const xa = Math.max(0, x0 | 0);
-      const xb = Math.min(w, x1 | 0);
-      const mrzY0 = Math.floor(h * 0.55);
-      for (let y = 0; y < h; y += 2) {
-        for (let x = xa; x < xb; x += 2) {
-          const i = (y * w + x) * 4;
-          const r = rgba[i], g = rgba[i + 1], b = rgba[i + 2];
-          const lum = 0.299 * r + 0.587 * g + 0.114 * b;
-          n++;
-          if (isRemarksPurple(r, g, b)) purple++;
-          if (y >= mrzY0) {
-            mrzN++;
-            if (lum < 85) mrzDark++;
-          }
-        }
-      }
-      return {
-        purple: n ? purple / n : 0,
-        mrz: mrzN ? mrzDark / mrzN : 0,
-      };
-    }
-
-    /**
-     * Drop REMARKS (შენიშვნები / page 03) when the open book clearly has two pages.
-     * Returns { bitmap, cropped }. Never blind-crops a single biodata page.
-     */
-    async function isolatePassportBiodataBitmap(bitmap) {
-      const w = bitmap.width;
-      const h = bitmap.height;
-      if (!w || !h) return { bitmap, cropped: false };
-
-      const maxSide = 420;
-      const scale = Math.min(1, maxSide / Math.max(w, h));
-      const aw = Math.max(2, Math.round(w * scale));
-      const ah = Math.max(2, Math.round(h * scale));
-      const c = document.createElement("canvas");
-      c.width = aw;
-      c.height = ah;
-      const ctx = c.getContext("2d", { willReadFrequently: true });
-      ctx.drawImage(bitmap, 0, 0, aw, ah);
-      const { data } = ctx.getImageData(0, 0, aw, ah);
-
-      const aspect = w / h;
-      let sx = 0;
-      let sy = 0;
-      let sw = w;
-      let sh = h;
-      let cut = false;
-
-      if (aspect < 0.95) {
-        // Tall open book: REMARKS on top, biodata (+ MRZ) underneath
-        const mid = Math.floor(ah / 2);
-        const top = scorePassportHalf(data, aw, ah, 0, mid);
-        const bot = scorePassportHalf(data, aw, ah, mid, ah);
-        // Require purple REMARKS wash OR very tall double-page + clear MRZ below
-        const remarksLikely =
-          (top.purple > 0.04 && bot.mrz > top.mrz + 0.02) ||
-          (top.purple > 0.08) ||
-          (aspect < 0.55 && bot.mrz > top.mrz + 0.05 && bot.mrz > 0.08 && top.purple > 0.02);
-        if (remarksLikely) {
-          sy = Math.floor(h * 0.48);
-          sh = h - sy;
-          cut = true;
-        }
-      } else if (aspect > 1.55) {
-        // Wide open book: REMARKS left, biodata right — purple REQUIRED
-        // (MRZ-only signal would wrongly cut a single landscape biodata page)
-        const mid = Math.floor(aw / 2);
-        const left = scorePassportVStrip(data, aw, ah, 0, mid);
-        const right = scorePassportVStrip(data, aw, ah, mid, aw);
-        if (left.purple > 0.04 && (right.mrz >= left.mrz || left.purple > 0.08)) {
-          sx = Math.floor(w * 0.48);
-          sw = w - sx;
-          cut = true;
-        }
-      } else {
-        const mid = Math.floor(ah / 2);
-        const top = scorePassportHalf(data, aw, ah, 0, mid);
-        const bot = scorePassportHalf(data, aw, ah, mid, ah);
-        if (top.purple > 0.05 && bot.mrz > top.mrz + 0.02) {
-          sy = Math.floor(h * 0.48);
-          sh = h - sy;
-          cut = true;
-        }
-      }
-
-      if (!cut) return { bitmap, cropped: false };
-
-      const canvas = document.createElement("canvas");
-      canvas.width = sw;
-      canvas.height = sh;
-      const octx = canvas.getContext("2d");
-      octx.drawImage(bitmap, sx, sy, sw, sh, 0, 0, sw, sh);
-      const out = await toDrawableBitmap(canvas);
-      return { bitmap: out, cropped: true };
-    }
-
-    /**
-     * Results photo: drop REMARKS when detected. Top capture slot stays original.
-     * When cropped, OCR should also use this biodata image (Vision focuses on MRZ).
-     */
-    async function processPassportImage(bitmap) {
-      let isolated = null;
-      try {
-        const result = await isolatePassportBiodataBitmap(bitmap);
-        isolated = result.bitmap;
-        const jpeg = await canvasToJpeg(isolated, 0, 0, isolated.width, isolated.height);
-        jpeg.cropped = !!result.cropped;
-        return jpeg;
-      } finally {
-        if (isolated && isolated !== bitmap && typeof isolated.close === "function") {
-          try { isolated.close(); } catch (_) {}
-        }
-      }
-    }
-
-    async function processLicenseForGenerate(bitmap) {
-      const cropped = await cropDocumentBitmap(bitmap, LICENSE_ASPECT, {
-        idCard: true,
-        licenseScan: true,
-      });
-      const scanBase = cropped.straighten || cropped;
-      const polished = await polishLicenseScan(scanBase, LICENSE_ASPECT);
-      const bright = await applyBrightnessToResult(polished, 1.03);
-      return {
-        crop: { blob: polished.blob, dataUrl: polished.dataUrl },
-        straighten: { blob: polished.blob, dataUrl: polished.dataUrl },
-        brightness: { blob: bright.blob, dataUrl: bright.dataUrl },
-        final: { blob: bright.blob, dataUrl: bright.dataUrl },
-      };
-    }
-
-    /**
-     * Normalize a license crop to flatbed-scan quality: tight trim, exact ID-1
-     * aspect, thin white margin, consistent output size.
-     */
-    async function polishLicenseScan(result, aspect = LICENSE_ASPECT) {
-      let trimmed = await trimIdScanBorders(result, aspect);
-      trimmed = await trimIdScanBorders(trimmed, aspect);
-      const bmp = await toDrawableBitmap(trimmed.blob || trimmed.dataUrl);
-      try {
-        const outW = LICENSE_SCAN_WIDTH;
-        const outH = Math.round(outW / aspect);
-        const pad = 0.014;
-        const innerW = Math.round(outW * (1 - 2 * pad));
-        const innerH = Math.round(innerW / aspect);
-        const px = Math.round((outW - innerW) / 2);
-        const py = Math.round((outH - innerH) / 2);
-
-        const out = document.createElement("canvas");
-        out.width = outW;
-        out.height = outH;
-        const ctx = out.getContext("2d");
-        ctx.fillStyle = "#ffffff";
-        ctx.fillRect(0, 0, outW, outH);
-        ctx.imageSmoothingEnabled = true;
-        ctx.imageSmoothingQuality = "high";
-        ctx.filter = "contrast(1.02)";
-        ctx.drawImage(bmp, 0, 0, bmp.width, bmp.height, px, py, innerW, innerH);
-        ctx.filter = "none";
-        return await canvasToJpeg(out, 0, 0, outW, outH, 0.97);
-      } finally {
-        if (typeof bmp.close === "function") {
-          try { bmp.close(); } catch (_) {}
-        }
-      }
-    }
-
-    /**
-     * Camera capture for ID front/back: same pipeline as upload —
-     * detect card, straighten to ID-1 (85.6×54), full-bleed crop like a flat scan.
-     * Back side uses protectMrz so the TD1 strip is not trimmed away.
-     */
-    async function processFrameCaptureForGenerate(bitmap, options = {}) {
-      return processDocumentForGenerate(bitmap, 85.6 / 54, options);
-    }
-
-    /**
-     * Full generate pipeline for ID photos (camera or upload):
-     * 1) Crop to card  2) Straighten to ID-1  3) Brightness  → final.
-     * Output matches a clean scan: card fills the frame, no desk background.
-     * options.protectMrz — gentler bottom crop for ID back (MRZ).
-     */
-    async function processDocumentForGenerate(bitmap, aspectRatio, options = {}) {
-      const idAspect = aspectRatio || 85.6 / 54;
-      const cropped = await cropDocumentBitmap(bitmap, idAspect, {
-        idCard: true,
-        protectMrz: !!options.protectMrz,
-      });
-      const bright = await applyBrightnessToResult(cropped);
-      const straighten = cropped.straighten || cropped;
-      return {
-        crop: { blob: cropped.blob, dataUrl: cropped.dataUrl },
-        straighten: { blob: straighten.blob, dataUrl: straighten.dataUrl },
-        brightness: { blob: bright.blob, dataUrl: bright.dataUrl },
-        final: { blob: bright.blob, dataUrl: bright.dataUrl },
-      };
-    }
 
     /**
      * Rotate a JPEG data URL counter-clockwise by 90 / 180 / 270 degrees.
@@ -7391,20 +5811,77 @@
       return sumSq / used - mean * mean;
     }
 
-    async function rotateBitmap(bitmap, angleDeg) {
+    /** Tilt of a photo that is already the green frame: median of long edges. */
+    function frameTiltAngle(bitmap) {
+      const maxSide = 480;
+      const scale = Math.min(1, maxSide / Math.max(bitmap.width, bitmap.height));
+      const w = Math.max(2, Math.round(bitmap.width * scale));
+      const h = Math.max(2, Math.round(bitmap.height * scale));
+      const canvas = document.createElement("canvas");
+      canvas.width = w;
+      canvas.height = h;
+      const ctx = canvas.getContext("2d", { willReadFrequently: true });
+      ctx.drawImage(bitmap, 0, 0, w, h);
+      const { data } = ctx.getImageData(0, 0, w, h);
+      const gray = new Float32Array(w * h);
+      for (let i = 0, p = 0; i < data.length; i += 4, p++) {
+        gray[p] = 0.299 * data[i] + 0.587 * data[i + 1] + 0.114 * data[i + 2];
+      }
+      const angles = [];
+      for (let y = 2; y < h - 2; y += 2) {
+        for (let x = 2; x < w - 2; x += 2) {
+          const i = y * w + x;
+          const gx = gray[i + 1] - gray[i - 1];
+          const gy = gray[i + w] - gray[i - w];
+          if (Math.abs(gx) + Math.abs(gy) < 36) continue;
+          let deg = (Math.atan2(gy, gx) * 180) / Math.PI + 90;
+          while (deg > 90) deg -= 180;
+          while (deg <= -90) deg += 180;
+          if (Math.abs(deg) <= 18) angles.push(deg);
+        }
+      }
+      if (angles.length < 40) return 0;
+      angles.sort((a, b) => a - b);
+      const median = angles[Math.floor(angles.length / 2)];
+      if (Math.abs(median) < 1.2 || Math.abs(median) > 16) return 0;
+      return median;
+    }
+
+    /** Rotate a framed capture upright. Does not crop to the card contour. */
+    async function straightenFramedPhoto(bitmap) {
+      let current = bitmap;
+      let owned = false;
+      try {
+        for (let pass = 0; pass < 2; pass++) {
+          const angle = frameTiltAngle(current);
+          if (Math.abs(angle) < 1.2) break;
+          const rotated = await rotateBitmap(current, -angle, { clipToSource: true });
+          if (owned && typeof current.close === "function") current.close();
+          current = rotated;
+          owned = true;
+        }
+        return await canvasToJpeg(current, 0, 0, current.width, current.height);
+      } finally {
+        if (owned && typeof current.close === "function") current.close();
+      }
+    }
+    async function rotateBitmap(bitmap, angleDeg, options = {}) {
       const rad = (angleDeg * Math.PI) / 180;
-      const cos = Math.abs(Math.cos(rad));
-      const sin = Math.abs(Math.sin(rad));
       const w = bitmap.width;
       const h = bitmap.height;
-      const nw = Math.max(2, Math.ceil(w * cos + h * sin));
-      const nh = Math.max(2, Math.ceil(w * sin + h * cos));
+      const clipToSource = !!options.clipToSource;
+      const cos = Math.abs(Math.cos(rad));
+      const sin = Math.abs(Math.sin(rad));
+      const nw = clipToSource ? w : Math.max(2, Math.ceil(w * cos + h * sin));
+      const nh = clipToSource ? h : Math.max(2, Math.ceil(w * sin + h * cos));
       const canvas = document.createElement("canvas");
       canvas.width = nw;
       canvas.height = nh;
       const ctx = canvas.getContext("2d");
-      ctx.fillStyle = "#000";
-      ctx.fillRect(0, 0, nw, nh);
+      if (!clipToSource) {
+        ctx.fillStyle = "#000";
+        ctx.fillRect(0, 0, nw, nh);
+      }
       ctx.translate(nw / 2, nh / 2);
       ctx.rotate(rad);
       ctx.drawImage(bitmap, -w / 2, -h / 2);
@@ -7425,13 +5902,14 @@
         let srcH = sh;
 
         const cropAspect = sw / Math.max(1, sh);
-        if (cropAspect > aspect) {
+        const keepAll = !!rectOptions.keepAll;
+        if (!keepAll && cropAspect > aspect) {
           // too wide — trim sides
           srcW = Math.round(sh * aspect);
           srcX = sx + Math.floor((sw - srcW) / 2);
           outW = srcW;
           outH = sh;
-        } else {
+        } else if (!keepAll) {
           // too tall — trim top/bottom
           srcH = Math.round(sw / aspect);
           srcY = sy + Math.floor((sh - srcH) / 2);
@@ -7705,33 +6183,38 @@
       // Shrink from each side only while the border strip is clearly darker than
       // the card — for ID scans we trim more so the result is full-bleed like a flat scan.
       // On the back, shrink the bottom much less so dark MRZ text is not treated as "desk".
-      const maxShrinkX = Math.floor((maxX - minX) * (idCard ? 0.18 : 0.1));
-      const maxShrinkYTop = Math.floor((maxY - minY) * (idCard ? 0.18 : 0.1));
+      const maxShrinkX = Math.floor((maxX - minX) * (idCard ? 0.12 : 0.08));
+      const maxShrinkYTop = Math.floor((maxY - minY) * (idCard ? 0.12 : 0.08));
       const maxShrinkYBot = protectMrz
-        ? Math.floor((maxY - minY) * 0.04)
+        ? Math.floor((maxY - minY) * 0.03)
         : maxShrinkYTop;
-      const darkMargin = idCard ? 16 : 22;
+      const darkMargin = idCard ? 36 : 40;
 
+      // Peel only a strip that is darker than BOTH the card and the pixels just inside it.
+      // A dark portrait or MRZ continues inward, so it is left alone.
       for (let i = 0; i < maxShrinkYTop; i++) {
         const top = regionMean(blur, w, h, minX, minY, maxX, minY + 2);
-        if (top < thr - darkMargin) minY++;
+        const inner = regionMean(blur, w, h, minX, minY + 6, maxX, minY + 12);
+        if (top < thr - darkMargin && top + 18 < inner) minY++;
         else break;
       }
       for (let i = 0; i < maxShrinkYBot; i++) {
         const bot = regionMean(blur, w, h, minX, maxY - 2, maxX, maxY);
-        // MRZ is dark printed text — require a clearly darker strip before shrinking
+        const inner = regionMean(blur, w, h, minX, maxY - 12, maxX, maxY - 6);
         const botMargin = protectMrz ? darkMargin + 18 : darkMargin;
-        if (bot < thr - botMargin) maxY--;
+        if (bot < thr - botMargin && bot + 18 < inner) maxY--;
         else break;
       }
       for (let i = 0; i < maxShrinkX; i++) {
         const left = regionMean(blur, w, h, minX, minY, minX + 2, maxY);
-        if (left < thr - darkMargin) minX++;
+        const inner = regionMean(blur, w, h, minX + 6, minY, minX + 12, maxY);
+        if (left < thr - darkMargin && left + 18 < inner) minX++;
         else break;
       }
       for (let i = 0; i < maxShrinkX; i++) {
         const right = regionMean(blur, w, h, maxX - 2, minY, maxX, maxY);
-        if (right < thr - darkMargin) maxX--;
+        const inner = regionMean(blur, w, h, maxX - 12, minY, maxX - 6, maxY);
+        if (right < thr - darkMargin && right + 18 < inner) maxX--;
         else break;
       }
 
@@ -7758,66 +6241,91 @@
         }
         const { data } = ctx.getImageData(0, 0, w, h);
 
-        const lumAt = (x, y) => {
-          const i = (y * w + x) * 4;
-          return 0.299 * data[i] + 0.587 * data[i + 1] + 0.114 * data[i + 2];
-        };
-        const rowMean = (y, x0, x1) => {
-          let s = 0;
+        const sampleLine = (fixed, horizontal, a, b) => {
+          let sum = 0;
+          let sumSq = 0;
+          let sr = 0;
+          let sg = 0;
+          let sb = 0;
           let n = 0;
-          for (let x = x0; x <= x1; x += 2) {
-            s += lumAt(x, y);
+          for (let t = a; t <= b; t += 3) {
+            const x = horizontal ? t : fixed;
+            const y = horizontal ? fixed : t;
+            const i = (y * w + x) * 4;
+            const r = data[i];
+            const g = data[i + 1];
+            const b = data[i + 2];
+            const lum = 0.299 * r + 0.587 * g + 0.114 * b;
+            sum += lum;
+            sumSq += lum * lum;
+            sr += r;
+            sg += g;
+            sb += b;
             n++;
           }
-          return n ? s / n : 0;
-        };
-        const colMean = (x, y0, y1) => {
-          let s = 0;
-          let n = 0;
-          for (let y = y0; y <= y1; y += 2) {
-            s += lumAt(x, y);
-            n++;
-          }
-          return n ? s / n : 0;
+          if (!n) return null;
+          const mean = sum / n;
+          return {
+            mean,
+            variance: sumSq / n - mean * mean,
+            r: sr / n,
+            g: sg / n,
+            b: sb / n,
+          };
         };
 
-        // Interior reference (card body is usually brighter than desk/letterbox)
-        const ix0 = Math.floor(w * 0.2);
-        const ix1 = Math.floor(w * 0.8);
-        const iy0 = Math.floor(h * 0.2);
-        const iy1 = Math.floor(h * 0.8);
-        let interior = 0;
+        let ir = 0;
+        let ig = 0;
+        let ib = 0;
         let nInt = 0;
+        const ix0 = Math.floor(w * 0.22);
+        const ix1 = Math.floor(w * 0.78);
+        const iy0 = Math.floor(h * 0.22);
+        const iy1 = Math.floor(h * 0.78);
         for (let y = iy0; y <= iy1; y += 4) {
           for (let x = ix0; x <= ix1; x += 4) {
-            interior += lumAt(x, y);
+            const i = (y * w + x) * 4;
+            ir += data[i];
+            ig += data[i + 1];
+            ib += data[i + 2];
             nInt++;
           }
         }
-        interior = nInt ? interior / nInt : 140;
-        const thr = Math.min(interior - 28, 70);
+        ir /= nInt || 1;
+        ig /= nInt || 1;
+        ib /= nInt || 1;
+
+        // Only a flat strip unlike the document (desk or black letterbox).
+        // A portrait, hologram, or MRZ is textured, so it is not trimmed.
+        const isMargin = (stats) => {
+          if (!stats) return false;
+          const dist = Math.hypot(stats.r - ir, stats.g - ig, stats.b - ib);
+          const uniform = stats.variance < 420;
+          const unlike = dist > 34 || stats.mean < 38;
+          return uniform && unlike;
+        };
 
         let minX = 0;
         let minY = 0;
         let maxX = w - 1;
         let maxY = h - 1;
-        const maxTrimX = Math.floor(w * 0.08);
-        const maxTrimY = Math.floor(h * 0.08);
+        const maxTrimX = Math.floor(w * 0.1);
+        const maxTrimY = Math.floor(h * 0.1);
 
         for (let i = 0; i < maxTrimY; i++) {
-          if (rowMean(minY, minX, maxX) < thr) minY++;
+          if (isMargin(sampleLine(minY, true, minX, maxX))) minY++;
           else break;
         }
         for (let i = 0; i < maxTrimY; i++) {
-          if (rowMean(maxY, minX, maxX) < thr) maxY--;
+          if (isMargin(sampleLine(maxY, true, minX, maxX))) maxY--;
           else break;
         }
         for (let i = 0; i < maxTrimX; i++) {
-          if (colMean(minX, minY, maxY) < thr) minX++;
+          if (isMargin(sampleLine(minX, false, minY, maxY))) minX++;
           else break;
         }
         for (let i = 0; i < maxTrimX; i++) {
-          if (colMean(maxX, minY, maxY) < thr) maxX--;
+          if (isMargin(sampleLine(maxX, false, minY, maxY))) maxX--;
           else break;
         }
 
@@ -7955,11 +6463,15 @@
       }
 
       if (isCarPhotoSlot(slot)) {
+        if (carPhotoEditsBlocked()) return;
         carPhotoBlobs[slot] = finalBlob;
         carPhotoDataUrls[slot] = finalUrl;
         const idx = carPhotoStepIndexForSlot(slot);
         if (idx >= 0) carPhotoStepIndex = idx;
         advanceCarPhotoStep();
+        pushCarSessionSlot(slot, finalBlob).catch((err) =>
+          console.warn("car session photo push:", err)
+        );
         return;
       }
 
@@ -8103,6 +6615,7 @@
       }
 
       if (isCarPhotoSlot(slot)) {
+        if (carPhotoEditsBlocked()) return;
         if (isCarGuideVideoSlot(slot)) {
           if (carVideoRecordSlot === slot || isCarOdometerVideoSlot(slot)) {
             await stopCarGuideVideoRecording(false);
@@ -8120,9 +6633,15 @@
         }
         delete carPhotoBlobs[slot];
         delete carPhotoDataUrls[slot];
+        try {
+          await deleteCarSessionSlotRemote(slot);
+        } catch (err) {
+          console.warn("car session cancel delete:", err);
+        }
         const idx = carPhotoStepIndexForSlot(slot);
         if (idx >= 0) carPhotoStepIndex = idx;
         refreshCarPhotoStage();
+        scheduleCarSessionMetaPush();
         return;
       }
 
@@ -8165,6 +6684,7 @@
       resetLicenseCapture();
       resetTechPassportCapture();
       await resetCarPhotoGuide();
+      clearCarPhotoSessionUrl();
       activeSlot = null;
       frontBlob = null;
       backBlob = null;
@@ -8227,6 +6747,7 @@
     }
 
     async function openCamera(slot) {
+      if (isCarPhotoSlot(slot) && carPhotoEditsBlocked()) return;
       if (isCarGuideVideoSlot(slot)) {
         triggerCarVideoUpload(slot);
         return;
@@ -8867,6 +7388,7 @@
       if (capturingNow) return;
       const slot = activeSlot;
       if (!slot) return;
+      if (isCarPhotoSlot(slot) && carPhotoEditsBlocked()) return;
 
       const captureBtn = document.getElementById("capture-btn");
       const vc = document.getElementById("video-container");
@@ -8882,8 +7404,8 @@
       readinessStatus.textContent = "Capturing…";
       readinessStatus.className = "status-badge is-visible status-ready";
 
-      // Same input style as Upload: card + surrounding margin for edge detect
-      // Car photos: use the full visible frame (not ID guide crop).
+      // Documents: save exactly the green guide. Car photos have no guide,
+      // so they keep the full visible camera picture.
       const src = isCarPhotoSlot(slot)
         ? {
             x: mapped.visible.x,
@@ -8891,7 +7413,7 @@
             w: mapped.visible.w,
             h: mapped.visible.h,
           }
-        : getCaptureProcessRect(mapped);
+        : mapped.frame;
       const cropW = Math.max(2, Math.round(src.w));
       const cropH = Math.max(2, Math.round(src.h));
       const cropCanvas = document.createElement("canvas");
@@ -8914,11 +7436,24 @@
         readinessStatus.className = "status-badge is-visible status-ready";
         let bitmap = null;
         try {
-          bitmap = await toDrawableBitmap(cropCanvas);
-          // Identical Crop + Straighten path as Upload
-          const processed = await processSlotForGenerate(slot, bitmap);
-          stages = processed.stages;
-          final = processed.final;
+          if (isCarPhotoSlot(slot)) {
+            bitmap = await toDrawableBitmap(cropCanvas);
+            const processed = await processSlotForGenerate(slot, bitmap);
+            stages = processed.stages;
+            final = processed.final;
+          } else {
+            // Green frame is already the picture. Only rotate it upright.
+            bitmap = await toDrawableBitmap(cropCanvas);
+            const straightened = await straightenFramedPhoto(bitmap);
+            final = { blob: straightened.blob, dataUrl: straightened.dataUrl };
+            const original = { blob: originalBlob, dataUrl: originalDataUrl };
+            stages = {
+              crop: original,
+              straighten: final,
+              brightness: final,
+              final,
+            };
+          }
         } catch (procErr) {
           console.warn("Processing failed, using original frame:", procErr);
           final = { blob: originalBlob, dataUrl: originalDataUrl };
@@ -10681,9 +9216,23 @@
     }
 
     (function bootMethodFromQuery() {
+      const pathMatch = String(window.location.pathname || "").match(
+        /^\/car-photo\/(\d+)\/?$/
+      );
+      if (pathMatch) {
+        const sid = Number(pathMatch[1]);
+        const sessionKey = new URLSearchParams(window.location.search).get("k") || "";
+        if (Number.isFinite(sid) && sid >= 1) {
+          enterCarPhotoGuide({ allocate: false, sessionId: sid, token: sessionKey });
+          initLicenseImageZoom();
+          return;
+        }
+      }
       const method = new URLSearchParams(window.location.search).get("method");
       if (method === "id" || method === "passport") {
         selectMethod(method);
+      } else if (method === "car-photo") {
+        enterCarPhotoGuide({ allocate: true });
       }
       initLicenseImageZoom();
     })();

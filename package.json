@@ -4,6 +4,7 @@
   "private": true,
   "description": "ID, passport, and driver license document scanner",
   "scripts": {
+    "check": "node scripts/check-car-guide.js",
     "dev": "node scripts/dev-server.js",
     "deploy": "powershell -ExecutionPolicy Bypass -File ./deploy.ps1",
     "scan:license": "tsx scripts/scan-license.ts"

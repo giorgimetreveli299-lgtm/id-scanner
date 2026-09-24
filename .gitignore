@@ -2,6 +2,7 @@ _last_tech_ocr.json
 _debug*
 _qr_*
 debug_uploads/
+data/
 venv/
 __pycache__/
 *.pyc
