@@ -529,6 +529,10 @@ async function enterCarPhotoGuide(options = {}) {
   clearIdUploadError();
   stopCarSessionPoll();
   carSessionReadOnly = false;
+  if (needNew) {
+    carSessionId = null;
+    carSessionToken = "";
+  }
   document.getElementById("car-photo-view")?.classList.remove("is-readonly", "is-lock-pending");
   document.getElementById("method-choice").classList.add("hidden");
   document.getElementById("scanner-view").classList.remove("visible");
@@ -542,41 +546,41 @@ async function enterCarPhotoGuide(options = {}) {
   carSessionKnownSlots = {};
   carSessionLastRevision = -1;
 
-  let id = existingId;
   if (needNew) {
-    carSessionId = null;
-    carSessionToken = "";
+    const label = document.getElementById("car-session-label");
+    const qrHost = document.getElementById("car-session-qr");
+    if (label) label.textContent = "…";
+    if (qrHost) {
+      qrHost.innerHTML =
+        '<p style="margin:0;font-size:0.85rem;color:var(--muted);">Creating session…</p>';
+    }
     try {
-      // Always from shared server counter so PC-A=#1, PC-B=#2, …
-      id = await allocateNextCarSessionId();
+      const id = await allocateNextCarSessionId();
+      carSessionId = id;
+      setCarPhotoSessionInUrl(id);
+      renderCarSessionQr(id);
+      scheduleCarSessionMetaPush();
+      startCarSessionPoll();
     } catch (err) {
       console.warn("car session allocate failed:", err);
-      alert(
-        "Could not create a new session number from the server.\n" +
-          "Check that all PCs use the same server address, then try again."
-      );
-      showMethodChoice();
-      return;
+      if (label) label.textContent = "—";
+      if (qrHost) {
+        qrHost.innerHTML =
+          '<p style="margin:0;font-size:0.85rem;color:#b91c1c;">Could not create session.</p>' +
+          '<button type="button" class="btn" style="margin-top:8px;" onclick="enterCarPhotoGuide({ allocate: true })">Retry</button>';
+      }
     }
+    return;
   }
 
-  carSessionId = id;
-  setCarPhotoSessionInUrl(id);
-  renderCarSessionQr(id);
-
-  if (!needNew) {
-    document.getElementById("car-photo-view")?.classList.add("is-lock-pending");
-  }
-
-  // Joining an existing session: load photos already taken on the other device
-  if (!needNew) {
-    try {
-      await pullCarSessionState();
-    } catch (err) {
-      console.warn("car session join pull:", err);
-    }
-  } else {
-    scheduleCarSessionMetaPush();
+  carSessionId = existingId;
+  setCarPhotoSessionInUrl(existingId);
+  renderCarSessionQr(existingId);
+  document.getElementById("car-photo-view")?.classList.add("is-lock-pending");
+  try {
+    await pullCarSessionState();
+  } catch (err) {
+    console.warn("car session join pull:", err);
   }
   startCarSessionPoll();
 }

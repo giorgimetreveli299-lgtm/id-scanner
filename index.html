@@ -2391,7 +2391,7 @@
     let readyGraceUntil = 0; // keep Capture enabled briefly (iOS tap vs flicker)
     let capturingNow = false;
     var selectedMethod = null;
-    /** VIN slot only: gallery Upload skips Vision angle checks (Capture still validates). */
+    /** VIN uses the same Vision angle checks as other car detail slots. */
     let carVinGalleryUpload = false;
 
     /** Upload available alongside Capture (quality path for scanners / gallery). */
@@ -4874,7 +4874,12 @@
         return;
       }
       if (method === "car-photo") {
-        await enterCarPhotoGuide({ allocate: true });
+        try {
+          await enterCarPhotoGuide({ allocate: true });
+        } catch (err) {
+          console.warn("car photo guide open failed:", err);
+          alert("Could not open Car photo guide. Refresh the page and try again.");
+        }
         return;
       }
       selectedMethod = method;
@@ -7188,10 +7193,6 @@
       // Car photos: reject documents on every angle; front also needs frontal car
       if (isCarPhotoSlot(slot)) {
         if (isCarGuideVideoSlot(slot)) {
-          clearCarUploadError();
-          return true;
-        }
-        if (options.fromGallery && slot === "car-vin") {
           clearCarUploadError();
           return true;
         }
