@@ -72,7 +72,7 @@ _REJECT_DOC_LABELS = {
 
 _CAR_OBJECTS = {"car", "vehicle", "truck", "bus", "van", "automobile"}
 
-_EXTERIOR = {"front", "rear", "left", "right"}
+_EXTERIOR = {"front", "rear", "left", "right", "left-horizontal", "right-horizontal"}
 _DETAIL = {
     "engine",
     "front-seat",
@@ -260,7 +260,7 @@ def validate_car_photo_angle(image_bytes: bytes, angle: str) -> dict:
 
     - All angles: reject ID / passport / license / paper documents
     - front: frontal vehicle framing
-    - rear / left / right: require a car subject
+    - rear / left / right / left-horizontal / right-horizontal: require a car subject
     - engine / front-seat / back-seat / gearbox / vin / truck / odometer-before / odometer-after: require vehicle-detail cues
     - odometer-video / roof: skipped (client enforces video type)
     """

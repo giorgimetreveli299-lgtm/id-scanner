@@ -1131,59 +1131,6 @@
       display: none !important;
     }
 
-    .car-photo-layout {
-      display: grid;
-      grid-template-columns: minmax(0, 1fr) minmax(220px, 280px);
-      gap: 18px;
-      align-items: start;
-    }
-    .car-photo-session-panel {
-      position: sticky;
-      top: 16px;
-      padding: 18px 16px 20px;
-      text-align: center;
-    }
-    .car-photo-session-panel h3 {
-      margin: 0 0 6px;
-      font-family: var(--font-display);
-      font-size: 1.05rem;
-      color: var(--accent-dark);
-    }
-    .car-session-id {
-      margin: 0 0 12px;
-      font-family: var(--font-display);
-      font-size: 1.65rem;
-      font-weight: 800;
-      letter-spacing: 0.02em;
-      color: var(--text);
-    }
-    .car-session-qr {
-      display: flex;
-      justify-content: center;
-      align-items: center;
-      min-height: 180px;
-      margin: 0 auto 12px;
-      padding: 10px;
-      background: #fff;
-      border-radius: 12px;
-      border: 1px solid var(--line);
-    }
-    .car-session-qr img,
-    .car-session-qr canvas {
-      display: block;
-      max-width: 100%;
-      height: auto;
-    }
-    @media (max-width: 820px) {
-      .car-photo-layout {
-        grid-template-columns: 1fr;
-      }
-      .car-photo-session-panel {
-        position: static;
-        order: -1;
-      }
-    }
-
     .car-upload-error {
       display: none;
       margin: 0 0 12px;
@@ -1900,7 +1847,6 @@
     </div>
 
     <div id="car-photo-view">
-      <div class="car-photo-layout">
       <div class="card car-photo-main">
         <button type="button" class="view-back" onclick="carPhotoNewClient()">← Back</button>
         <h2>Car photo guide</h2>
@@ -1981,12 +1927,6 @@
           <button type="button" class="btn btn-tech-new" id="btn-car-new" onclick="carPhotoNewClient()">New client</button>
           <button type="button" class="btn btn-tech-pdf" id="btn-car-download" onclick="downloadCarPhotoBundle()" disabled>DOWNLOAD</button>
         </div>
-      </div>
-      <aside class="card car-photo-session-panel" id="car-photo-session-panel" aria-label="Car photo session">
-        <h3>Session</h3>
-        <p class="car-session-id" id="car-session-label">—</p>
-        <div class="car-session-qr" id="car-session-qr"></div>
-      </aside>
       </div>
     </div>
 
@@ -5043,7 +4983,7 @@
         stages = await processLicenseForGenerate(bitmap);
         final = stages.final;
       } else if (isTechPassportSlot(slot)) {
-        stages = await processDocumentForGenerate(bitmap, 85.6 / 54);
+        stages = await processTechPassportForGenerate(bitmap);
         final = stages.final;
       } else if (slot === "passport") {
         // Results photo: biodata only (REMARKS cut). Original stays in top slot.
@@ -5254,7 +5194,7 @@
         const validateBlob =
           activeSlot === "passport"
             ? (final.cropped ? final.blob : originalBlob)
-            : isTechPassportSlot(activeSlot) || isCarPhotoSlot(activeSlot)
+            : isCarPhotoSlot(activeSlot)
               ? originalBlob
               : final.blob;
         const ok = await validateCapturedSide(activeSlot, validateBlob, {
@@ -6789,7 +6729,9 @@
         "car-front": "Car — Front",
         "car-rear": "Car — Rear",
         "car-left": "Car — Left side",
+        "car-left-horizontal": "Car — Left side (Horizontal)",
         "car-right": "Car — Right side",
+        "car-right-horizontal": "Car — Right side (Horizontal)",
         "car-engine": "Car — Engine",
         "car-front-seat": "Car — Front seat",
         "car-back-seat": "Car — Back seat",
@@ -7273,7 +7215,25 @@
       if (!expected) return true;
 
       try {
-        const data = await fetchMrzCheck(blob);
+        // License: shrink payload + run MRZ + side check in parallel (biggest wait).
+        let data;
+        let licenseSideData = null;
+        if (expected === "license") {
+          const checkBlob =
+            typeof downscaleBlobForCheck === "function"
+              ? await downscaleBlobForCheck(blob)
+              : blob;
+          const licSide = slot === "license-front" ? "front" : "back";
+          const [mrzRes, sideRes] = await Promise.all([
+            fetchMrzCheck(checkBlob),
+            fetchLicenseSideCheck(checkBlob, licSide),
+          ]);
+          data = mrzRes;
+          licenseSideData = sideRes;
+        } else {
+          data = await fetchMrzCheck(blob);
+        }
+
         const hasMrz = Boolean(data && data.has_mrz);
         const passportStrip = String((data && data.passport_mrz_strip) || "");
         const stripHint = String(
@@ -7362,8 +7322,7 @@
 
         // Wrong side: license front must not show QR; back must not show face/signature
         if (expected === "license") {
-          const licSide = slot === "license-front" ? "front" : "back";
-          const sideData = await fetchLicenseSideCheck(blob, licSide);
+          const sideData = licenseSideData;
           if (sideData && sideData.ok === false) {
             const raw = String(sideData.error || "");
             const msg = /front side/i.test(raw)
@@ -7473,7 +7432,7 @@
         const validateBlob =
           slot === "passport"
             ? (final.cropped ? final.blob : originalBlob)
-            : isTechPassportSlot(slot) || isCarPhotoSlot(slot)
+            : isCarPhotoSlot(slot)
               ? originalBlob
               : final.blob;
         const ok = await validateCapturedSide(slot, validateBlob);

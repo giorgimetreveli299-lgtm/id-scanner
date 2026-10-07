@@ -1,6 +1,6 @@
 /** Document crop. The car photo guide does not use this file. */
 const LICENSE_ASPECT = 85.6 / 54;
-const LICENSE_SCAN_WIDTH = 1400;
+const LICENSE_CHECK_MAX = 720;
 
 /** True if image border looks like a white / very light background. */
 function borderLooksWhite(gray, w, h) {
@@ -89,10 +89,11 @@ function floodWhiteBackgroundMask(rgba, w, h, thresh) {
  * - optional outer-band white→black to help find the card contour
  * Original bitmap is never modified.
  */
-async function buildAnalysisBlackBg(bitmap) {
+async function buildAnalysisBlackBg(bitmap, options = {}) {
   const srcW = bitmap.width;
   const srcH = bitmap.height;
   const pad = Math.max(32, Math.round(Math.min(srcW, srcH) * 0.06));
+  const skipFlood = !!options.skipFlood;
 
   const maxSide = 360;
   const scale = Math.min(1, maxSide / Math.max(srcW, srcH));
@@ -121,7 +122,7 @@ async function buildAnalysisBlackBg(bitmap) {
   // Draw ORIGINAL pixels unchanged into analysis canvas
   ctx.drawImage(bitmap, pad, pad);
 
-  if (whiteBg) {
+  if (whiteBg && !skipFlood) {
     // Only darken outer band of white background on the ANALYSIS copy.
     // High threshold + erosion keep the card's own light edge out of the mask,
     // otherwise the detected contour eats into the card (over-crop on white desks).
@@ -262,8 +263,7 @@ async function cropDocumentBitmap(bitmap, aspectRatio, options = {}) {
   // ID aspect stays 85.6/54 unless caller (passport) passes another ratio
   const ID_ASPECT = aspectRatio || 85.6 / 54;
   const passport = !!options.passport;
-  const licenseScan = !!options.licenseScan;
-  const idCard = !!options.idCard || licenseScan || (!passport && !aspectRatio);
+  const idCard = !!options.idCard || (!passport && !aspectRatio);
   const protectMrz = !!options.protectMrz;
   let analysisTemps = [];
 
@@ -344,13 +344,11 @@ async function cropDocumentBitmap(bitmap, aspectRatio, options = {}) {
         passport,
       })) {
         try {
-          warpedExtra = await warpQuadToIdBitmap(workingOrig, quadOrig, ID_ASPECT, {
-            targetWidth: licenseScan ? LICENSE_SCAN_WIDTH : undefined,
-          });
+          warpedExtra = await warpQuadToIdBitmap(workingOrig, quadOrig, ID_ASPECT);
           let result = await canvasToJpeg(
-            warpedExtra, 0, 0, warpedExtra.width, warpedExtra.height
+            warpedExtra, 0, 0, warpedExtra.width, warpedExtra.height, 0.95
           );
-          // Never run aggressive border trim on ID back — MRZ lives on the bottom edge
+          // Never run aggressive border trim on ID back — MRZ lives on the bottom edge.
           if (idCard && !protectMrz) {
             result = await trimIdScanBorders(result, ID_ASPECT);
           }
@@ -393,9 +391,7 @@ async function cropDocumentBitmap(bitmap, aspectRatio, options = {}) {
 
   // Prefer full-bleed card (reference scans have almost no desk margin).
   // ID back keeps a larger bottom pad so the MRZ strip is never shaved.
-  const padRatio = licenseScan
-    ? (det.whiteBg ? 0.003 : 0.001)
-    : idCard
+  const padRatio = idCard
     ? (det.whiteBg ? 0.008 : 0.004)
     : (det.whiteBg ? 0.03 : 0.015);
   const padX = Math.max(1, Math.round((maxX - minX) * padRatio));
@@ -418,10 +414,10 @@ async function cropDocumentBitmap(bitmap, aspectRatio, options = {}) {
     return { ...fallback, straighten: straightenShot || fallback };
   }
 
-  // Crop from ORIGINAL pixels only — analysis black paint never reaches output
+  // Crop from ORIGINAL pixels only — analysis black paint never reaches output.
+  // Letterbox fill matches ID: dark (#111), not white scan paper.
   let result = await rectifyToIdAspect(workingOrig, sx, sy, sw, sh, ID_ASPECT, {
-    targetWidth: licenseScan ? LICENSE_SCAN_WIDTH : undefined,
-    fillColor: licenseScan ? "#ffffff" : "#111111",
+    fillColor: "#111111",
   });
   if (idCard && !protectMrz) {
     result = await trimIdScanBorders(result, ID_ASPECT);
@@ -630,76 +626,45 @@ async function processPassportImage(bitmap) {
   }
 }
 
-async function downscaleBitmap(bitmap, maxSide) {
-  const w = bitmap.width;
-  const h = bitmap.height;
-  if (Math.max(w, h) <= maxSide) return bitmap;
-  const scale = maxSide / Math.max(w, h);
-  const canvas = document.createElement("canvas");
-  canvas.width = Math.max(2, Math.round(w * scale));
-  canvas.height = Math.max(2, Math.round(h * scale));
-  canvas.getContext("2d").drawImage(bitmap, 0, 0, canvas.width, canvas.height);
-  if (typeof createImageBitmap === "function") return await createImageBitmap(canvas);
-  return canvas;
-}
-
-async function processLicenseForGenerate(bitmap) {
-  const working = await downscaleBitmap(bitmap, 1600);
-  const owned = working !== bitmap;
+/** Small JPEG for Vision / side-check APIs (upload + OCR latency). */
+async function downscaleBlobForCheck(blob, maxSide = LICENSE_CHECK_MAX) {
+  if (!blob) return blob;
+  let bmp = null;
   try {
-    const cropped = await cropDocumentBitmap(working, LICENSE_ASPECT, {
-      idCard: true,
-      licenseScan: true,
-    });
-    const bright = await applyBrightnessToResult(cropped, 1.03);
-    const straighten = cropped.straighten || cropped;
-    return {
-      crop: { blob: cropped.blob, dataUrl: cropped.dataUrl },
-      straighten: { blob: straighten.blob, dataUrl: straighten.dataUrl },
-      brightness: { blob: bright.blob, dataUrl: bright.dataUrl },
-      final: { blob: bright.blob, dataUrl: bright.dataUrl },
-    };
-  } finally {
-    if (owned && typeof working.close === "function") {
-      try { working.close(); } catch (_) {}
-    }
-  }
-}
-
-/**
- * Normalize a license crop to flatbed-scan quality: tight trim, exact ID-1
- * aspect, thin white margin, consistent output size.
- */
-async function polishLicenseScan(result, aspect = LICENSE_ASPECT) {
-  let trimmed = await trimIdScanBorders(result, aspect);
-  trimmed = await trimIdScanBorders(trimmed, aspect);
-  const bmp = await toDrawableBitmap(trimmed.blob || trimmed.dataUrl);
-  try {
-    const outW = LICENSE_SCAN_WIDTH;
-    const outH = Math.round(outW / aspect);
-    const pad = 0.014;
-    const innerW = Math.round(outW * (1 - 2 * pad));
-    const innerH = Math.round(innerW / aspect);
-    const px = Math.round((outW - innerW) / 2);
-    const py = Math.round((outH - innerH) / 2);
-
-    const out = document.createElement("canvas");
-    out.width = outW;
-    out.height = outH;
-    const ctx = out.getContext("2d");
-    ctx.fillStyle = "#ffffff";
-    ctx.fillRect(0, 0, outW, outH);
+    bmp = await toDrawableBitmap(blob);
+    if (Math.max(bmp.width, bmp.height) <= maxSide) return blob;
+    const scale = maxSide / Math.max(bmp.width, bmp.height);
+    const canvas = document.createElement("canvas");
+    canvas.width = Math.max(2, Math.round(bmp.width * scale));
+    canvas.height = Math.max(2, Math.round(bmp.height * scale));
+    const ctx = canvas.getContext("2d");
     ctx.imageSmoothingEnabled = true;
-    ctx.imageSmoothingQuality = "high";
-    ctx.filter = "contrast(1.02)";
-    ctx.drawImage(bmp, 0, 0, bmp.width, bmp.height, px, py, innerW, innerH);
-    ctx.filter = "none";
-    return await canvasToJpeg(out, 0, 0, outW, outH, 0.97);
+    ctx.imageSmoothingQuality = "medium";
+    ctx.drawImage(bmp, 0, 0, canvas.width, canvas.height);
+    return await new Promise((resolve, reject) => {
+      canvas.toBlob(
+        (b) => (b ? resolve(b) : reject(new Error("blob failed"))),
+        "image/jpeg",
+        0.72
+      );
+    });
+  } catch (_) {
+    return blob;
   } finally {
-    if (typeof bmp.close === "function") {
+    if (bmp && typeof bmp.close === "function") {
       try { bmp.close(); } catch (_) {}
     }
   }
+}
+
+/** Driver license: same black-bg crop + straighten + brightness as ID. */
+async function processLicenseForGenerate(bitmap) {
+  return processDocumentForGenerate(bitmap, LICENSE_ASPECT);
+}
+
+/** Tech passport front/back: same crop path as ID. */
+async function processTechPassportForGenerate(bitmap) {
+  return processDocumentForGenerate(bitmap, 85.6 / 54);
 }
 
 /**

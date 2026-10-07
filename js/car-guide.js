@@ -35,7 +35,9 @@ const CAR_PHOTO_SLOTS = [
   { id: "car-front", title: "Front" },
   { id: "car-rear", title: "Rear" },
   { id: "car-left", title: "Left side" },
+  { id: "car-left-horizontal", title: "Left side (Horizontal)" },
   { id: "car-right", title: "Right side" },
+  { id: "car-right-horizontal", title: "Right side (Horizontal)" },
   { id: "car-engine", title: "Engine" },
   { id: "car-front-seat", title: "Front seat" },
   { id: "car-back-seat", title: "Back seat" },
@@ -73,6 +75,18 @@ function carPhotoPreviewUrl(slotId) {
   if (!path) return "";
   return path.charAt(0) === "/" ? path : `/${path}`;
 }
+
+/** Warm the contour preview images so opening the guide does not wait on first fetch. */
+function preloadCarPhotoPreviews() {
+  Object.keys(CAR_PHOTO_PREVIEWS).forEach((slotId) => {
+    const url = carPhotoPreviewUrl(slotId);
+    if (!url) return;
+    const img = new Image();
+    img.decoding = "async";
+    img.src = url;
+  });
+}
+preloadCarPhotoPreviews();
 
 function carThumbCell(slotId, title, capturedUrl) {
   const url = capturedUrl || carPhotoPreviewUrl(slotId);
@@ -539,6 +553,8 @@ async function enterCarPhotoGuide(options = {}) {
   document.getElementById("passport-view").classList.remove("visible");
   document.getElementById("license-view").classList.remove("visible");
   document.getElementById("tech-passport-view")?.classList.remove("visible");
+  // Contour previews first — do not wait on recorder/session cleanup.
+  clearCarPhotoGuideStateSync();
   document.getElementById("car-photo-view")?.classList.add("visible");
   window.scrollTo({ top: 0, behavior: "auto" });
 
@@ -964,8 +980,7 @@ function renderCarPhotoThumbs() {
   }).join("");
 }
 
-async function resetCarPhotoGuide() {
-  await stopCarOdometerRecording(false);
+function clearCarPhotoGuideStateSync() {
   carPhotoLeafSlots().forEach(({ id }) => {
     const url = carPhotoDataUrls[id];
     if (url && String(url).startsWith("blob:")) {
@@ -982,7 +997,13 @@ async function resetCarPhotoGuide() {
     delete carPhotoBlobs[id];
     delete carPhotoDataUrls[id];
   });
-  await clearCarRoofMedia();
+  const roofId = CAR_ROOF_SLOT.id;
+  const roofUrl = carPhotoDataUrls[roofId];
+  if (roofUrl && String(roofUrl).startsWith("blob:")) {
+    try { URL.revokeObjectURL(roofUrl); } catch (_) {}
+  }
+  delete carPhotoBlobs[roofId];
+  delete carPhotoDataUrls[roofId];
   carOdometerMode = null;
   carCabriolet = false;
   const cabCb = document.getElementById("car-cabriolet");
@@ -990,6 +1011,13 @@ async function resetCarPhotoGuide() {
   carPhotoStepIndex = 0;
   clearCarUploadError();
   refreshCarPhotoStage();
+}
+
+async function resetCarPhotoGuide() {
+  clearCarPhotoGuideStateSync();
+  await stopCarOdometerRecording(false);
+  await clearCarRoofMedia();
+  clearCarPhotoGuideStateSync();
 }
 
 function updateCarPhotoStepHint() {
